@@ -1,0 +1,34 @@
+# 폴더에 변경이 생기면 소유자가 자동으로 리뷰어로 지정돼요.
+# @member-a ~ @member-d 를 실제 GitHub 아이디로 바꿔주세요.
+# 아래쪽 줄이 우선이에요. 소유자가 여러 명이면 그중 1명만 승인해도 통과돼요.
+
+# 기본: 아래에 없는 파일(설정·lib·ui·storage·CI·피드·설정 화면)은 D
+* @member-d
+
+# A. 기록·문서
+/apps/mobile/features/notes/ @member-a
+/apps/mobile/features/sessions/ @member-a
+/apps/mobile/features/editor/ @member-a
+/packages/shared/src/templates/ @member-a
+
+# B. AI·카드
+/apps/mobile/features/cards/ @member-b
+/apps/mobile/features/ai-draft/ @member-b
+/packages/extractor/ @member-b
+/packages/ai-client/ @member-b
+
+# C. 캘린더
+/apps/mobile/features/calendar/ @member-c
+/apps/mobile/features/execution/ @member-c
+/supabase/functions/google-calendar/ @member-c
+
+# 마이그레이션: 파일 이름의 영역으로 담당 지정
+/supabase/migrations/*_notes_* @member-a
+/supabase/migrations/*_docs_* @member-a
+/supabase/migrations/*_cards_* @member-b
+/supabase/migrations/*_calendar_* @member-c
+/supabase/migrations/*_exec_* @member-c
+
+# 공통 타입: 모두가 보는 곳 (승인 2명은 팀 약속으로 지켜요)
+/packages/shared/src/types/ @member-a @member-b @member-c @member-d
+/packages/shared/src/fixtures/ @member-a @member-b @member-c @member-d
