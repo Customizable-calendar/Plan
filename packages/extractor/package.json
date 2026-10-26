@@ -1,0 +1,19 @@
+{
+  "name": "@noteapp/extractor",
+  "version": "0.0.0",
+  "private": true,
+  "description": "메모에서 카드를 찾는 규칙 + AI 추출",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@noteapp/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3",
+    "vitest": "~3.2.7"
+  }
+}

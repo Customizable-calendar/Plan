@@ -1,0 +1,28 @@
+{
+  "id": "research-paper",
+  "name": "연구논문",
+  "description": "연구 메모를 논문 구조로 정리해요.",
+  "sections": [
+    {
+      "key": "abstract",
+      "title": "초록",
+      "hint": "목적·방법·결과를 세 문장으로"
+    },
+    {
+      "key": "background",
+      "title": "배경",
+      "hint": "관련 연구와 문제"
+    },
+    {
+      "key": "method",
+      "title": "방법",
+      "hint": "무엇을 어떻게 했는지"
+    },
+    {
+      "key": "result",
+      "title": "결과와 논의",
+      "hint": "발견한 것과 한계"
+    }
+  ],
+  "aiInstructions": "출처가 없는 주장은 '[출처 필요]'로 표시하고, 수치를 만들어내지 않아요."
+}

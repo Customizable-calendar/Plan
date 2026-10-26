@@ -1,0 +1,28 @@
+{
+  "id": "study-log",
+  "name": "학습일지",
+  "description": "개발하며 배운 것을 기록해요. 우리 팀이 첫 사용자예요.",
+  "sections": [
+    {
+      "key": "learned",
+      "title": "오늘 배운 것",
+      "hint": "새로 알게 된 개념이나 도구"
+    },
+    {
+      "key": "asked-ai",
+      "title": "AI에게 한 질문",
+      "hint": "도움이 된 질문과 답 요약"
+    },
+    {
+      "key": "blocked",
+      "title": "막힌 곳과 해결",
+      "hint": "문제 → 원인 → 해결 순서로"
+    },
+    {
+      "key": "next",
+      "title": "내일 할 것",
+      "hint": "다음에 이어서 할 작업"
+    }
+  ],
+  "aiInstructions": "사용자가 쓴 내용을 정리만 하고, 해결하지 않은 문제를 해결된 것처럼 쓰지 않아요."
+}

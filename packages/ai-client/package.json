@@ -1,0 +1,14 @@
+{
+  "name": "@noteapp/ai-client",
+  "version": "0.0.0",
+  "private": true,
+  "description": "AI 회사별 호출 어댑터 (사용자 키, 기기에서 호출)",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3"
+  }
+}

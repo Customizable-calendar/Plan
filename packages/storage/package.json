@@ -1,0 +1,14 @@
+{
+  "name": "@noteapp/storage",
+  "version": "0.0.0",
+  "private": true,
+  "description": "파일 저장소 인터페이스와 어댑터",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3"
+  }
+}

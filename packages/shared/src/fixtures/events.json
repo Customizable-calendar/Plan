@@ -1,0 +1,22 @@
+[
+  {
+    "id": "event-1",
+    "calendarId": "primary",
+    "title": "주간 정기 회의",
+    "startAt": "2026-10-25T11:00:00.000Z",
+    "endAt": "2026-10-25T12:00:00.000Z",
+    "allDay": false,
+    "timezone": "Asia/Seoul",
+    "source": "google"
+  },
+  {
+    "id": "event-2",
+    "calendarId": "primary",
+    "title": "기획 회의",
+    "startAt": "2026-10-27T06:00:00.000Z",
+    "endAt": "2026-10-27T07:00:00.000Z",
+    "allDay": false,
+    "timezone": "Asia/Seoul",
+    "source": "google"
+  }
+]

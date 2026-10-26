@@ -1,0 +1,54 @@
+[
+  {
+    "id": "card-1",
+    "type": "event",
+    "status": "suggested",
+    "title": "기획 회의",
+    "startAt": "2026-10-27T06:00:00.000Z",
+    "endAt": "2026-10-27T07:00:00.000Z",
+    "source": {
+      "kind": "note",
+      "noteId": "note-1",
+      "span": [0, 20]
+    },
+    "createdAt": "2026-10-26T01:00:01.000Z"
+  },
+  {
+    "id": "card-2",
+    "type": "task",
+    "status": "suggested",
+    "title": "견적서 보내기",
+    "dueAt": "2026-10-27T06:00:00.000Z",
+    "source": {
+      "kind": "note",
+      "noteId": "note-1",
+      "span": [22, 36]
+    },
+    "createdAt": "2026-10-26T01:00:01.000Z"
+  },
+  {
+    "id": "card-3",
+    "type": "person",
+    "status": "suggested",
+    "title": "민수",
+    "personName": "민수",
+    "source": {
+      "kind": "note",
+      "noteId": "note-1",
+      "span": [6, 8]
+    },
+    "createdAt": "2026-10-26T01:00:01.000Z"
+  },
+  {
+    "id": "card-4",
+    "type": "idea",
+    "status": "confirmed",
+    "title": "학습일지 템플릿 추가",
+    "source": {
+      "kind": "note",
+      "noteId": "note-2",
+      "span": [0, 28]
+    },
+    "createdAt": "2026-10-26T03:30:01.000Z"
+  }
+]

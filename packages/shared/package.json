@@ -1,0 +1,16 @@
+{
+  "name": "@noteapp/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "기능끼리 주고받는 타입, 예시 JSON, 세션 템플릿",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3",
+    "vitest": "~3.2.7"
+  }
+}
