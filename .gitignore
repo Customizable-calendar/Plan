@@ -1,0 +1,40 @@
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# generated native folders
+/apps/mobile/ios
+/apps/mobile/android
+.kotlin/
+
+# 키·인증서
+*.jks
+*.p8
+*.p12
+*.key
+*.pem
+*.mobileprovision
+
+# 환경 변수 (.env.example만 커밋해요)
+.env
+.env*.local
+
+# Supabase 로컬 파일
+supabase/.temp/
+supabase/.branches/
+
+# 개인 AI 설정
+CLAUDE.local.md
+
+# 기타
+.metro-health-check*
+*.orig.*
+*.tsbuildinfo
+coverage/
+npm-debug.*
+.DS_Store

@@ -1,0 +1,22 @@
+{
+  "name": "noteapp",
+  "private": true,
+  "packageManager": "pnpm@10.34.9",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "pnpm --filter mobile start",
+    "lint": "eslint .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r --if-present test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "eslint": "~9.39.5",
+    "eslint-config-expo": "~58.0.4",
+    "prettier": "~3.9.10",
+    "typescript": "~6.0.3"
+  }
+}

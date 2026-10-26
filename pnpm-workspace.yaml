@@ -1,0 +1,8 @@
+packages:
+  - apps/*
+  - packages/*
+
+# 설치 스크립트 실행을 허용할 패키지 (pnpm 10은 기본으로 막아요)
+onlyBuiltDependencies:
+  - esbuild
+  - unrs-resolver
