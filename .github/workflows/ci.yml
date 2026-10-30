@@ -1,10 +1,11 @@
 name: CI
 
+# develop은 stage로 이름을 바꾸기 전까지 남겨 둬요(docs/setup-github.md 1번).
 on:
   pull_request:
-    branches: [stage, main]
+    branches: [stage, develop, main]
   push:
-    branches: [stage, main]
+    branches: [stage, develop, main]
 
 jobs:
   check:
