@@ -10,6 +10,8 @@
     "lint": "eslint .",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r --if-present test",
+    "pr:check": "node scripts/pr-check.mjs",
+    "db:types": "npx --yes supabase@2.122.0 gen types typescript --local --schema public > packages/shared/src/db/database.types.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

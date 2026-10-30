@@ -31,6 +31,8 @@ Claude Code, Codex, Cursor 등 어떤 AI 코딩 도구를 쓰든 이 파일을 �
 - 테이블 이름 앞에 영역을 붙여요: `notes_`, `docs_`, `cards_`, `calendar_`, `exec_`, 그리고 공용 `profiles`, `files`
 - 모든 테이블에 RLS를 켜고 `user_id = auth.uid()` 정책부터 시작해요.
 - 마이그레이션 파일은 `supabase/migrations/<타임스탬프>_<영역>_<설명>.sql`이에요. 이미 합친 파일은 고치지 않고 새 파일을 만들어요.
+- 마이그레이션을 바꾸면 `pnpm db:types`로 `packages/shared/src/db/database.types.ts`를 다시 만들고, `packages/shared/src/db/mappers/`도 맞춰요. 생성 파일은 손으로 고치지 않아요.
+- 기능 코드는 Supabase 응답을 그대로 쓰지 않고 mapper로 앱 타입으로 바꿔서 써요.
 - 시각은 UTC ISO 8601로 저장하고, 시간대(IANA, 예: Asia/Seoul)는 따로 저장해요.
 
 ## AI 결과를 다루는 원칙 (앱 기능)
@@ -50,8 +52,18 @@ Claude Code, Codex, Cursor 등 어떤 AI 코딩 도구를 쓰든 이 파일을 �
 
 ## 작업 방식
 
-- 브랜치: `feat/<기능>/<설명>`, `fix/<기능>/<설명>`, `contract/<설명>`
+- 브랜치: `feat/<기능>/<설명>`, `fix/<기능>/<설명>`, `contract/<설명>`. 모두 `stage`에서 따고 `stage`로 PR을 올려요.
 - 커밋: `<종류>(<기능>): <한글 설명>`. 종류는 feat · fix · contract · refactor · test · docs · chore
 - 끝내기 전에 `pnpm lint && pnpm typecheck && pnpm test`를 통과시켜요.
-- 코드를 만든 뒤에는 무엇을 왜 바꿨는지 짧게 설명해요. 사람이 PR 템플릿의 "내가 이해한 것"을 채울 수 있게요.
+- 코드를 만든 뒤에는 무엇을 왜 바꿨는지 짧게 설명해요. 작성자가 이해하고 PR 본문 "무엇을 했나요"에 적을 수 있게요.
 - UI 글자는 한국어, 코드의 이름(변수·함수·파일)은 영어로 써요. 주석은 한국어로 써도 돼요.
+
+## PR을 올리기 전 (AI 도구가 꼭 하는 일)
+
+PR을 만들거나 PR 본문을 쓰기 전에 아래를 순서대로 해요. 건너뛰지 않아요.
+
+1. `pnpm pr:check`를 실행해요. stage보다 뒤처졌는지, 열린 PR 중 같은 파일을 고치는 PR이 있는지 나와요.
+2. 뒤처졌으면 `git fetch origin && git rebase origin/stage`. 충돌은 `docs/conventions.md`의 "충돌 처리" 표대로 풀고, 풀고 나서 lint·typecheck·test를 다시 돌려요.
+3. 겹치는 PR이 있으면 `gh pr diff <번호>`로 그 PR이 무엇을 바꾸는지 읽고, 사람에게 겹치는 부분과 권하는 머지 순서를 알려요. PR 본문 "겹치는 PR"에 적어요.
+4. 다른 사람의 PR 브랜치에 push하거나, 그 PR에 맞추려고 남의 기능 폴더를 고치지 않아요.
+5. `git push --force-with-lease`는 내 브랜치에만 써요. `stage`·`main`에는 force push하지 않아요.
