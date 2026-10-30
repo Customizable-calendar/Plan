@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [develop, main]
+    branches: [stage, main]
   push:
-    branches: [develop, main]
+    branches: [stage, main]
 
 jobs:
   check:
@@ -25,3 +25,38 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+
+  # 마이그레이션으로 만든 DB와 packages/shared/src/db/database.types.ts가 같은지 확인해요.
+  # 다르면 로컬에서 supabase start → pnpm db:types 후 커밋해요.
+  db-types:
+    name: db-types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 마이그레이션이 있는지 확인
+        id: has
+        run: |
+          if ls supabase/migrations/*.sql >/dev/null 2>&1; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "마이그레이션이 아직 없어서 건너뛰어요."
+          fi
+
+      - uses: supabase/setup-cli@v1
+        if: steps.has.outputs.run == 'true'
+        with:
+          version: 2.122.0
+
+      - if: steps.has.outputs.run == 'true'
+        run: supabase db start
+
+      - name: 생성한 타입과 커밋된 타입 비교
+        if: steps.has.outputs.run == 'true'
+        run: |
+          supabase gen types typescript --local --schema public > packages/shared/src/db/database.types.ts
+          if ! git diff --ignore-space-at-eol --exit-code packages/shared/src/db/database.types.ts; then
+            echo "::error::DB 타입이 마이그레이션과 달라요. supabase start 후 pnpm db:types를 실행해 커밋해 주세요."
+            exit 1
+          fi
