@@ -1,7 +1,7 @@
 {
   "_설명": "담당별 GitHub 아이디. 채운 뒤 node scripts/github/apply-owners.mjs 를 실행하면 CODEOWNERS가 바뀌어요.",
-  "a": "",
-  "b": "",
-  "c": "",
-  "d": ""
+  "a": "kfd0209",
+  "b": "redchoeng",
+  "c": "YoonDiding",
+  "d": "jaemin743"
 }
