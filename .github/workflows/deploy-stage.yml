@@ -91,5 +91,7 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_KEY }}
           EXPO_PUBLIC_STORAGE_PROVIDER: supabase
+          # 기능 데이터 출처: fixtures(예시 JSON) | supabase. M2에 stage 환경 변수로 supabase로 바꿔요
+          EXPO_PUBLIC_DATA_SOURCE: ${{ vars.EXPO_PUBLIC_DATA_SOURCE || 'fixtures' }}
           MESSAGE: ${{ github.event.head_commit.message }}
         run: eas update --channel stage --message "${MESSAGE:-수동 배포}" --non-interactive

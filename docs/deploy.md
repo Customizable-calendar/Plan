@@ -26,6 +26,7 @@ main 브랜치: 운영 전까지 배포하지 않아요. 마일스톤이 끝나�
 | `SUPABASE_DB_PASSWORD`     | Secret                    | stage 프로젝트 만들 때 정한 DB 비밀번호               |
 | `EXPO_PUBLIC_SUPABASE_URL` | Variable                  | stage 프로젝트 → Project Settings → API               |
 | `EXPO_PUBLIC_SUPABASE_KEY` | Variable                  | 같은 곳의 publishable(anon) 키. service_role은 금지   |
+| `EXPO_PUBLIC_DATA_SOURCE`  | Variable                  | `fixtures`(기본) 또는 `supabase`. M2부터 `supabase`   |
 | `EXPO_TOKEN`               | Secret                    | expo.dev → Account settings → Access tokens           |
 
 ```bash

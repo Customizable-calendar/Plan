@@ -24,6 +24,8 @@ dev 서버는 따로 없어요. 각자 컴퓨터에서 앱과 Supabase를 띄우
 
 ### 2. Supabase 고르기
 
+M1(예시 JSON으로 화면 만들기)에서는 이 단계를 건너뛰어도 돼요. Supabase 없이 `pnpm dev`만으로 화면이 떠요.
+
 **A. 로컬 Supabase (기본, 키 발급 필요 없음)**
 
 ```bash
