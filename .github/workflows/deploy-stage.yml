@@ -1,0 +1,97 @@
+name: Deploy stage
+
+# stage에 머지되면 stage 환경에 올려요. main은 운영 전까지 배포하지 않아요.
+# 설정값이 없으면 해당 단계는 건너뛰어요. 설정 순서는 docs/deploy.md
+on:
+  push:
+    branches: [stage]
+  workflow_dispatch:
+
+# 배포가 겹치면 앞의 것이 끝난 뒤에 실행해요.
+concurrency:
+  group: deploy-stage
+  cancel-in-progress: false
+
+jobs:
+  ready:
+    runs-on: ubuntu-latest
+    environment: stage
+    outputs:
+      supabase: ${{ steps.check.outputs.supabase }}
+      app: ${{ steps.check.outputs.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$SUPABASE_DB_PASSWORD" ] && [ -n "$SUPABASE_PROJECT_REF" ]; then
+            echo "supabase=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "supabase=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Supabase stage 설정이 없어서 DB·함수 배포를 건너뛰어요. docs/deploy.md 2번"
+          fi
+          if [ -n "$EXPO_TOKEN" ] && grep -q '"expo-updates"' apps/mobile/package.json; then
+            echo "app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "app=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::EXPO_TOKEN 또는 expo-updates가 없어서 앱 업데이트를 건너뛰어요. docs/deploy.md 3번"
+          fi
+
+  supabase:
+    needs: ready
+    if: needs.ready.outputs.supabase == 'true'
+    runs-on: ubuntu-latest
+    environment: stage
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.122.0
+      - run: supabase link --project-ref "$PROJECT_REF"
+      # 아직 적용 안 된 마이그레이션만 순서대로 적용해요.
+      - run: supabase db push
+      - name: Edge Functions 배포
+        run: |
+          if ls -d supabase/functions/*/ >/dev/null 2>&1; then
+            supabase functions deploy --project-ref "$PROJECT_REF"
+          else
+            echo "배포할 함수가 아직 없어요."
+          fi
+
+  app:
+    needs: [ready, supabase]
+    # DB 배포를 건너뛴 경우에도 앱은 올리고, DB 배포가 실패하면 올리지 않아요.
+    if: always() && needs.ready.outputs.app == 'true' && needs.supabase.result != 'failure'
+    runs-on: ubuntu-latest
+    environment: stage
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: pnpm install --frozen-lockfile
+      # stage 빌드를 깐 폰은 앱을 다시 열면 이 업데이트를 받아요.
+      - name: stage 채널로 업데이트 올리기
+        working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_KEY }}
+          EXPO_PUBLIC_STORAGE_PROVIDER: supabase
+          # 기능 데이터 출처: fixtures(예시 JSON) | supabase. M2에 stage 환경 변수로 supabase로 바꿔요
+          EXPO_PUBLIC_DATA_SOURCE: ${{ vars.EXPO_PUBLIC_DATA_SOURCE || 'fixtures' }}
+          MESSAGE: ${{ github.event.head_commit.message }}
+        run: eas update --channel stage --message "${MESSAGE:-수동 배포}" --non-interactive
