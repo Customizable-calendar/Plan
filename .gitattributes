@@ -1,0 +1,4 @@
+# Windows에서도 줄바꿈을 LF로 받아요. (Prettier 검사가 CRLF 때문에 실패하지 않게)
+* text=auto eol=lf
+*.png binary
+*.jpg binary
