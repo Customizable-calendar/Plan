@@ -21,6 +21,8 @@ Claude Code, Codex, Cursor 등 어떤 AI 코딩 도구를 쓰든 이 파일을 �
 - `apps/mobile/app/`은 화면 라우트예요. 조립만 하고 로직은 `features/<기능>/`에 둬요.
 - 다른 기능 폴더의 내부 파일을 import하지 않아요. `@/features/<기능>`(index.ts)로 내보낸 것만 써요. ESLint가 막아요.
 - 작업할 기능 폴더의 `README.md`를 먼저 읽어요. 담당자, 범위, 데이터, 할 일이 있어요.
+- 기능은 `index.ts`의 `feature`로 탭·오늘 섹션·화면에 붙어요. 새 기능은 `node scripts/new-feature.mjs`로 만들고, 공용 레이아웃(`app/_layout.tsx`, `app/(tabs)/`)은 고치지 않아요. 자세한 건 `apps/mobile/features/README.md`
+- 화면은 자기 기능의 `data.ts`로만 데이터를 가져와요. 예시 JSON ↔ Supabase 전환은 `data.ts` 안에서만 해요.
 - 기능끼리 주고받는 타입은 `packages/shared`에만 정의해요. 바꿀 때는 예시 JSON도 함께 고치고 `contract` 라벨 PR로 올려요.
 - Supabase는 `@/lib/supabase`의 `getSupabase()`로만, 로그인은 `@/lib/auth`로만 써요.
 - 파일 업로드·다운로드는 `@noteapp/storage`의 `FileStorage`로만 해요.
