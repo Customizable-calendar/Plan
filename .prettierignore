@@ -3,3 +3,4 @@ pnpm-lock.yaml
 .expo
 dist
 supabase/.temp
+packages/shared/src/db/database.types.ts
