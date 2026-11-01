@@ -12,6 +12,8 @@ module.exports = defineConfig([
       '**/expo-env.d.ts',
       // Edge Functions는 Deno로 돌아가서 따로 검사해요.
       'supabase/functions/**',
+      // supabase gen types로 만든 파일이라 손대지 않아요.
+      'packages/shared/src/db/database.types.ts',
     ],
   },
   {
