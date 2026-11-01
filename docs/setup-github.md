@@ -13,7 +13,7 @@ bash scripts/github/apply-settings.sh
 - `develop` 브랜치를 `stage`로 이름 바꾸기, 기본 브랜치를 `stage`로
 - 머지 방식: stage는 Squash merge, main은 merge commit. rebase merge는 끔. 머지한 브랜치는 자동 삭제
 - 브랜치 규칙 적용: [.github/rulesets/](../.github/rulesets/)
-  - `stage`: PR 필수, 아무나 승인 1명(CODEOWNERS는 리뷰어 자동 지정에만 써요), CI `check`·`db-types` 통과, stage 최신 위에서만 머지, force push·삭제 금지
+  - `stage`: PR 필수, 승인 없이 머지 가능(CODEOWNERS는 리뷰 요청 자동 지정에만 써요), CI `check`·`db-types` 통과, stage 최신 위에서만 머지, force push·삭제 금지
   - `main`: PR 필수, 승인 1명, CI `check` 통과, force push·삭제 금지
 - `develop`을 대상으로 하던 예전 규칙(`main·develop 보호`) 삭제
 - 배포 환경 `stage` 만들기 (비밀값은 [deploy.md](deploy.md)에서 따로 넣어요)
