@@ -3,4 +3,5 @@ export const env = {
   supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL ?? '',
   supabaseKey: process.env.EXPO_PUBLIC_SUPABASE_KEY ?? '',
   storageProvider: process.env.EXPO_PUBLIC_STORAGE_PROVIDER ?? 'supabase',
+  dataSource: process.env.EXPO_PUBLIC_DATA_SOURCE ?? 'fixtures',
 };
