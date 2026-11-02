@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 
 import { CardItem } from './CardItem';
+import { setDragging } from './dragging';
 import { confirmCard, dismissCard } from './store';
 
 // 확인 기다리는 카드를 한 장씩 넘겨요. 오른쪽 = 확인, 왼쪽 = 버리기.
@@ -19,6 +20,9 @@ import { confirmCard, dismissCard } from './store';
 
 const THRESHOLD = 110;
 const FLING = 0.8;
+
+const isHorizontal = (g: { dx: number; dy: number }) =>
+  Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5;
 
 export function CardDeck({ cards }: { cards: Card[] }) {
   if (cards.length === 0) return null;
@@ -44,12 +48,16 @@ function TopCard({ card, next }: { card: Card; next?: Card }) {
 
   const [responder] = useState(() =>
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy),
+      // 가로로 미는 게 보이면 ScrollView보다 먼저(capture) 잡고, 미는 동안 스크롤을 꺼요.
+      onMoveShouldSetPanResponder: (_, g) => isHorizontal(g),
+      onMoveShouldSetPanResponderCapture: (_, g) => isHorizontal(g),
       onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => setDragging(true),
       onPanResponderMove: Animated.event([null, { dx: pos.x, dy: pos.y }], {
         useNativeDriver: false,
       }),
       onPanResponderRelease: (_, g) => {
+        setDragging(false);
         if (Math.abs(g.dx) > THRESHOLD || Math.abs(g.vx) > FLING) fly(g.dx > 0, g.dy);
         else
           Animated.spring(pos, {
@@ -58,8 +66,10 @@ function TopCard({ card, next }: { card: Card; next?: Card }) {
             useNativeDriver: false,
           }).start();
       },
-      onPanResponderTerminate: () =>
-        Animated.spring(pos, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start(),
+      onPanResponderTerminate: () => {
+        setDragging(false);
+        Animated.spring(pos, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
+      },
     }),
   );
 

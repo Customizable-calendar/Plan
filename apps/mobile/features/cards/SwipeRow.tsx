@@ -2,6 +2,7 @@ import { colors, fontSize, space } from '@noteapp/ui';
 import { type ReactNode, useState } from 'react';
 import { Animated, Dimensions, PanResponder, StyleSheet, Text, View } from 'react-native';
 
+import { setDragging } from './dragging';
 import { confirmCard, dismissCard } from './store';
 
 // 확인 기다리는 카드를 오른쪽으로 밀면 확인, 왼쪽으로 밀면 버리기.
@@ -9,16 +10,21 @@ import { confirmCard, dismissCard } from './store';
 
 const THRESHOLD = 96;
 
+const isHorizontal = (g: { dx: number; dy: number }) =>
+  Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 2;
+
 export function SwipeRow({ cardId, children }: { cardId: string; children: ReactNode }) {
   const [x] = useState(() => new Animated.Value(0));
   const [responder] = useState(() =>
     PanResponder.create({
-      // 가로로 확실히 밀 때만 잡아요. 세로 스크롤은 ScrollView가 가져가요.
-      onMoveShouldSetPanResponder: (_, g) =>
-        Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+      // 가로로 확실히 밀 때만 ScrollView보다 먼저 잡고, 미는 동안 스크롤을 꺼요.
+      onMoveShouldSetPanResponder: (_, g) => isHorizontal(g),
+      onMoveShouldSetPanResponderCapture: (_, g) => isHorizontal(g),
       onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => setDragging(true),
       onPanResponderMove: Animated.event([null, { dx: x }], { useNativeDriver: false }),
       onPanResponderRelease: (_, g) => {
+        setDragging(false);
         if (Math.abs(g.dx) < THRESHOLD) {
           Animated.spring(x, { toValue: 0, useNativeDriver: false }).start();
           return;
@@ -35,6 +41,7 @@ export function SwipeRow({ cardId, children }: { cardId: string; children: React
         });
       },
       onPanResponderTerminate: () => {
+        setDragging(false);
         Animated.spring(x, { toValue: 0, useNativeDriver: false }).start();
       },
     }),
