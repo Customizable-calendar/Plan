@@ -5,7 +5,15 @@ import type { Field, Span } from './types';
 export { parseEvent } from './parse';
 export { toRRule } from './dates';
 export { ko } from './lexicon/ko';
-export type * from './types';
+export type {
+  Field,
+  Lexicon,
+  ParsedEvent,
+  ParseOptions,
+  Recurrence,
+  Span,
+  Weekday,
+} from './types';
 
 export interface Segment {
   text: string;
