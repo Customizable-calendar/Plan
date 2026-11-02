@@ -9,6 +9,7 @@ import { typeLabel } from './format';
 import { confirmCards, restoreCard, useCards } from './store';
 import { SwipeRow } from './SwipeRow';
 import { CardDeck } from './CardDeck';
+import { useDragging } from './dragging';
 import { TryMemo } from './TryMemo';
 import { UndoBar } from './UndoBar';
 
@@ -19,6 +20,7 @@ export function CardsScreen() {
   const [filter, setFilter] = useState<CardType | 'all'>('all');
   // 한 장씩(틴더처럼) 넘기기가 기본, 목록으로도 볼 수 있어요.
   const [deck, setDeck] = useState(true);
+  const dragging = useDragging();
 
   const shown = cards.filter((c) => filter === 'all' || c.type === filter);
   const waiting = shown.filter((c) => c.status === 'suggested');
@@ -31,6 +33,7 @@ export function CardsScreen() {
         style={screen.container}
         contentContainerStyle={[screen.content, styles.bottomRoom]}
         keyboardShouldPersistTaps="handled"
+        scrollEnabled={!dragging}
       >
         <TryMemo />
 
