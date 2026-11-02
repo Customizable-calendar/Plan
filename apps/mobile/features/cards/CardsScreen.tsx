@@ -1,5 +1,6 @@
 import type { CardType } from '@noteapp/shared';
 import { colors, fontSize, screen, space } from '@noteapp/ui';
+import { Link } from 'expo-router';
 import { type ReactNode, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -50,6 +51,9 @@ export function CardsScreen() {
           {confirmed.map((c) => (
             <CardItem key={c.id} card={c} />
           ))}
+          <Link href="/draft" style={styles.draft}>
+            확인한 카드로 초안 만들기
+          </Link>
         </Section>
       )}
 
@@ -96,4 +100,11 @@ const styles = StyleSheet.create({
   empty: { fontSize: fontSize.caption, color: colors.muted },
   dismissed: { fontSize: fontSize.caption, color: colors.muted, paddingVertical: space.xs },
   undo: { color: colors.accent, fontWeight: '600' },
+  draft: {
+    paddingVertical: space.sm,
+    textAlign: 'center',
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    color: colors.accent,
+  },
 });
