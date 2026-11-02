@@ -8,6 +8,7 @@ import { CardItem } from './CardItem';
 import { typeLabel } from './format';
 import { confirmCards, restoreCard, useCards } from './store';
 import { SwipeRow } from './SwipeRow';
+import { CardDeck } from './CardDeck';
 import { TryMemo } from './TryMemo';
 import { UndoBar } from './UndoBar';
 
@@ -16,6 +17,8 @@ const filters: (CardType | 'all')[] = ['all', 'event', 'task', 'person', 'idea']
 export function CardsScreen() {
   const { cards, loading } = useCards();
   const [filter, setFilter] = useState<CardType | 'all'>('all');
+  // 한 장씩(틴더처럼) 넘기기가 기본, 목록으로도 볼 수 있어요.
+  const [deck, setDeck] = useState(true);
 
   const shown = cards.filter((c) => filter === 'all' || c.type === filter);
   const waiting = shown.filter((c) => c.status === 'suggested');
@@ -52,26 +55,41 @@ export function CardsScreen() {
         <Section
           title={`확인 기다리는 카드 ${waiting.length}`}
           action={
-            waiting.length > 1 ? (
-              <Pressable
-                onPress={() => confirmCards(waiting.map((c) => c.id))}
-                accessibilityRole="button"
-                hitSlop={8}
-              >
-                <Text style={styles.undo}>모두 확인</Text>
-              </Pressable>
-            ) : null
+            <View style={styles.actions}>
+              {waiting.length > 1 && (
+                <Pressable
+                  onPress={() => setDeck((d) => !d)}
+                  accessibilityRole="button"
+                  hitSlop={8}
+                >
+                  <Text style={styles.undo}>{deck ? '목록으로' : '한 장씩'}</Text>
+                </Pressable>
+              )}
+              {waiting.length > 1 && (
+                <Pressable
+                  onPress={() => confirmCards(waiting.map((c) => c.id))}
+                  accessibilityRole="button"
+                  hitSlop={8}
+                >
+                  <Text style={styles.undo}>모두 확인</Text>
+                </Pressable>
+              )}
+            </View>
           }
         >
           {waiting.length === 0 && !loading && <Text style={styles.empty}>모두 확인했어요.</Text>}
           {waiting.length > 0 && (
             <Text style={styles.empty}>오른쪽으로 밀면 확인, 왼쪽으로 밀면 버려요.</Text>
           )}
-          {waiting.map((c) => (
-            <SwipeRow key={c.id} cardId={c.id}>
-              <CardItem card={c} />
-            </SwipeRow>
-          ))}
+          {deck ? (
+            <CardDeck cards={waiting} />
+          ) : (
+            waiting.map((c) => (
+              <SwipeRow key={c.id} cardId={c.id}>
+                <CardItem card={c} />
+              </SwipeRow>
+            ))
+          )}
         </Section>
 
         {confirmed.length > 0 && (
@@ -139,6 +157,7 @@ const styles = StyleSheet.create({
   section: { gap: space.sm },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   bottomRoom: { paddingBottom: 80 },
+  actions: { flexDirection: 'row', gap: space.md },
   sectionTitle: { fontSize: fontSize.caption, fontWeight: '700', color: colors.muted },
   empty: { fontSize: fontSize.caption, color: colors.muted },
   dismissed: { fontSize: fontSize.caption, color: colors.muted, paddingVertical: space.xs },
