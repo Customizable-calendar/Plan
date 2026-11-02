@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import cases from '../cases/cases.json';
 import { extractCards } from '../src';
-import { splitPieces, taskTitle } from '../src/extract';
+import { cardHints, splitPieces, taskTitle } from '../src/extract';
 
 const timezone = 'Asia/Seoul';
 const options = { now: new Date('2026-10-26T01:00:00.000Z'), timezone };
@@ -115,4 +115,40 @@ describe('taskTitle', () => {
     ['약 먹어야지', '약 먹기'],
     ['우유 사기', '우유 사기'],
   ])('%s → %s', (input, want) => expect(taskTitle(input)).toBe(want));
+});
+
+describe('cardHints', () => {
+  const at = '2026-10-26T01:00:00.000Z'; // 10/26 (월) 10:00 KST
+  const hints = async (text: string) => {
+    const [card] = await extractCards(
+      { id: 'h', text, createdAt: at },
+      { now: new Date(at), timezone },
+    );
+    return cardHints(card, text, timezone);
+  };
+
+  it('오전·오후가 없으면 짐작한 쪽을 알려 준다', async () => {
+    expect(await hints('내일 3시 회의')).toEqual(['오전·오후가 없어서 오후로 봤어요']);
+    expect(await hints('내일 9시 회의')).toEqual(['오전·오후가 없어서 오전으로 봤어요']);
+  });
+
+  it('다 적혀 있으면 아무것도 없다', async () => {
+    expect(await hints('내일 오후 3시 회의')).toEqual([]);
+    expect(await hints('내일 15:00 회의')).toEqual([]);
+  });
+
+  it('날짜가 없으면 오늘·내일 중 어느 쪽으로 봤는지 알려 준다', async () => {
+    expect(await hints('오후 5시 회의')).toEqual(['날짜가 없어서 오늘로 봤어요']);
+    expect(await hints('오전 8시 회의')).toEqual(['날짜가 없어서 내일로 봤어요']);
+  });
+
+  it('지난 날짜는 내년으로 봤다고 알려 준다', async () => {
+    expect(await hints('3월 2일 개강')).toEqual(['지난 날짜라 내년으로 봤어요']);
+  });
+
+  it('fixtures 카드에도 쓸 수 있다', () => {
+    const note = fixtures.notes[0];
+    const card = fixtures.cards.find((c) => c.id === 'card-1')!;
+    expect(cardHints(card, note.text, timezone)).toEqual(['오전·오후가 없어서 오후로 봤어요']);
+  });
 });

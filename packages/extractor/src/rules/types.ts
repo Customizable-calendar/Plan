@@ -35,6 +35,12 @@ export interface Recurrence {
   until?: Date;
 }
 
+/**
+ * 원문에 없어서 파서가 짐작한 것. 화면에서 "오후로 봤어요"처럼 보여 줘요.
+ * pm/am: 오전·오후 없이 쓴 시각, nextYear: 지난 날짜를 내년으로, today/tomorrow: 날짜 없이 쓴 시각
+ */
+export type Assumption = 'pm' | 'am' | 'nextYear' | 'today' | 'tomorrow';
+
 export interface ParsedEvent {
   type: 'event' | 'task';
   /** 인식된 부분을 뺀 나머지. 비어 있을 수 있음 */
@@ -53,6 +59,7 @@ export interface ParsedEvent {
   calendar?: string;
   url?: string;
   spans: Span[];
+  assumptions: Assumption[];
 }
 
 export interface ParseOptions {

@@ -185,6 +185,7 @@ export function parseEvent(input: string, options: ParseOptions = {}): ParsedEve
     alarms: [],
     alarmOff: false,
     spans: sc.spans,
+    assumptions: [],
   };
 
   const toNumber = (s: string): number => {
@@ -211,8 +212,10 @@ export function parseEvent(input: string, options: ParseOptions = {}): ParsedEve
       const base = prev ?? today;
       const date = new Date(y ?? base.getFullYear(), mo - 1, d);
       if (date.getMonth() !== mo - 1) return null;
-      if (y === undefined && rollToFuture && date < base)
+      if (y === undefined && rollToFuture && date < base) {
+        result.assumptions.push('nextYear');
         return new Date(date.getFullYear() + 1, mo - 1, d);
+      }
       return date;
     };
   const fixed = (date: Date | null) => () => date;
@@ -446,6 +449,10 @@ export function parseEvent(input: string, options: ParseOptions = {}): ParsedEve
 
   // 8. 시각이 없으면 "점심", "회식" 같은 단어로 기본 시각. 날짜 바로 뒤에 있을 때만 제목에서 뺀다
   let startMinutes = times[0] ? toMinutes(times[0], pmHours) : undefined;
+  if (times[0] && !times[0].dp && times[0].hour >= 1 && times[0].hour <= 11) {
+    const pm = times[0].hour >= pmHours[0] && times[0].hour <= pmHours[1];
+    result.assumptions.push(pm ? 'pm' : 'am');
+  }
   if (startMinutes === undefined && !relStart) {
     const [c] = sc.find([[R.implicit, (m) => lookup(L.implicitTimes, m[1])]]);
     if (c) {
@@ -474,6 +481,7 @@ export function parseEvent(input: string, options: ParseOptions = {}): ParsedEve
   } else if (startMinutes !== undefined) {
     start = atMinutes(today, startMinutes);
     if (rollToFuture && start < now) start = addDays(start, 1);
+    result.assumptions.push(start >= addDays(today, 1) ? 'tomorrow' : 'today');
   }
 
   if (start) {

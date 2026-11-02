@@ -1,7 +1,7 @@
 import type { Card, Note } from '@noteapp/shared';
 
 import { parseEvent } from './rules';
-import type { ParsedEvent } from './rules';
+import type { Assumption, ParsedEvent } from './rules';
 import { fromLocalFrame, toLocalFrame } from './zone';
 
 // 메모 → 카드 후보. 메모를 문장 조각으로 자르고, 조각마다 파서를 돌려 카드로 바꿔요.
@@ -196,4 +196,28 @@ export function extractByRules(note: Note, ctx: Omit<ExtractContext, 'noteId'>):
     }
   }
   return cards;
+}
+
+// ---------- 짐작한 것 보여 주기 ----------
+
+const hintText: Record<Assumption, string> = {
+  pm: '오전·오후가 없어서 오후로 봤어요',
+  am: '오전·오후가 없어서 오전으로 봤어요',
+  nextYear: '지난 날짜라 내년으로 봤어요',
+  today: '날짜가 없어서 오늘로 봤어요',
+  tomorrow: '날짜가 없어서 내일로 봤어요',
+};
+
+/**
+ * 일정·할 일 카드에서 파서가 짐작한 부분을 사람이 읽는 문장으로.
+ * 카드가 나온 원문 구간을 만든 시각(createdAt) 기준으로 다시 읽어요. 카드 타입은 바꾸지 않아요.
+ * 사용자가 날짜를 고친 카드에는 쓰지 마세요.
+ */
+export function cardHints(card: Card, noteText: string, timezone: string): string[] {
+  if (card.type !== 'event' && card.type !== 'task') return [];
+  const [s, e] = card.source.span;
+  const now = new Date(card.createdAt);
+  if (Number.isNaN(now.getTime())) return [];
+  const parsed = parseEvent(noteText.slice(s, e), { now: toLocalFrame(now, timezone) });
+  return [...new Set(parsed.assumptions)].map((a) => hintText[a]);
 }

@@ -4,8 +4,8 @@ import { extractByRules } from './extract';
 
 // 캘린더 빠른 입력처럼 한 줄 일정 입력에는 파서를 바로 써요.
 export { parseEvent, toRRule, toSegments, ko } from './rules';
-export type { ParsedEvent, ParseOptions, Recurrence, Span, Segment } from './rules';
-export { splitPieces } from './extract';
+export type { Assumption, ParsedEvent, ParseOptions, Recurrence, Span, Segment } from './rules';
+export { cardHints, splitPieces } from './extract';
 
 export interface ExtractOptions {
   /** "내일", "다음 주" 같은 표현을 계산할 기준 시각 */
