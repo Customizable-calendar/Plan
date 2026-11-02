@@ -1,9 +1,9 @@
 import type { Card } from '@noteapp/shared';
 import { colors, fontSize, space } from '@noteapp/ui';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { getNoteText } from './data';
+import { getHints, getNoteText } from './data';
 import { cardDetail, typeLabel } from './format';
 import { confirmCard, dismissCard, renameCard, restoreCard } from './store';
 
@@ -12,6 +12,18 @@ export function CardItem({ card }: { card: Card }) {
   const [draft, setDraft] = useState(card.title);
   const [source, setSource] = useState<string | null>(null);
   const detail = cardDetail(card);
+  const [hints, setHints] = useState<string[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    getHints(card).then(
+      (h) => alive && setHints(h),
+      () => alive && setHints([]),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [card]);
 
   const toggleSource = async () => {
     if (source !== null) return setSource(null);
@@ -47,6 +59,11 @@ export function CardItem({ card }: { card: Card }) {
         <Text style={styles.title}>{card.title}</Text>
       )}
       {detail && <Text style={styles.detail}>{detail}</Text>}
+      {hints.map((h) => (
+        <Text key={h} style={styles.hint}>
+          {h}
+        </Text>
+      ))}
 
       {source !== null && <SourceText text={source} span={card.source.span} />}
 
@@ -100,6 +117,9 @@ function Action({
   );
 }
 
+// 짐작한 부분 안내 색. 테마(D)에 경고 색이 생기면 그걸로 바꿔요.
+const hintColor = '#A35A00';
+
 const styles = StyleSheet.create({
   card: {
     gap: space.sm,
@@ -120,6 +140,7 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
   },
   detail: { fontSize: fontSize.caption, color: colors.muted },
+  hint: { fontSize: fontSize.caption, color: hintColor },
   source: {
     fontSize: fontSize.caption,
     lineHeight: 20,

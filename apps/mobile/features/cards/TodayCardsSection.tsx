@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { CardItem } from './CardItem';
 import { useCards } from './store';
+import { UndoBar } from './UndoBar';
 
 // 오늘 화면에는 확인을 기다리는 카드만 앞의 3장까지 보여주고, 나머지는 카드 탭으로 보내요.
 const LIMIT = 3;
@@ -34,6 +35,7 @@ export function TodayCardsSection() {
           )}
         </>
       )}
+      <UndoBar />
     </View>
   );
 }
