@@ -1,4 +1,4 @@
-import { extractCards } from '@noteapp/extractor';
+import { cardHints, extractCards } from '@noteapp/extractor';
 import { type Card, fixtures } from '@noteapp/shared';
 
 import { dataSource, fromFixture } from '@/lib/data-source';
@@ -37,4 +37,11 @@ export async function getNoteText(noteId: string): Promise<string | undefined> {
   if (tried.has(noteId)) return tried.get(noteId);
   if (dataSource === 'fixtures') return fixtures.notes.find((n) => n.id === noteId)?.text;
   throw new Error('cards: Supabase 연결은 M2에서 만들어요.');
+}
+
+/** 파서가 짐작한 부분 안내 ("오전·오후가 없어서 오후로 봤어요"). 확인 전 일정·할 일 카드만 */
+export async function getHints(card: Card): Promise<string[]> {
+  if (card.status !== 'suggested') return [];
+  const text = await getNoteText(card.source.noteId);
+  return text ? cardHints(card, text, timezone) : [];
 }

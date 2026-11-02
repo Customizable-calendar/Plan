@@ -1,4 +1,4 @@
-import type { Card } from '@noteapp/shared';
+import type { Card, CardStatus } from '@noteapp/shared';
 import { useEffect, useSyncExternalStore } from 'react';
 
 import { extractFromText, listCards, saveCard } from './data';
@@ -60,7 +60,48 @@ export async function addFromText(text: string): Promise<number> {
   return found.length;
 }
 
-export const confirmCard = (id: string) => update(id, { status: 'confirmed' });
-export const dismissCard = (id: string) => update(id, { status: 'dismissed' });
+// ---------- 되돌리기 ----------
+// 확인·버리기는 한 번 누르면 바로 반영하고, 몇 초 동안 되돌리기를 보여줘요. (확인 창 대신)
+
+export interface Undo {
+  label: string;
+  changes: { id: string; status: CardStatus }[];
+}
+
+const UNDO_MS = 5000;
+let undo: Undo | null = null;
+let undoTimer: ReturnType<typeof setTimeout> | undefined;
+
+function setUndo(next: Undo | null) {
+  clearTimeout(undoTimer);
+  undo = next;
+  if (next) undoTimer = setTimeout(() => setUndo(null), UNDO_MS);
+  emit();
+}
+
+export function useUndo() {
+  return useSyncExternalStore(subscribe, () => undo);
+}
+
+async function setStatus(ids: string[], status: CardStatus, label: string) {
+  const changes = (cards ?? [])
+    .filter((c) => ids.includes(c.id) && c.status !== status)
+    .map((c) => ({ id: c.id, status: c.status }));
+  if (changes.length === 0) return;
+  setUndo({ label, changes });
+  await Promise.all(changes.map((c) => update(c.id, { status })));
+}
+
+export async function undoLast() {
+  const last = undo;
+  if (!last) return;
+  setUndo(null);
+  await Promise.all(last.changes.map((c) => update(c.id, { status: c.status })));
+}
+
+export const confirmCard = (id: string) => setStatus([id], 'confirmed', '확인했어요');
+export const dismissCard = (id: string) => setStatus([id], 'dismissed', '버렸어요');
+export const confirmCards = (ids: string[]) =>
+  setStatus(ids, 'confirmed', `${ids.length}장을 확인했어요`);
 export const restoreCard = (id: string) => update(id, { status: 'suggested' });
 export const renameCard = (id: string, title: string) => update(id, { title });
