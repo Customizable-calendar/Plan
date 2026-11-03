@@ -1,7 +1,7 @@
 import type { Card } from '@noteapp/shared';
 import { useEffect, useSyncExternalStore } from 'react';
 
-import { listCards, saveCard } from './data';
+import { extractFromText, listCards, saveCard } from './data';
 
 // 카드 탭과 오늘 화면 섹션이 같은 카드 목록을 보도록 한곳에 둬요.
 // useSyncExternalStore: 컴포넌트 밖의 값이 바뀌면 그 값을 쓰는 화면을 다시 그려요.
@@ -49,6 +49,15 @@ async function update(id: string, patch: Partial<Pick<Card, 'status' | 'title'>>
     emit();
     throw error;
   }
+}
+
+/** 새로 찾은 카드를 맨 앞에 붙여요. 몇 장 붙였는지 돌려줘요. */
+export async function addFromText(text: string): Promise<number> {
+  await load();
+  const found = await extractFromText(text);
+  cards = [...found, ...(cards ?? [])];
+  emit();
+  return found.length;
 }
 
 export const confirmCard = (id: string) => update(id, { status: 'confirmed' });

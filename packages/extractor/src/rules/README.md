@@ -1,4 +1,10 @@
 # rules/
 
-규칙 추출기를 파일 하나에 하나씩 둬요. 예: `dates.ts`(날짜·시간), `people.ts`(사람 이름), `tasks.ts`(할 일 표현).
-각 규칙은 원문 위치(`span`)를 함께 돌려줘서 카드에서 원문으로 돌아갈 수 있게 해요.
+한국어 자연어 날짜·일정 파서예요. [event-parser](https://github.com/Customizable-calendar/event-parser)에서 옮겨 왔고, 이제 여기가 원본이에요.
+
+- `parse.ts` `parseEvent(text, options)`: 한 줄 → 제목·시작·끝·참석자·장소·반복·알림 + 원문 위치(`spans`)
+- `lexicon/ko.ts`: 단어 사전. 새 표현은 정규식보다 사전에 먼저 추가해요.
+- `dates.ts`: 날짜 계산, `toRRule()`
+- `scanner.ts`: 이미 인식한 글자를 다시 쓰지 않게 하는 스캐너
+
+파서는 기기 시간(`getHours` 등)으로 계산해요. 메모 시간대 변환은 `../zone.ts`가 해요.

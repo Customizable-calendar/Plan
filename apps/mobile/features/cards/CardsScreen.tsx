@@ -7,6 +7,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CardItem } from './CardItem';
 import { typeLabel } from './format';
 import { restoreCard, useCards } from './store';
+import { TryMemo } from './TryMemo';
 
 const filters: (CardType | 'all')[] = ['all', 'event', 'task', 'person', 'idea'];
 
@@ -20,7 +21,13 @@ export function CardsScreen() {
   const dismissed = shown.filter((c) => c.status === 'dismissed');
 
   return (
-    <ScrollView style={screen.container} contentContainerStyle={screen.content}>
+    <ScrollView
+      style={screen.container}
+      contentContainerStyle={screen.content}
+      keyboardShouldPersistTaps="handled"
+    >
+      <TryMemo />
+
       <View style={styles.filters}>
         {filters.map((f) => (
           <Pressable
