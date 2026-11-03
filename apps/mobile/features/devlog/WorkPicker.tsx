@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { fetchWork, type WorkItem } from './github';
+import { look } from './look';
 
 export interface Picked {
   item: WorkItem;
@@ -100,17 +101,17 @@ const styles = StyleSheet.create({
   gap: { gap: space.sm },
   flex: { flex: 1, gap: 2 },
   muted: { fontSize: fontSize.caption, color: colors.muted },
-  error: { fontSize: fontSize.caption, color: '#C0392B' },
-  link: { fontSize: fontSize.caption, fontWeight: '700', color: colors.accent },
+  error: { fontSize: fontSize.caption, color: look.destructive },
+  link: { fontSize: fontSize.caption, fontWeight: '700', color: look.primary },
   item: {
     gap: space.sm,
     padding: space.sm,
-    borderRadius: 12,
+    borderRadius: look.radius,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
     backgroundColor: colors.surface,
   },
-  itemOn: { borderColor: colors.accent, borderWidth: 1 },
+  itemOn: { borderColor: look.primary, borderWidth: 1 },
   itemHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: 44 },
   check: {
     width: 24,
@@ -125,7 +126,7 @@ const styles = StyleSheet.create({
     color: colors.surface,
     overflow: 'hidden',
   },
-  checkOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  checkOn: { backgroundColor: look.primary, borderColor: look.primary },
   title: { fontSize: fontSize.body, color: colors.ink },
   note: {
     minHeight: 44,

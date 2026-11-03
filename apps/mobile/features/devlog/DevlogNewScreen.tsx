@@ -1,11 +1,22 @@
-import type { AiMessage } from '@noteapp/ai-client';
+import type { AiMessage as Turn } from '@noteapp/ai-client';
 import { colors, fontSize, screen, space } from '@noteapp/ui';
 import { router } from 'expo-router';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { askDevlogAi, hasAiKey, saveAiKey } from './ai';
+import {
+  AiMessage,
+  AiText,
+  Composer,
+  ErrorNotice,
+  Sources,
+  SuggestionChips,
+  Thinking,
+  UserBubble,
+} from './Chat';
 import { fetchPrFiles } from './github';
+import { look } from './look';
 import { Markdown } from './Markdown';
 import { type Role, memberOf, members } from './members';
 import { splitSections, studyQuestions } from './parse';
@@ -15,9 +26,19 @@ import { shiftWeek, weekKey, weekLabel } from './week';
 import { type Picked, WorkPicker } from './WorkPicker';
 
 // 1) 이번 주 PR·이슈를 고르고 배운 점 한두 줄 2) 앱 안 AI가 공통 템플릿으로 채워요
-// 3) 말로 더 고쳐 달라고 하거나 직접 고치고 4) 저장. 키가 없으면 코딩 AI에 부탁 문장을 보내요.
+// 3) 대화로 더 고쳐 달라고 하거나 직접 고치고 4) 저장. 키가 없으면 코딩 AI에 부탁 문장을 보내요.
+// 대화 모양은 디자인 시스템 "5. AI 채팅" 기본안을 따라요 (Chat.tsx).
 
 type Range = 1 | 2;
+
+/** 화면에 보이는 대화. AI에게 실제로 보낸 문장(turns)과 따로 둬요. */
+interface Bubble {
+  who: 'user' | 'ai';
+  text: string;
+  sources?: string[];
+}
+
+const SUGGESTIONS = ['스터디 질문을 더 쉽게', '배운 개념을 더 자세히', '전체를 더 짧게'];
 
 export function DevlogNewScreen() {
   // TODO(B, M2): 로그인한 사람으로 고정해요.
@@ -27,8 +48,8 @@ export function DevlogNewScreen() {
   const [note, setNote] = useState('');
 
   const [keyReady, setKeyReady] = useState<boolean | null>(null);
-  const [turns, setTurns] = useState<AiMessage[]>([]);
-  const [asks, setAsks] = useState<string[]>([]);
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const [thread, setThread] = useState<Bubble[]>([]);
   const [ask, setAsk] = useState('');
   const [draft, setDraft] = useState('');
   const [editing, setEditing] = useState(false);
@@ -41,6 +62,8 @@ export function DevlogNewScreen() {
   const since = range === 1 ? week : shiftWeek(week, -1);
   const pickedList = Object.values(picked);
   const lastReply = turns.length ? turns[turns.length - 1].content : '';
+  const canFill = !busy && (pickedList.length > 0 || note.trim() !== '');
+  const lastAi = thread.map((b) => b.who).lastIndexOf('ai');
 
   useEffect(() => {
     hasAiKey().then(setKeyReady, () => setKeyReady(false));
@@ -59,7 +82,11 @@ export function DevlogNewScreen() {
   };
 
   const fill = () =>
-    run('PR 내용을 모아 AI가 채우는 중', async () => {
+    run('PR 내용을 모아 일지를 채우는 중', async () => {
+      const said = pickedList.length
+        ? `PR·이슈 ${pickedList.length}개${note.trim() ? '와 메모' : ''}로 일지를 채워줘`
+        : '메모로 일지를 채워줘';
+      setThread([{ who: 'user', text: said }]);
       const works: PickedWork[] = await Promise.all(
         pickedList.map(async ({ item, note: itemNote }) => ({
           item,
@@ -73,14 +100,23 @@ export function DevlogNewScreen() {
         { role: 'user', content: prompt },
         { role: 'assistant', content: reply },
       ]);
-      setAsks([]);
+      setThread([
+        { who: 'user', text: said },
+        {
+          who: 'ai',
+          text: reply,
+          sources: works.map(({ item }) => `${item.kind === 'pr' ? 'PR' : '이슈'} #${item.number}`),
+        },
+      ]);
       setDraft(reply);
       setEditing(false);
     });
 
-  const revise = () =>
-    run('AI가 고치는 중', async () => {
-      const text = ask.trim();
+  const revise = (text: string) =>
+    run('고치는 중', async () => {
+      const shown: Bubble[] = [...thread, { who: 'user', text }];
+      setThread(shown);
+      setAsk('');
       const prompt = reviseRequest(text, draft !== lastReply ? draft : undefined);
       const reply = await askDevlogAi(turns, prompt);
       setTurns([
@@ -88,8 +124,7 @@ export function DevlogNewScreen() {
         { role: 'user', content: prompt },
         { role: 'assistant', content: reply },
       ]);
-      setAsks([...asks, text]);
-      setAsk('');
+      setThread([...shown, { who: 'ai', text: reply }]);
       setDraft(reply);
       setEditing(false);
     });
@@ -148,12 +183,9 @@ export function DevlogNewScreen() {
         {keyReady && (
           <Pressable
             onPress={fill}
-            disabled={!!busy || (pickedList.length === 0 && !note.trim())}
+            disabled={!canFill}
             accessibilityRole="button"
-            style={[
-              styles.primary,
-              (!!busy || (pickedList.length === 0 && !note.trim())) && styles.disabled,
-            ]}
+            style={[styles.primary, !canFill && styles.disabled]}
           >
             <Text style={styles.primaryText}>
               {turns.length ? '처음부터 다시 채우기' : `AI로 일지 채우기 (${pickedList.length}개)`}
@@ -177,42 +209,48 @@ export function DevlogNewScreen() {
         {manual && <ManualAsk prompt={devlogPrompt(member, week)} />}
       </Step>
 
-      {busy && <Text style={styles.muted}>{busy}…</Text>}
-      {error && <Text style={styles.error}>{error}</Text>}
-
-      {(draft !== '' || manual) && (
+      {(thread.length > 0 || draft !== '' || manual || error) && (
         <Step n={4} title="확인하고 고치기">
-          {asks.map((a, i) => (
-            <Text key={i} style={styles.bubble}>
-              {a}
-            </Text>
-          ))}
-          <DraftView draft={draft} editing={editing || manual} onChange={setDraft} />
-          {draft !== '' && (
-            <Pressable onPress={() => setEditing(!editing)} accessibilityRole="button">
-              <Text style={styles.link}>{editing ? '미리보기' : '직접 고치기'}</Text>
-            </Pressable>
+          {thread.map((b, i) =>
+            b.who === 'user' ? (
+              <UserBubble key={i}>{b.text}</UserBubble>
+            ) : (
+              <AiMessage key={i}>
+                {i === lastAi ? (
+                  <DraftView draft={draft} editing={editing} onChange={setDraft} />
+                ) : (
+                  <AiText>일지를 고쳤어요. 최신본은 아래에 있어요.</AiText>
+                )}
+                {b.sources && <Sources items={b.sources} />}
+              </AiMessage>
+            ),
+          )}
+          {lastAi < 0 && (draft !== '' || manual) && (
+            <DraftView draft={draft} editing onChange={setDraft} />
+          )}
+          {busy && busy !== '저장하는 중' && <Thinking label={busy} />}
+          {error && <ErrorNotice message={error} action="내용을 확인하고 다시 해 주세요" />}
+
+          {lastAi >= 0 && !busy && (
+            <>
+              <Pressable
+                onPress={() => setEditing(!editing)}
+                accessibilityRole="button"
+                style={styles.indent}
+              >
+                <Text style={styles.link}>{editing ? '미리보기' : '직접 고치기'}</Text>
+              </Pressable>
+              <SuggestionChips items={SUGGESTIONS} onPick={revise} />
+            </>
           )}
           {turns.length > 0 && (
-            <View style={styles.askRow}>
-              <TextInput
-                value={ask}
-                onChangeText={setAsk}
-                multiline
-                placeholder="AI에게 더 고쳐 달라고 하기 (예: 스터디 질문을 더 쉽게)"
-                placeholderTextColor={colors.muted}
-                accessibilityLabel="AI에게 고쳐 달라고 할 말"
-                style={[styles.input, styles.inputSmall, styles.flex]}
-              />
-              <Pressable
-                onPress={revise}
-                disabled={!!busy || !ask.trim()}
-                accessibilityRole="button"
-                style={[styles.send, (!!busy || !ask.trim()) && styles.disabled]}
-              >
-                <Text style={styles.primaryText}>보내기</Text>
-              </Pressable>
-            </View>
+            <Composer
+              value={ask}
+              onChange={setAsk}
+              onSend={() => revise(ask.trim())}
+              disabled={!!busy}
+              placeholder="더 고쳐 달라고 하기"
+            />
           )}
           <Pressable
             onPress={save}
@@ -367,26 +405,17 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, alignItems: 'center' },
   askRow: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-end' },
   muted: { fontSize: fontSize.caption, color: colors.muted },
-  link: { fontSize: fontSize.caption, fontWeight: '700', color: colors.accent },
-  error: { fontSize: fontSize.caption, color: '#C0392B' },
-  sectionTitle: { fontSize: fontSize.caption, fontWeight: '700', color: colors.accent },
+  link: { fontSize: fontSize.caption, fontWeight: '700', color: look.primary },
+  error: { fontSize: fontSize.caption, color: look.destructive },
+  indent: { marginLeft: 36 },
+  sectionTitle: { fontSize: fontSize.caption, fontWeight: '700', color: look.primary },
   box: {
     gap: space.md,
     padding: space.md,
-    borderRadius: 12,
+    borderRadius: look.radius,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
     backgroundColor: colors.surface,
-  },
-  bubble: {
-    alignSelf: 'flex-end',
-    maxWidth: '85%',
-    padding: space.sm,
-    borderRadius: 12,
-    backgroundColor: colors.accent,
-    color: colors.surface,
-    fontSize: fontSize.caption,
-    overflow: 'hidden',
   },
   prompt: {
     maxHeight: 220,
@@ -402,7 +431,7 @@ const styles = StyleSheet.create({
   input: {
     minHeight: 200,
     padding: space.md,
-    borderRadius: 12,
+    borderRadius: look.radius,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
     backgroundColor: colors.surface,
@@ -432,22 +461,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: colors.accent,
+    borderColor: look.primary,
   },
   primary: {
     minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: colors.accent,
+    borderRadius: look.radius,
+    backgroundColor: look.primary,
   },
   send: {
     minHeight: 44,
     paddingHorizontal: space.md,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: colors.accent,
+    borderRadius: look.radius,
+    backgroundColor: look.primary,
   },
   disabled: { opacity: 0.4 },
   primaryText: { fontSize: fontSize.body, fontWeight: '700', color: colors.surface },

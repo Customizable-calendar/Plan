@@ -5,6 +5,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { members } from './members';
 import { useDevlogs } from './store';
 import { weekKey } from './week';
+import { look } from './look';
 
 /** 오늘 화면: 이번 주 일지를 몇 명이 썼는지와 바로 가기 */
 export function DevlogSection() {
@@ -38,6 +39,6 @@ const styles = StyleSheet.create({
   section: { gap: space.sm },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   title: { fontSize: fontSize.title, fontWeight: '700', color: colors.ink },
-  link: { fontSize: fontSize.caption, fontWeight: '700', color: colors.accent },
+  link: { fontSize: fontSize.caption, fontWeight: '700', color: look.primary },
   muted: { fontSize: fontSize.caption, color: colors.muted },
 });
