@@ -33,6 +33,8 @@ export interface AiRequest {
   history?: AiMessage[];
   prompt: string;
   maxTokens?: number;
+  /** JSON 스키마를 주면 그 모양의 JSON 문자열로만 답해요 (구조화 출력). */
+  json?: Record<string, unknown>;
 }
 
 export interface AiProvider {
@@ -66,7 +68,7 @@ function claudeProvider(apiKey: string): AiProvider {
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
   return {
     name: 'claude',
-    async complete({ system, history = [], prompt, maxTokens = 16000 }) {
+    async complete({ system, history = [], prompt, maxTokens = 16000, json }) {
       try {
         const res = await client.beta.messages.create({
           model: CLAUDE_MODEL,
@@ -74,7 +76,10 @@ function claudeProvider(apiKey: string): AiProvider {
           // 정책상 거절되면 서버가 알맞은 다른 모델로 다시 돌려요.
           betas: ['server-side-fallback-2026-07-01'],
           fallbacks: 'default',
-          output_config: { effort: 'medium' },
+          output_config: {
+            effort: 'medium',
+            ...(json ? { format: { type: 'json_schema', schema: json } } : {}),
+          },
           ...(system ? { system } : {}),
           messages: [...history, { role: 'user', content: prompt }],
         });
