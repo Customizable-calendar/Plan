@@ -11,6 +11,7 @@ import { feature as calendar } from './calendar';
 import { feature as execution } from './execution';
 import { feature as feed } from './feed';
 import { feature as settings } from './settings';
+import { feature as dev } from './dev';
 // new-feature:import
 
 export const features: Feature[] = [
@@ -23,6 +24,7 @@ export const features: Feature[] = [
   execution,
   feed,
   settings,
+  dev,
   // new-feature:entry
 ];
 

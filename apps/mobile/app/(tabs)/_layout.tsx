@@ -1,7 +1,7 @@
 import { colors } from '@noteapp/ui';
 import { Link, Tabs } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { type ColorValue, Pressable } from 'react-native';
+import { type ColorValue, Pressable, Text } from 'react-native';
 
 import { tabFeatures } from '@/features/registry';
 
@@ -28,6 +28,17 @@ function SettingsButton() {
   );
 }
 
+// 개발 중에만 보이는 버튼이에요. 탭에 없는 화면까지 모아 둔 개발 메뉴(features/dev)를 열어요.
+function DevMenuButton() {
+  return (
+    <Link href="/dev" asChild>
+      <Pressable accessibilityLabel="개발 메뉴 열기" hitSlop={12} style={{ marginLeft: 16 }}>
+        <Text style={{ color: colors.accent, fontWeight: '600' }}>개발</Text>
+      </Pressable>
+    </Link>
+  );
+}
+
 export default function TabLayout() {
   return (
     <Tabs screenOptions={{ tabBarActiveTintColor: colors.accent }}>
@@ -37,6 +48,7 @@ export default function TabLayout() {
           title: '오늘',
           tabBarIcon: tabIcon({ ios: 'house', android: 'home', web: 'home' }),
           headerRight: SettingsButton,
+          headerLeft: __DEV__ ? DevMenuButton : undefined,
         }}
       />
       {tabFeatures.map((f) => (
