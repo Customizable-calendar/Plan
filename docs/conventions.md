@@ -23,12 +23,12 @@ docs(learning): Expo Router 탭 구조 정리
 
 ## PR
 
-- 대상은 `stage`, 리뷰 1명 승인(CODEOWNERS가 자동 지정), 합칠 때는 Squash merge예요. 배포는 [deploy.md](deploy.md)
+- 대상은 `stage`, 승인 없이 머지할 수 있어요(리뷰 요청은 CODEOWNERS가 자동 지정). 합칠 때는 Squash merge예요. 배포는 [deploy.md](deploy.md)
 - 올리기 전에 `pnpm pr:check`로 stage 최신 여부와 겹치는 PR을 확인해요(아래 "충돌 처리").
 - 한 PR에는 기능 하나, 400줄 이하를 권장해요. 길어지면 "화면만", "데이터만"으로 나눠요.
 - 탭·라우트·`package.json` 같은 공유 파일 변경은 따로 작은 PR로 올려요. 충돌은 대부분 여기서 나요.
 - 작업 중인 기능은 화면에서 숨긴 채 먼저 합쳐도 돼요.
-- 리뷰 순서: AI 리뷰로 1차 점검 → 팀원 1명이 확인 후 승인
+- 리뷰 순서: AI 리뷰로 1차 점검 → CI 통과 후 본인이 머지. 공용 타입(contract)이나 다른 사람 기능 폴더를 바꾸는 PR은 담당자 승인을 받고 머지해요(GitHub가 막지는 않는 팀 약속).
 - 깨지는 변경(필드 삭제·이름 변경)은 PR 제목에 `[breaking]`을 붙여요.
 
 ## 충돌 처리
