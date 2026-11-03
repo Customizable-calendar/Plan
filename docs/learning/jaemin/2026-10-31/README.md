@@ -1,0 +1,37 @@
+# 캘린더 연결과 자동 정보 업데이트
+
+## 오늘 배운 것
+
+### 캘린더 연결
+
+- `internal/hub/models.go`: 계정과 일정에 담을 정보를 정한다.
+- `internal/hub/service.go`: `Connect()`가 로그인을 처리하고, `Snapshot()`이 일정 조회를 모은다.
+- `internal/hub/provider.go`: Google·Microsoft에서 일정을 받아 같은 형태로 정리한다.
+- 코드 흐름: 화면에서 요청 → 로그인 → 캘린더와 일정 가져오기 → 화면 표시.
+
+### 자동 정보 업데이트
+
+- `gui_windows.go`: 화면 입력을 받고 `start()`에서 반복 작업을 시작한다.
+- `pipeline.go`: `cycle()`이 검색어 만들기 → 논문 검색 → AI 요약 → 파일 저장 순서로 처리한다.
+- `papers.go`는 검색과 중복 제거, `api.go`는 외부 서비스와의 통신을 맡는다.
+- `time.NewTicker(6 * time.Hour)`가 6시간마다 다음 작업 시점을 알린다.
+
+## AI에게 한 질문
+
+- **캘린더 로그인은 왜 앱 등록이 필요한가?** Google·Microsoft가 어떤 프로그램에 일정 접근을 허용하는지 구분해야 해서다. 등록 정보는 `provider.go`의 로그인 설정에 쓰인다.
+- **6시간을 기다리는 동안 화면은 멈추지 않나?** `gui_windows.go`의 `go func()`가 작업을 별도로 처리해 화면이 계속 반응한다.
+
+## 막힌 곳과 해결
+
+- **로그인과 일정 조회가 헷갈림:** `Connect()`는 접근 허가를 받는 부분, `Snapshot()`은 일정을 가져오는 부분으로 나눠 읽는다. 현재 캘린더 코드는 조회까지이며 자동 동기화는 추가 구현이 필요하다.
+- **자동 업데이트에서 같은 논문이 반복될 수 있음:** 처리한 논문을 `state.json`에 기록하고 다음 검색 결과에서 제외한다.
+
+## 내일 할 것
+
+- [ ] 캘린더의 `internal/hub/view.go`에서 검색 조건을 바꿔 보기.
+- [ ] 자동 업데이트의 `pipeline.go`에서 `renderReport()`를 찾아 보고서 모양을 바꿔 보기.
+
+소스 위치:
+
+- 캘린더: `calendar-sync/`
+- 자동 업데이트: `auto-information-update/`
