@@ -5,6 +5,9 @@ import { TodayCardsSection } from './TodayCardsSection';
 
 export { CardsScreen } from './CardsScreen';
 export { TodayCardsSection };
+// AI 초안(같은 B)이 확인한 카드를 고를 때 써요.
+export { useCards } from './store';
+export { cardDetail, typeLabel } from './format';
 
 export const feature = defineFeature({
   id: 'cards',
