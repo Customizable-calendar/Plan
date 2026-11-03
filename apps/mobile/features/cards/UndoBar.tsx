@@ -25,10 +25,15 @@ const styles = StyleSheet.create({
     gap: space.md,
     minHeight: 48,
     paddingHorizontal: space.md,
-    borderRadius: 12,
+    borderRadius: 14,
     backgroundColor: colors.ink,
   },
   floating: { position: 'absolute', left: space.md, right: space.md, bottom: space.md },
   label: { flex: 1, fontSize: fontSize.caption, color: colors.surface },
-  action: { fontSize: fontSize.caption, fontWeight: '700', color: '#9DB4FF' },
+  action: {
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    color: colors.surface,
+    textDecorationLine: 'underline',
+  },
 });
