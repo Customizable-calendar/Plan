@@ -1,4 +1,23 @@
-import Anthropic from '@anthropic-ai/sdk';
+import type AnthropicClient from '@anthropic-ai/sdk';
+
+type Sdk = typeof AnthropicClient;
+let sdk: Sdk | null = null;
+
+/**
+ * SDK는 처음 AI를 부를 때 불러와요. 앱을 켤 때 SDK 문제로 화면 전체가 멈추지 않게 해요.
+ * Metro가 ESM 빌드(index.mjs)를 고르면 Hermes에서 SDK 안의 순환 import 때문에
+ * "Cannot access ... before initialization"이 나서, CJS 빌드(index.js)를 require로 받아요.
+ */
+function loadSdk(): Sdk {
+  if (sdk) return sdk;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    sdk = (require('@anthropic-ai/sdk') as { default: Sdk }).default;
+  } catch (e) {
+    throw new AiError(`AI 모듈을 불러오지 못했어요: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return sdk;
+}
 
 export type AiProviderName = 'claude' | 'openai' | 'gemini';
 
@@ -43,6 +62,7 @@ export function createProvider(name: AiProviderName, apiKey: string): AiProvider
 
 function claudeProvider(apiKey: string): AiProvider {
   // 사용자 자기 키를 자기 기기에서 쓰는 구조라 브라우저(Expo 웹) 호출도 허용해요.
+  const Anthropic = loadSdk();
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
   return {
     name: 'claude',
@@ -79,6 +99,7 @@ function claudeProvider(apiKey: string): AiProvider {
 
 function toAiError(e: unknown): Error {
   if (e instanceof AiError) return e;
+  const Anthropic = loadSdk();
   if (e instanceof Anthropic.AuthenticationError) return new AiError('AI 키가 맞지 않아요.');
   if (e instanceof Anthropic.PermissionDeniedError)
     return new AiError('이 키로는 이 모델을 쓸 수 없어요.');
