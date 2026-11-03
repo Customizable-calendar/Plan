@@ -1,5 +1,6 @@
 import { colors, fontSize, space } from '@noteapp/ui';
 import { StyleSheet, Text, View } from 'react-native';
+import { look } from './look';
 
 // 일지 본문용 최소 마크다운: 목록(- 1.), `코드`, **굵게**. 제목은 섹션으로 따로 그려요.
 
@@ -57,7 +58,7 @@ const styles = StyleSheet.create({
   bold: { fontWeight: '700' },
   code: {
     fontSize: fontSize.caption,
-    color: colors.accent,
+    color: look.primary,
     backgroundColor: colors.background,
   },
 });

@@ -8,6 +8,7 @@ import { memberOf, members } from './members';
 import { splitSections, STUDY_TITLE, studyQuestions } from './parse';
 import { type Devlog, useDevlogs } from './store';
 import { shiftWeek, weekKey, weekLabel } from './week';
+import { look } from './look';
 
 type Mode = 'logs' | 'study';
 
@@ -157,18 +158,18 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   flex: { flex: 1 },
   muted: { fontSize: fontSize.caption, color: colors.muted },
-  link: { fontSize: fontSize.caption, fontWeight: '700', color: colors.accent },
+  link: { fontSize: fontSize.caption, fontWeight: '700', color: look.primary },
   box: {
     gap: space.md,
     padding: space.md,
-    borderRadius: 12,
+    borderRadius: look.radius,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
     backgroundColor: colors.surface,
   },
   author: { fontSize: fontSize.body, fontWeight: '700', color: colors.ink },
   section: { gap: space.xs },
-  sectionTitle: { fontSize: fontSize.caption, fontWeight: '700', color: colors.accent },
+  sectionTitle: { fontSize: fontSize.caption, fontWeight: '700', color: look.primary },
   question: { fontSize: fontSize.body, fontWeight: '600', lineHeight: 24, color: colors.ink },
   chip: {
     minHeight: 36,
