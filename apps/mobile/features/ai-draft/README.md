@@ -14,8 +14,19 @@
 
 ## M1 할 일
 
-- [ ] 예시 카드로 "보낼 카드 고르기" 화면 만들기
-- [ ] 가짜 응답으로 초안 미리보기 화면 만들기
+- [x] 예시 카드로 "보낼 카드 고르기" 화면 만들기 (양식 고르기, 확인한 카드 빼기·넣기)
+- [x] 가짜 응답으로 초안 미리보기 화면 만들기 (`fake.ts`, 보낸 내용·글자 수 보기)
+
+## 구조
+
+- `prompt.ts` `buildRequest(template, cards)`: 카드를 한 줄씩 적은 요청. 원문은 보내지 않아요.
+- `data.ts` `getProvider()`: M1은 `fakeProvider`, M3에 설정의 AI 회사·키로 `createProvider`.
+- `fake.ts`: 진짜와 같은 요청을 받아 섹션 안내(hint)에 맞게 카드를 나눠 담아요.
+
+## M2·M3
+
+- [ ] 편집기(A)로 Document 넘기기
+- [ ] `createProvider` Claude 어댑터 연결 (M3)
 
 ## 나중에
 

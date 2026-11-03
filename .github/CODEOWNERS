@@ -1,9 +1,9 @@
 # 폴더에 변경이 생기면 소유자가 자동으로 리뷰어로 지정돼요.
-# @kfd0209 ~ @jaemin743 를 실제 GitHub 아이디로 바꿔주세요.
+# 담당 아이디는 .github/team.json에 있어요. 바꾸면 이 파일도 같이 고쳐요.
 # 아래쪽 줄이 우선이에요. 소유자가 여러 명이면 그중 1명만 승인해도 통과돼요.
 
 # 기본: 아래에 없는 파일(설정·lib·ui·storage·CI·피드·설정 화면)은 D
-* @jaemin743
+* @YoonDiding
 
 # A. 기록·문서
 /apps/mobile/features/notes/ @kfd0209
@@ -18,17 +18,17 @@
 /packages/ai-client/ @redchoeng
 
 # C. 캘린더
-/apps/mobile/features/calendar/ @YoonDiding
-/apps/mobile/features/execution/ @YoonDiding
-/supabase/functions/google-calendar/ @YoonDiding
+/apps/mobile/features/calendar/ @jaemin743
+/apps/mobile/features/execution/ @jaemin743
+/supabase/functions/google-calendar/ @jaemin743
 
 # 마이그레이션: 파일 이름의 영역으로 담당 지정
 /supabase/migrations/*_notes_* @kfd0209
 /supabase/migrations/*_docs_* @kfd0209
 /supabase/migrations/*_cards_* @redchoeng
-/supabase/migrations/*_calendar_* @YoonDiding
-/supabase/migrations/*_exec_* @YoonDiding
+/supabase/migrations/*_calendar_* @jaemin743
+/supabase/migrations/*_exec_* @jaemin743
 
 # 공통 타입: 모두가 보는 곳 (승인 2명은 팀 약속으로 지켜요)
-/packages/shared/src/types/ @kfd0209 @redchoeng @YoonDiding @jaemin743
-/packages/shared/src/fixtures/ @kfd0209 @redchoeng @YoonDiding @jaemin743
+/packages/shared/src/types/ @kfd0209 @redchoeng @jaemin743 @YoonDiding
+/packages/shared/src/fixtures/ @kfd0209 @redchoeng @jaemin743 @YoonDiding
