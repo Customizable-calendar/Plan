@@ -13,6 +13,7 @@ import {
 
 import { CardItem } from './CardItem';
 import { setDragging } from './dragging';
+import { look } from './look';
 import { confirmCard, dismissCard } from './store';
 
 // 확인 기다리는 카드를 한 장씩 넘겨요. 오른쪽 = 확인, 왼쪽 = 버리기.
@@ -118,7 +119,7 @@ function TopCard({ card, next }: { card: Card; next?: Card }) {
             pointerEvents="none"
             style={[styles.stamp, styles.stampLeft, { opacity: confirmStamp }]}
           >
-            <Text style={[styles.stampText, { color: colors.accent }]}>확인</Text>
+            <Text style={[styles.stampText, { color: look.primary }]}>확인</Text>
           </Animated.View>
           <Animated.View
             pointerEvents="none"
@@ -166,7 +167,7 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
-    borderRadius: 12,
+    borderRadius: look.radius,
     backgroundColor: colors.surface,
   },
   stamp: {
@@ -175,8 +176,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
     paddingVertical: 2,
     borderWidth: 3,
-    borderColor: colors.accent,
-    borderRadius: 8,
+    borderColor: look.primary,
+    borderRadius: look.radius - 4,
     backgroundColor: colors.surface,
   },
   // 오른쪽으로 밀면 왼쪽 위에 "확인", 왼쪽으로 밀면 오른쪽 위에 "버리기"
@@ -193,6 +194,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   roundDismiss: { borderColor: colors.line, backgroundColor: colors.surface },
-  roundConfirm: { borderColor: colors.accent, backgroundColor: colors.accent },
+  roundConfirm: { borderColor: look.primary, backgroundColor: look.primary },
   roundText: { fontSize: 26, fontWeight: '700' },
 });

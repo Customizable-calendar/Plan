@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { addFromText } from './store';
+import { look } from './look';
 
 // 메모 편집기(A)가 붙기 전까지 카드 탭에서 바로 메모를 넣어 보는 칸이에요.
 // TODO(B, M2): 편집기가 저장할 때 추출하게 되면 이 칸은 지워요.
@@ -52,7 +53,7 @@ const styles = StyleSheet.create({
   box: {
     gap: space.sm,
     padding: space.md,
-    borderRadius: 12,
+    borderRadius: look.radius,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
     backgroundColor: colors.surface,
@@ -71,7 +72,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: space.md,
     borderRadius: 18,
-    backgroundColor: colors.accent,
+    backgroundColor: look.primary,
   },
   disabled: { opacity: 0.4 },
   buttonText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.surface },

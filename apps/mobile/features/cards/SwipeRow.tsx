@@ -3,6 +3,7 @@ import { type ReactNode, useState } from 'react';
 import { Animated, Dimensions, PanResponder, StyleSheet, Text, View } from 'react-native';
 
 import { setDragging } from './dragging';
+import { look } from './look';
 import { confirmCard, dismissCard } from './store';
 
 // 확인 기다리는 카드를 오른쪽으로 밀면 확인, 왼쪽으로 밀면 버리기.
@@ -78,9 +79,9 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     paddingHorizontal: space.lg,
-    borderRadius: 12,
+    borderRadius: look.radius,
   },
-  confirm: { backgroundColor: colors.accent, alignItems: 'flex-start' },
+  confirm: { backgroundColor: look.primary, alignItems: 'flex-start' },
   dismiss: { backgroundColor: colors.muted, alignItems: 'flex-end' },
   underText: { fontSize: fontSize.body, fontWeight: '700', color: colors.surface },
 });
