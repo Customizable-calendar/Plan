@@ -7,6 +7,15 @@ export { DevlogNewScreen } from './DevlogNewScreen';
 export { DevlogScreen } from './DevlogScreen';
 export { DevlogSection };
 
+// 공부 퀴즈(devquiz)가 일지와 같은 모양으로 쓰는 것들. 일지는 퀴즈를 몰라요(퀴즈만 지우면 돼요).
+export { hasAiKey } from './ai';
+export { AiMessage, AiText, ErrorNotice, Thinking, UserBubble } from './Chat';
+export { look } from './look';
+export { Markdown } from './Markdown';
+export { type Member, memberOf, members, type Role } from './members';
+export { type Devlog, useDevlogs } from './store';
+export { shiftWeek, weekKey, weekLabel } from './week';
+
 export const feature = defineFeature({
   id: 'devlog',
   owner: 'B',
