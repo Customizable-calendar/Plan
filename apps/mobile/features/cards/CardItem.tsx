@@ -1,17 +1,33 @@
 import type { Card } from '@noteapp/shared';
 import { colors, fontSize, space } from '@noteapp/ui';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { getNoteText } from './data';
+import { getHints, getNoteText } from './data';
 import { cardDetail, typeLabel } from './format';
+import { look, typeColor } from './look';
 import { confirmCard, dismissCard, renameCard, restoreCard } from './store';
+
+// 디자인 시스템 ExtractedCard 규칙: 확인 전(suggested)은 점선, 확인한 카드는 실선.
+// 종류 칩은 색과 글자 라벨을 같이 써요.
 
 export function CardItem({ card }: { card: Card }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(card.title);
   const [source, setSource] = useState<string | null>(null);
   const detail = cardDetail(card);
+  const [hints, setHints] = useState<string[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    getHints(card).then(
+      (h) => alive && setHints(h),
+      () => alive && setHints([]),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [card]);
 
   const toggleSource = async () => {
     if (source !== null) return setSource(null);
@@ -26,10 +42,24 @@ export function CardItem({ card }: { card: Card }) {
   };
 
   return (
-    <View style={[styles.card, card.status === 'confirmed' && styles.confirmed]}>
+    <View
+      style={[
+        styles.card,
+        card.status === 'suggested' && styles.suggested,
+        card.status === 'dismissed' && styles.dismissed,
+      ]}
+    >
       <View style={styles.header}>
-        <Text style={styles.type}>{typeLabel[card.type]}</Text>
+        <View style={[styles.chip, { backgroundColor: typeColor[card.type].bg }]}>
+          <Text style={[styles.chipText, { color: typeColor[card.type].fg }]}>
+            {typeLabel[card.type]}
+          </Text>
+        </View>
+        <View style={styles.flex} />
         {card.status === 'confirmed' && <Text style={styles.badge}>확인됨</Text>}
+        <View style={[styles.chip, { backgroundColor: look.muted }]}>
+          <Text style={[styles.chipText, styles.sourceText]}>메모</Text>
+        </View>
       </View>
 
       {editing ? (
@@ -44,9 +74,16 @@ export function CardItem({ card }: { card: Card }) {
           style={[styles.title, styles.input]}
         />
       ) : (
-        <Text style={styles.title}>{card.title}</Text>
+        <Text style={[styles.title, card.status === 'dismissed' && styles.struck]}>
+          {card.title}
+        </Text>
       )}
       {detail && <Text style={styles.detail}>{detail}</Text>}
+      {hints.map((h) => (
+        <Text key={h} style={styles.hint}>
+          {h}
+        </Text>
+      ))}
 
       {source !== null && <SourceText text={source} span={card.source.span} />}
 
@@ -102,43 +139,56 @@ function Action({
 
 const styles = StyleSheet.create({
   card: {
-    gap: space.sm,
-    padding: space.md,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: look.radius,
+    borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.surface,
   },
-  confirmed: { borderColor: colors.accent },
+  suggested: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: `${look.primary}66`,
+    backgroundColor: look.primarySoft,
+  },
+  dismissed: { backgroundColor: look.muted, opacity: 0.6 },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  type: { fontSize: fontSize.caption, fontWeight: '700', color: colors.accent },
-  badge: { fontSize: fontSize.caption, color: colors.muted },
-  title: { fontSize: fontSize.body, fontWeight: '600', color: colors.ink },
+  flex: { flex: 1 },
+  chip: { borderRadius: 999, paddingHorizontal: space.sm, paddingVertical: 2 },
+  chipText: { fontSize: 11, fontWeight: '700' },
+  sourceText: { fontWeight: '400', color: colors.muted },
+  badge: { fontSize: 11, color: colors.muted },
+  title: { fontSize: 15, fontWeight: '700', color: colors.ink },
+  struck: { textDecorationLine: 'line-through' },
   input: {
     paddingVertical: space.xs,
     borderBottomWidth: 1,
-    borderColor: colors.accent,
+    borderColor: look.primary,
   },
-  detail: { fontSize: fontSize.caption, color: colors.muted },
+  detail: { fontSize: 12, color: colors.muted },
+  hint: { fontSize: 12, color: look.secondary },
   source: {
     fontSize: fontSize.caption,
     lineHeight: 20,
     color: colors.muted,
     padding: space.sm,
-    borderRadius: 8,
-    backgroundColor: colors.background,
+    borderRadius: look.radius - 4,
+    backgroundColor: colors.surface,
   },
   highlight: { fontWeight: '700', color: colors.ink },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.xs },
   action: {
-    minHeight: 36,
+    height: 32,
     justifyContent: 'center',
-    paddingHorizontal: space.md,
-    borderRadius: 18,
+    paddingHorizontal: 12,
+    borderRadius: look.radius - 4,
     borderWidth: 1,
     borderColor: colors.line,
+    backgroundColor: colors.surface,
   },
-  primary: { backgroundColor: colors.accent, borderColor: colors.accent },
+  primary: { backgroundColor: look.primary, borderColor: look.primary },
   actionText: { fontSize: fontSize.caption, fontWeight: '600', color: colors.ink },
   primaryText: { color: colors.surface },
 });
