@@ -1,0 +1,29 @@
+[
+  {
+    "id": "doc-work-log-1024",
+    "templateId": "work-log",
+    "title": "업무일지 10/24",
+    "body": "## 오늘 한 일\n- 견적서 보내기\n- 주간 정기 회의 참석\n\n## 못 한 일\n- 기획안 초안 (자료가 늦게 와서 내일로)\n\n## 메모\n- 학습일지 양식을 앱 템플릿으로 넣어보기\n\n## 내일 할 일\n- 기획 회의 준비\n",
+    "cardIds": ["card-1", "card-2"],
+    "createdAt": "2026-10-24T09:00:00.000Z",
+    "updatedAt": "2026-10-24T09:10:00.000Z"
+  },
+  {
+    "id": "doc-blog-1",
+    "templateId": "blog",
+    "title": "메모 앱을 바이브 코딩으로 만들며 배운 것",
+    "body": "## 도입\n\n## 본문\n\n## 마무리\n",
+    "cardIds": [],
+    "createdAt": "2026-10-22T12:00:00.000Z",
+    "updatedAt": "2026-10-22T12:30:00.000Z"
+  },
+  {
+    "id": "doc-meeting-1",
+    "templateId": "meeting-notes",
+    "title": "회의록 10/20",
+    "body": "## 참석자\n- 민수\n\n## 결정 사항\n- 기획 회의는 강남에서\n\n## 할 일\n- 견적서 보내기\n\n## 남은 질문\n",
+    "cardIds": ["card-3"],
+    "createdAt": "2026-10-20T07:00:00.000Z",
+    "updatedAt": "2026-10-20T07:00:00.000Z"
+  }
+]
