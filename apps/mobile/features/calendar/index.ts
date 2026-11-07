@@ -15,7 +15,7 @@ export const feature = defineFeature({
   id: 'calendar',
   owner: 'C',
   screens: [{ route: 'calendar', title: '캘린더' }],
-  todaySection: { Component: TodayEventsSection, order: 20 },
+  homeWidget: { slot: 'schedule', Component: HomeSchedule },
   lnb: [
     {
       section: 'quick',
