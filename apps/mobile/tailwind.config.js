@@ -9,6 +9,7 @@ module.exports = {
   content: [
     './app/**/*.{ts,tsx}',
     './features/**/*.{ts,tsx}',
+    './shell/**/*.{ts,tsx}',
     '../../packages/ui/src/**/*.{ts,tsx}',
   ],
   presets: [require('nativewind/preset')],

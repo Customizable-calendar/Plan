@@ -7,4 +7,13 @@ export const feature = defineFeature({
   id: 'settings',
   owner: 'D',
   screens: [{ route: 'settings', title: '설정' }],
+  lnb: [
+    {
+      section: 'more',
+      order: 90,
+      label: '설정',
+      icon: { ios: 'gearshape', android: 'settings', web: 'settings' },
+      href: '/settings',
+    },
+  ],
 });

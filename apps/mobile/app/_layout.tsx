@@ -6,6 +6,8 @@ import { DefaultTheme, ThemeProvider } from 'expo-router/react-navigation';
 import { StatusBar } from 'expo-status-bar';
 
 import { stackScreens } from '@/features/registry';
+import { Lnb } from '@/shell/Lnb';
+import { LnbProvider } from '@/shell/LnbContext';
 
 // 화면 이동 구조를 정하는 최상위 레이아웃이에요. (담당: D)
 // 라우트 파일(app/)은 조립만 하고, 실제 화면은 features/에서 가져와요.
@@ -34,17 +36,20 @@ const navTheme = {
 export default function RootLayout() {
   return (
     <ThemeProvider value={navTheme}>
-      <StatusBar style="dark" />
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        {stackScreens.map((s) => (
-          <Stack.Screen
-            key={s.route}
-            name={s.route}
-            options={{ title: s.title, presentation: s.modal ? 'modal' : undefined }}
-          />
-        ))}
-      </Stack>
+      <LnbProvider>
+        <StatusBar style="dark" />
+        <Stack>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          {stackScreens.map((s) => (
+            <Stack.Screen
+              key={s.route}
+              name={s.route}
+              options={{ title: s.title, presentation: s.modal ? 'modal' : undefined }}
+            />
+          ))}
+        </Stack>
+        <Lnb />
+      </LnbProvider>
     </ThemeProvider>
   );
 }
