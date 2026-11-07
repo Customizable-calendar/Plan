@@ -15,7 +15,8 @@ import { UndoBar } from './UndoBar';
 
 const filters: (CardType | 'all')[] = ['all', 'event', 'task', 'person', 'idea'];
 
-export function CardsScreen() {
+/** memo: 맨 위에 둘 막 쓰기 칸. 라우트가 notes 기능의 입력을 넣어 줘요. 없으면 예전 TryMemo를 써요. */
+export function CardsScreen({ memo }: { memo?: ReactNode }) {
   const { cards, loading } = useCards();
   const [filter, setFilter] = useState<CardType | 'all'>('all');
   // 한 장씩(틴더처럼) 넘기기가 기본, 목록으로도 볼 수 있어요.
@@ -35,7 +36,7 @@ export function CardsScreen() {
         keyboardShouldPersistTaps="handled"
         scrollEnabled={!dragging}
       >
-        <TryMemo />
+        {memo ?? <TryMemo />}
 
         <View style={styles.filters}>
           {filters.map((f) => (
