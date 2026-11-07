@@ -36,6 +36,7 @@ Claude Code, Codex, Cursor 등 어떤 AI 코딩 도구를 쓰든 이 파일을 �
 - 스타일은 NativeWind `className`과 `@noteapp/ui` 토큰 이름(`bg-primary`, `text-muted-foreground`, `rounded-lg` 등)으로만 써요. hex 색, 숫자 모서리, 글꼴 이름을 화면 코드에 직접 적지 않아요.
 - Button·Card·Badge 같은 공용 컴포넌트는 `@noteapp/ui`에서 가져와요. 기능 폴더에 같은 모양을 복사해 만들지 않아요.
 - 카드 4종(일정·할 일·사람·아이디어)은 정해진 색과 글자 라벨을 함께 써요. 색만으로 구분하지 않아요.
+- 앱 화면 글자에 AI가 쓴 티가 나는 기호를 넣지 않아요. 가운뎃점(`·`), 줄표(`—`, `–`), 글자로 쓴 화살표(`→`), 이모지가 해당돼요. 여러 개를 나열할 때는 쉼표, 줄바꿈, 칩으로 나누고, 방향 표시가 필요하면 lucide 아이콘을 써요.
 - 디자인 시스템에 없는 모양이 필요하면 화면에서 지어내지 말고, 디자인 시스템 레포에 이슈로 먼저 제안해요.
 - 지금은 NativeWind로 옮기는 중이에요(#33). 옮기기 전 화면은 `@noteapp/ui`의 `colors`·`space`·`fontSize`를 쓰고, 기능 폴더에 새 `look.ts`·`tokens.ts`를 만들지 않아요.
 
