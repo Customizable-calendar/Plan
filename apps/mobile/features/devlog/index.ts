@@ -19,7 +19,15 @@ export { shiftWeek, weekKey, weekLabel } from './week';
 export const feature = defineFeature({
   id: 'devlog',
   owner: 'B',
-  todaySection: { Component: DevlogSection, order: 50 },
+  lnb: [
+    {
+      section: 'more',
+      order: 10,
+      label: '개발일지',
+      icon: { ios: 'book', android: 'menu_book', web: 'menu_book' },
+      href: '/devlog',
+    },
+  ],
   screens: [
     { route: 'devlog', title: '개발일지' },
     { route: 'devlog-new', title: '개발일지 쓰기', modal: true },

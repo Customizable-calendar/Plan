@@ -2,6 +2,7 @@
 // - 모든 기능 폴더가 registry.ts에 있고, id가 폴더 이름과 같은지
 // - tab이 있으면 app/(tabs)/<id>.tsx, screens가 있으면 app/<route>.tsx가 있는지
 // - id·라우트가 겹치지 않는지
+// - 하단 탭은 홈 포함 4개(디자인 시스템 lnb4), 홈 위젯 자리는 한 기능씩인지
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +12,8 @@ const featuresDir = join(mobile, 'features');
 const registry = readFileSync(join(featuresDir, 'registry.ts'), 'utf8');
 const errors = [];
 const routes = new Set();
+const tabs = [];
+const slots = new Map();
 
 const folders = readdirSync(featuresDir).filter((n) =>
   statSync(join(featuresDir, n)).isDirectory(),
@@ -36,6 +39,14 @@ for (const folder of folders) {
   if (/\btab:\s*\{/.test(src) && !existsSync(join(mobile, 'app/(tabs)', `${folder}.tsx`)))
     errors.push(`${where}: tab이 있는데 app/(tabs)/${folder}.tsx가 없어요.`);
 
+  if (/\btab:\s*\{/.test(src)) tabs.push(folder);
+  const slot = src.match(/homeWidget:\s*\{\s*slot:\s*'([^']+)'/)?.[1];
+  if (slot) {
+    if (slots.has(slot))
+      errors.push(`${where}: 홈 위젯 자리 '${slot}'를 ${slots.get(slot)}도 쓰고 있어요.`);
+    slots.set(slot, folder);
+  }
+
   for (const [, route] of src.matchAll(/route:\s*'([^']+)'/g)) {
     if (routes.has(route)) errors.push(`${where}: 라우트 '${route}'가 다른 기능과 겹쳐요.`);
     routes.add(route);
@@ -43,6 +54,11 @@ for (const folder of folders) {
       errors.push(`${where}: screens의 '${route}'에 맞는 app/${route}.tsx가 없어요.`);
   }
 }
+
+if (tabs.length > 3)
+  errors.push(
+    `하단 탭은 홈 포함 4개까지예요(디자인 시스템 lnb4). 지금 탭 기능: ${tabs.join(', ')}`,
+  );
 
 if (errors.length) {
   console.error(`기능 등록 검사 실패 (${errors.length}개)\n- ${errors.join('\n- ')}`);

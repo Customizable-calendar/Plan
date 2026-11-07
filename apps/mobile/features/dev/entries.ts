@@ -19,8 +19,20 @@ export function devEntries(features: Feature[]): DevEntry[] {
       const rows: DevEntry[] = [];
       if (f.tab)
         rows.push({ ...base, key: `${f.id}:tab`, title: `${f.tab.title} 탭`, href: `/${f.id}` });
+      if (f.homeWidget)
+        rows.push({
+          ...base,
+          key: `${f.id}:home`,
+          title: `홈 위젯 (${f.homeWidget.slot})`,
+          href: '/',
+        });
       if (f.todaySection)
-        rows.push({ ...base, key: `${f.id}:today`, title: `오늘 화면 · ${f.id} 섹션`, href: '/' });
+        rows.push({
+          ...base,
+          key: `${f.id}:today`,
+          title: `홈 옮기기 전 섹션 (${f.id})`,
+          href: '/',
+        });
       for (const s of f.screens ?? []) {
         rows.push({
           ...base,
