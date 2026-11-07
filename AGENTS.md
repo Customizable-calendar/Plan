@@ -28,6 +28,17 @@ Claude Code, Codex, Cursor 등 어떤 AI 코딩 도구를 쓰든 이 파일을 �
 - 파일 업로드·다운로드는 `@noteapp/storage`의 `FileStorage`로만 해요.
 - AI 호출은 `@noteapp/ai-client`로만 해요. 사용자 AI 키는 `@/lib/secrets`(기기 보안 저장소)에만 두고, 서버·DB·로그로 보내지 않아요.
 
+## 디자인
+
+- 화면은 디자인 시스템([note-app-design-system](https://github.com/Customizable-calendar/note-app-design-system), [페이지](https://customizable-calendar.github.io/note-app-design-system/))을 따라요. 색·모서리·글꼴·간격·컴포넌트 모양을 화면에서 새로 정하지 않아요.
+- 화면을 만들거나 고치기 전에 디자인 시스템 레포의 해당 부분을 먼저 읽어요.
+  - 색·모서리 토큰: `lib/theme.ts` · 공용 컴포넌트: `components/ui/` · 앱 컴포넌트(카드, 탭바, LNB, 시트, 캘린더): `components/app/` · AI 채팅: `components/chat/` · 화면 목업과 확인 항목: `screens/`
+- 스타일은 NativeWind `className`과 `@noteapp/ui` 토큰 이름(`bg-primary`, `text-muted-foreground`, `rounded-lg` 등)으로만 써요. hex 색, 숫자 모서리, 글꼴 이름을 화면 코드에 직접 적지 않아요.
+- Button·Card·Badge 같은 공용 컴포넌트는 `@noteapp/ui`에서 가져와요. 기능 폴더에 같은 모양을 복사해 만들지 않아요.
+- 카드 4종(일정·할 일·사람·아이디어)은 정해진 색과 글자 라벨을 함께 써요. 색만으로 구분하지 않아요.
+- 디자인 시스템에 없는 모양이 필요하면 화면에서 지어내지 말고, 디자인 시스템 레포에 이슈로 먼저 제안해요.
+- 지금은 NativeWind로 옮기는 중이에요(#33). 옮기기 전 화면은 `@noteapp/ui`의 `colors`·`space`·`fontSize`를 쓰고, 기능 폴더에 새 `look.ts`·`tokens.ts`를 만들지 않아요.
+
 ## 데이터
 
 - 테이블 이름 앞에 영역을 붙여요: `notes_`, `docs_`, `cards_`, `calendar_`, `exec_`, 그리고 공용 `profiles`, `files`
