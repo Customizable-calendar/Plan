@@ -2,6 +2,7 @@
 import { defineFeature } from '@/lib/feature';
 
 export { ExecutionScreen } from './ExecutionScreen';
+export { listExecutionRecords } from './data';
 
 export const feature = defineFeature({
   id: 'execution',
