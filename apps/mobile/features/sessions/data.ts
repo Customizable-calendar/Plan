@@ -1,4 +1,4 @@
-import { type Session, type Template, fixtures, templates } from '@noteapp/shared';
+import { type Document, type Session, type Template, fixtures, templates } from '@noteapp/shared';
 
 import { dataSource, fromFixture } from '@/lib/data-source';
 
@@ -28,4 +28,11 @@ export async function listMySessions(): Promise<SessionItem[]> {
 export async function listTemplates(): Promise<Template[]> {
   // 양식은 앱에 들어 있는 JSON이라 M2에도 그대로 써요.
   return fromFixture(templates);
+}
+
+/** 홈 최근 문서 위젯. 최근에 고친 문서부터 limit개. */
+export async function listRecentDocuments(limit = 3): Promise<Document[]> {
+  if (dataSource !== 'fixtures') throw new Error('sessions: Supabase 연결은 M2에서 만들어요.');
+  const docs = [...fixtures.documents].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return fromFixture(docs.slice(0, limit));
 }

@@ -8,11 +8,21 @@ import { listNotes, saveNote } from './data';
 // 오늘 화면에 보여줄 최근 메모 개수
 const LIMIT = 5;
 
-export function QuickNoteSection() {
+interface Props {
+  /** 저장한 뒤 이어서 할 일. 카드 탭에서는 카드 찾기를 넘겨요. 돌려준 글은 입력칸 아래에 보여요. */
+  onSaved?: (text: string) => Promise<string | void>;
+  /** 최근 메모 목록을 보여줄지 */
+  showRecent?: boolean;
+  /** 화면이 열리면 바로 입력할 수 있게 */
+  autoFocus?: boolean;
+}
+
+export function QuickNoteSection({ onSaved, showRecent = true, autoFocus }: Props) {
   const [text, setText] = useState('');
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   // useEffect: 화면이 처음 나타날 때 한 번 실행돼요. 여기서 예시 메모를 불러와요.
   useEffect(() => {
@@ -30,6 +40,7 @@ export function QuickNoteSection() {
       setNotes((prev) => [note, ...prev]); // 새 메모를 목록 맨 위에 붙여요
       setText('');
       setError(null);
+      setMessage((await onSaved?.(note.text)) ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -47,23 +58,24 @@ export function QuickNoteSection() {
           placeholder="생각나는 대로 적어 보세요"
           placeholderTextColor={colors.muted}
           accessibilityLabel="메모 입력"
+          autoFocus={autoFocus}
           style={styles.input}
         />
         <View style={styles.row}>
-          <Text style={styles.message}>{error}</Text>
+          <Text style={styles.message}>{error ?? message}</Text>
           <Pressable
             onPress={submit}
             disabled={!canSave}
             accessibilityRole="button"
             style={[styles.button, !canSave && styles.disabled]}
           >
-            <Text style={styles.buttonText}>저장</Text>
+            <Text style={styles.buttonText}>{onSaved ? '저장하고 카드 찾기' : '저장'}</Text>
           </Pressable>
         </View>
       </View>
 
-      <Text style={styles.subtitle}>최근 메모</Text>
-      {loading ? (
+      {!showRecent ? null : <Text style={styles.subtitle}>최근 메모</Text>}
+      {!showRecent ? null : loading ? (
         <Text style={styles.caption}>불러오는 중</Text>
       ) : notes.length === 0 ? (
         <Text style={styles.caption}>아직 쓴 메모가 없어요.</Text>
