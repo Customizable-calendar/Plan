@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* note-app-design-system 에서 내보냄 · 메인 #0b6b8a / 서브 #b5470b */
+@layer base {
+  :root {
+    /* 기본 (react-native-reusables 호환) */
+    --background: 0 0% 100%;
+    --foreground: 210 16% 9.8%;
+    --card: 0 0% 100%;
+    --card-foreground: 210 16% 9.8%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 16% 9.8%;
+    --primary: 194.6 85.2% 29.2%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 21.2 88.5% 37.6%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 200 14.3% 95.9%;
+    --muted-foreground: 208.6 10.3% 39.8%;
+    --accent: 192.9 35% 92.2%;
+    --accent-foreground: 194.6 84.7% 25.7%;
+    --destructive: 357.7 63.1% 51.2%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 205.7 14.3% 90.4%;
+    --input: 207.3 15.1% 85.7%;
+    --ring: 194.6 85.2% 29.2%;
+    /* 앱 전용: 연한 색 */
+    --primary-soft: 192.9 35% 92.2%;
+    --primary-soft-foreground: 194.6 84.7% 25.7%;
+    --secondary-soft: 22.1 54.3% 93.1%;
+    --secondary-soft-foreground: 20.9 88.2% 33.1%;
+    /* 앱 전용: 카드 4종 */
+    --event: 21.6 88.8% 34.9%;
+    --event-soft: 20 45.5% 93.5%;
+    --task: 194.9 83.2% 25.7%;
+    --task-soft: 196.4 29.7% 92.7%;
+    --person: 259.8 52% 43.3%;
+    --person-soft: 261.8 37.9% 94.3%;
+    --idea: 124.5 42.9% 30.2%;
+    --idea-soft: 120 20% 93.1%;
+    /* AI 채팅 */
+    --ai: 194.6 85.2% 29.2%;
+    --ai-foreground: 0 0% 100%;
+    --ai-soft: 192.9 35% 92.2%;
+    --bubble-user: 194.6 85.2% 29.2%;
+    --bubble-user-foreground: 0 0% 100%;
+    --bubble-ai: 192.9 35% 92.2%;
+    --bubble-ai-foreground: 210 16% 9.8%;
+    --bubble-ai-border: 192.9 35% 92.2%;
+    /* 캘린더: 연결한 계정 색 */
+    --cal-1: 218.1 67.3% 43.1%;
+    --cal-1-soft: 216 51.7% 94.3%;
+    --cal-2: 330.8 50.2% 42.5%;
+    --cal-2-soft: 332.7 37.9% 94.3%;
+    --radius: 0.875rem;
+  }
+
+  .dark:root {
+    /* 기본 (react-native-reusables 호환) */
+    --background: 202.5 21.1% 7.5%;
+    --foreground: 202.5 21.1% 92.5%;
+    --card: 202.5 21.1% 7.5%;
+    --card-foreground: 202.5 21.1% 92.5%;
+    --popover: 202.5 21.1% 7.5%;
+    --popover-foreground: 202.5 21.1% 92.5%;
+    --primary: 194.7 35% 51.8%;
+    --primary-foreground: 210 16% 9.8%;
+    --secondary: 21.2 53.7% 57.6%;
+    --secondary-foreground: 210 16% 9.8%;
+    --muted: 203.1 19.4% 13.1%;
+    --muted-foreground: 204.5 12.2% 64.7%;
+    --accent: 196.8 28.7% 17.1%;
+    --accent-foreground: 193.8 35.1% 78.2%;
+    --destructive: 357.8 63.3% 66.9%;
+    --destructive-foreground: 210 16% 9.8%;
+    --border: 202.5 16% 19.6%;
+    --input: 204 15.6% 25.1%;
+    --ring: 194.7 35% 51.8%;
+    /* 앱 전용: 연한 색 */
+    --primary-soft: 196.8 28.7% 17.1%;
+    --primary-soft-foreground: 193.8 35.1% 78.2%;
+    --secondary-soft: 18.9 20% 18.6%;
+    --secondary-soft-foreground: 21.5 54.6% 81%;
+    /* 앱 전용: 카드 4종 */
+    --event: 21.3 47.9% 67.6%;
+    --event-soft: 21.8 45.2% 14.3%;
+    --task: 195.3 29.1% 62.9%;
+    --task-soft: 196.4 54.1% 12%;
+    --person: 259.7 40.3% 71.8%;
+    --person-soft: 251.6 35.6% 17.1%;
+    --idea: 123.6 18.6% 65.3%;
+    --idea-soft: 142.9 32.3% 12.7%;
+    /* AI 채팅 */
+    --ai: 194.7 35% 51.8%;
+    --ai-foreground: 210 16% 9.8%;
+    --ai-soft: 196.8 28.7% 17.1%;
+    --bubble-user: 194.7 35% 51.8%;
+    --bubble-user-foreground: 210 16% 9.8%;
+    --bubble-ai: 196.8 28.7% 17.1%;
+    --bubble-ai-foreground: 202.5 21.1% 92.5%;
+    --bubble-ai-border: 196.8 28.7% 17.1%;
+    /* 캘린더: 연결한 계정 색 */
+    --cal-1: 218.1 51.4% 71.8%;
+    --cal-1-soft: 214.9 51.8% 16.3%;
+    --cal-2: 331.1 37% 71.4%;
+    --cal-2-soft: 320.9 28.4% 15.9%;
+  }
+}

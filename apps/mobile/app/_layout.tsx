@@ -1,4 +1,8 @@
+import '../global.css';
+
+import { palette } from '@noteapp/ui';
 import { Stack } from 'expo-router';
+import { DefaultTheme, ThemeProvider } from 'expo-router/react-navigation';
 import { StatusBar } from 'expo-status-bar';
 
 import { stackScreens } from '@/features/registry';
@@ -13,9 +17,23 @@ export const unstable_settings = {
   anchor: '(tabs)',
 };
 
+// 상단 바·탭 바 색을 디자인 시스템 색으로 맞춰요.
+const navTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: palette.muted,
+    border: palette.border,
+    card: palette.card,
+    notification: palette.destructive,
+    primary: palette.primary,
+    text: palette.foreground,
+  },
+};
+
 export default function RootLayout() {
   return (
-    <>
+    <ThemeProvider value={navTheme}>
       <StatusBar style="dark" />
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -27,6 +45,6 @@ export default function RootLayout() {
           />
         ))}
       </Stack>
-    </>
+    </ThemeProvider>
   );
 }
