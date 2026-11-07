@@ -5,6 +5,9 @@ import { TodayEventsSection } from './TodayEventsSection';
 
 export { CalendarScreen } from './CalendarScreen';
 export { TodayEventsSection };
+export { listCalendarTasks } from './data';
+export { CalendarButton, useCalendarTheme } from './design';
+export { dayKey, timeLabel } from './model';
 
 export const feature = defineFeature({
   id: 'calendar',
