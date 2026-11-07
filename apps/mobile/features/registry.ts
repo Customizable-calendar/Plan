@@ -13,6 +13,7 @@ import { feature as feed } from './feed';
 import { feature as settings } from './settings';
 import { feature as devlog } from './devlog';
 import { feature as devquiz } from './devquiz';
+import { feature as dev } from './dev';
 // new-feature:import
 
 export const features: Feature[] = [
@@ -27,6 +28,7 @@ export const features: Feature[] = [
   settings,
   devlog,
   devquiz,
+  dev,
   // new-feature:entry
 ];
 
