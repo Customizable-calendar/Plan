@@ -1,5 +1,12 @@
 import type { Card, Note } from '@noteapp/shared';
 
+import { extractByRules } from './extract';
+
+// 캘린더 빠른 입력처럼 한 줄 일정 입력에는 파서를 바로 써요.
+export { parseEvent, toRRule, toSegments, ko } from './rules';
+export type { Assumption, ParsedEvent, ParseOptions, Recurrence, Span, Segment } from './rules';
+export { cardHints, splitPieces } from './extract';
+
 export interface ExtractOptions {
   /** "내일", "다음 주" 같은 표현을 계산할 기준 시각 */
   now: Date;
@@ -10,11 +17,11 @@ export interface ExtractOptions {
 }
 
 /**
- * 메모에서 카드 후보를 찾아요. 아직 뼈대라 빈 배열을 돌려줘요.
- * TODO(B, M2): src/rules/에 날짜·시간·사람 규칙을 만들고, 애매한 부분만 options.ai로 보내기
+ * 메모에서 카드 후보를 찾아요. 모두 status: 'suggested'예요.
+ * 규칙(src/rules)으로 일정·할 일·사람·아이디어를 잡아요.
+ * TODO(B, M3): 규칙으로 카드가 안 나온 조각만 options.ai로 보내기
  */
 export async function extractCards(note: Note, options: ExtractOptions): Promise<Card[]> {
   if (note.text.trim() === '') return [];
-  void options;
-  return [];
+  return extractByRules(note, { now: options.now, timezone: options.timezone });
 }
