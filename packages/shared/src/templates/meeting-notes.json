@@ -24,5 +24,9 @@
       "hint": "다음 회의에서 다룰 것"
     }
   ],
-  "aiInstructions": "결정과 할 일을 먼저 쓰고, 담당자가 불분명하면 '담당 미정'으로 표시해요."
+  "aiInstructions": "결정과 할 일을 먼저 쓰고, 담당자가 불분명하면 '담당 미정'으로 표시해요.",
+  "category": "meeting",
+  "icon": "bubble",
+  "tags": ["#회의록", "#협업"],
+  "defaultContent": "## 일시\n- \n\n## 참석자\n- \n\n## 안건\n1. \n\n## 주요 논의\n- \n\n## 결정 사항\n- \n\n## Action Items\n- [ ] 담당: / 마감: \n"
 }

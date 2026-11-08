@@ -34,4 +34,27 @@ describe('세션 템플릿', () => {
     expect(new Set(ids).size).toBe(ids.length);
     for (const t of templates) expect(t.sections.length).toBeGreaterThan(0);
   });
+
+  it('기본 양식 4개는 분류와 태그가 있고, 분류가 겹치지 않는다', () => {
+    const categorized = templates.filter((t) => t.category);
+    expect(categorized.map((t) => t.category).sort()).toEqual([
+      'blog',
+      'meeting',
+      'research',
+      'work',
+    ]);
+    for (const t of categorized) {
+      expect(t.tags?.length).toBeGreaterThan(0);
+      for (const tag of t.tags ?? []) expect(tag.startsWith('#')).toBe(true);
+    }
+  });
+
+  it('모든 예시 문서는 있는 양식을 쓴다', () => {
+    for (const doc of fixtures.documents) {
+      expect(
+        templates.some((t) => t.id === doc.templateId),
+        doc.id,
+      ).toBe(true);
+    }
+  });
 });
