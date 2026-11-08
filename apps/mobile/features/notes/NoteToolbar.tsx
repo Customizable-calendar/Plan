@@ -42,7 +42,8 @@ interface Props {
 
 export function NoteToolbar({ onPress, active, onSave, canSave, saveLabel }: Props) {
   return (
-    <View className="flex-row items-center gap-1 border-t border-border pt-2">
+    // flex-wrap: 저장 버튼 글자가 길어 한 줄에 안 들어가면 다음 줄로 내려가요.
+    <View className="flex-row flex-wrap items-center gap-1 border-t border-border pt-2">
       {TOOLS.map((t) => (
         <Pressable
           key={t.action}
@@ -62,12 +63,12 @@ export function NoteToolbar({ onPress, active, onSave, canSave, saveLabel }: Pro
           />
         </Pressable>
       ))}
-      <View className="flex-1" />
       <Pressable
         onPress={onSave}
         disabled={!canSave}
         accessibilityRole="button"
-        className={`h-9 justify-center rounded-md bg-primary px-4 ${canSave ? '' : 'opacity-40'}`}
+        // ml-auto: 남는 자리를 왼쪽에 채워서 버튼을 오른쪽 끝에 붙여요.
+        className={`ml-auto h-9 justify-center rounded-md bg-primary px-4 ${canSave ? '' : 'opacity-40'}`}
       >
         <Text className="text-sm font-semibold text-primary-foreground">{saveLabel}</Text>
       </Pressable>
