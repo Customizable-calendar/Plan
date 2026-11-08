@@ -6,7 +6,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { type DocumentItem, listDocuments, listTemplates } from './data';
+import { ConfirmDialog } from './ConfirmDialog';
+import { type DocumentItem, deleteDocument, listDocuments, listTemplates } from './data';
 import { shortDate } from './format';
 import { templateIcon } from './icons';
 import { TagBadge, TemplatePickerModal } from './TemplatePickerModal';
@@ -27,6 +28,8 @@ export function SessionsListScreen() {
   const [items, setItems] = useState<DocumentItem[] | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [picking, setPicking] = useState(false);
+  // 삭제 확인창에 띄울 문서. null이면 확인창이 닫혀 있어요.
+  const [deleting, setDeleting] = useState<DocumentItem | null>(null);
   // 편집기에서 돌아올 때마다 1씩 올려서 목록을 다시 불러와요.
   const [reload, setReload] = useState(0);
 
@@ -46,6 +49,13 @@ export function SessionsListScreen() {
       alive = false;
     };
   }, [category, query, reload]);
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    await deleteDocument(deleting.document.id);
+    setDeleting(null);
+    setReload((n) => n + 1); // 목록을 다시 불러와요
+  };
 
   const startNew = (t: Template) => {
     setPicking(false);
@@ -125,7 +135,9 @@ export function SessionsListScreen() {
             {query || category ? '조건에 맞는 문서가 없어요.' : '아직 쓴 문서가 없어요.'}
           </Text>
         ) : (
-          items.map((item) => <DocumentCard key={item.document.id} item={item} />)
+          items.map((item) => (
+            <DocumentCard key={item.document.id} item={item} onDelete={() => setDeleting(item)} />
+          ))
         )}
       </ScrollView>
 
@@ -150,11 +162,26 @@ export function SessionsListScreen() {
         onPick={startNew}
         onClose={() => setPicking(false)}
       />
+
+      <ConfirmDialog
+        visible={deleting !== null}
+        title="이 문서를 삭제할까요?"
+        message={`'${deleting?.document.title ?? ''}' 문서가 목록에서 사라져요. 삭제한 문서는 되돌릴 수 없어요.`}
+        confirmLabel="삭제"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleting(null)}
+      />
     </View>
   );
 }
 
-function DocumentCard({ item: { document, template } }: { item: DocumentItem }) {
+function DocumentCard({
+  item: { document, template },
+  onDelete,
+}: {
+  item: DocumentItem;
+  onDelete: () => void;
+}) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -172,6 +199,20 @@ function DocumentCard({ item: { document, template } }: { item: DocumentItem }) 
             {document.title}
           </Text>
           <Text className="text-xs text-muted-foreground">{shortDate(document.updatedAt)}</Text>
+          {/* 카드 안의 버튼: 이 버튼을 누르면 카드(열기)는 눌리지 않아요. */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${document.title} 삭제`}
+            onPress={onDelete}
+            hitSlop={8}
+            className="-my-1 h-7 w-7 items-center justify-center rounded-md active:bg-muted"
+          >
+            <SymbolView
+              name={{ ios: 'trash', android: 'delete', web: 'delete' }}
+              size={16}
+              tintColor={palette.mutedForeground}
+            />
+          </Pressable>
         </View>
         <Text className="text-[13px] leading-5 text-muted-foreground" numberOfLines={2}>
           {preview(document.body) || '아직 내용이 없어요.'}

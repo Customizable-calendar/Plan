@@ -51,6 +51,15 @@ export interface DocumentFilter {
   query?: string;
 }
 
+// M1에서 지운 문서 id. 앱이 켜져 있는 동안만 기억해요(앱을 다시 켜면 예시 문서는 돌아와요).
+const deleted = new Set<string>();
+
+/** 문서를 지워요. 목록과 홈 최근 문서에서 빠져요. */
+export async function deleteDocument(id: string): Promise<void> {
+  if (dataSource !== 'fixtures') throw new Error('sessions: Supabase 연결은 M2에서 만들어요.');
+  deleted.add(id);
+}
+
 /** 작성한 문서 목록. 최근에 고친 문서가 위로 와요. 이번에 편집기에서 고친 문서도 합쳐요. */
 export async function listDocuments(filter: DocumentFilter = {}): Promise<DocumentItem[]> {
   if (dataSource !== 'fixtures') throw new Error('sessions: Supabase 연결은 M2에서 만들어요.');
@@ -61,6 +70,7 @@ export async function listDocuments(filter: DocumentFilter = {}): Promise<Docume
 
   const q = filter.query?.trim().toLowerCase() ?? '';
   const items = [...byId.values()]
+    .filter((d) => !deleted.has(d.id))
     .map((document) => ({
       document,
       template: templates.find((t) => t.id === document.templateId),
@@ -79,6 +89,8 @@ export async function listDocuments(filter: DocumentFilter = {}): Promise<Docume
 /** 홈 최근 문서 위젯. 최근에 고친 문서부터 limit개. */
 export async function listRecentDocuments(limit = 3): Promise<Document[]> {
   if (dataSource !== 'fixtures') throw new Error('sessions: Supabase 연결은 M2에서 만들어요.');
-  const docs = [...fixtures.documents].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const docs = fixtures.documents
+    .filter((d) => !deleted.has(d.id))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return fromFixture(docs.slice(0, limit));
 }
