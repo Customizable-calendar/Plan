@@ -219,7 +219,13 @@ export function EditorScreen() {
 
 const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  // marginRight: 웹 헤더에서는 오른쪽 끝에 딱 붙어서 여백을 줘요.
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    marginRight: space.sm,
+  },
   saveButton: {
     paddingVertical: space.xs + 2,
     paddingHorizontal: space.sm + 4,
