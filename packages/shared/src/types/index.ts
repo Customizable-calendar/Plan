@@ -4,4 +4,5 @@ export * from './document';
 export * from './execution';
 export * from './file';
 export * from './note';
+export * from './session';
 export * from './template';

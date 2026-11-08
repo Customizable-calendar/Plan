@@ -1,2 +1,20 @@
-// 카드 탭: 라우트 파일은 기능 폴더의 화면을 연결만 해요.
-export { CardsScreen as default } from '@/features/cards';
+import { useLocalSearchParams } from 'expo-router';
+
+import { CardsScreen, findCardsFromMemo } from '@/features/cards';
+import { QuickNoteSection } from '@/features/notes';
+
+// 카드 탭: 맨 위에 막 쓰기(notes, A)를 두고, 저장하면 카드 찾기(cards, B)로 이어요. 조립만 해요.
+export default function CardsTab() {
+  const { focus } = useLocalSearchParams<{ focus?: string }>();
+  return (
+    <CardsScreen
+      memo={
+        <QuickNoteSection
+          onSaved={findCardsFromMemo}
+          showRecent={false}
+          autoFocus={focus === 'memo'}
+        />
+      }
+    />
+  );
+}
