@@ -183,49 +183,53 @@ function DocumentCard({
   onDelete: () => void;
 }) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${document.title} 열기`}
-      // 편집기에는 id만 넘기고, 편집기가 자기 data.ts로 내용을 불러와요.
-      onPress={() => router.push({ pathname: '/editor/[id]', params: { id: document.id } })}
-      className="flex-row gap-3 rounded-lg border border-border bg-card p-4 active:bg-muted"
-    >
-      <View className="h-10 w-10 items-center justify-center rounded-md bg-primary-soft">
-        <SymbolView name={templateIcon(template?.icon)} size={20} tintColor={palette.primary} />
-      </View>
-      <View className="flex-1 gap-1.5">
-        <View className="flex-row items-baseline gap-2">
-          <Text className="flex-1 text-base font-bold text-card-foreground" numberOfLines={1}>
-            {document.title}
-          </Text>
-          <Text className="text-xs text-muted-foreground">{shortDate(document.updatedAt)}</Text>
-          {/* 카드 안의 버튼: 이 버튼을 누르면 카드(열기)는 눌리지 않아요. */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`${document.title} 삭제`}
-            onPress={onDelete}
-            hitSlop={8}
-            className="-my-1 h-7 w-7 items-center justify-center rounded-md active:bg-muted"
-          >
-            <SymbolView
-              name={{ ios: 'trash', android: 'delete', web: 'delete' }}
-              size={16}
-              tintColor={palette.mutedForeground}
-            />
-          </Pressable>
+    // 삭제 버튼을 카드 버튼 "안"에 넣으면 웹에서 <button> 안에 <button>이 되어 오류가 나요.
+    // 그래서 카드와 삭제 버튼을 나란히 두고, 삭제 버튼을 오른쪽 위에 겹쳐 올려요(absolute).
+    <View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${document.title} 열기`}
+        // 편집기에는 id만 넘기고, 편집기가 자기 data.ts로 내용을 불러와요.
+        onPress={() => router.push({ pathname: '/editor/[id]', params: { id: document.id } })}
+        className="flex-row gap-3 rounded-lg border border-border bg-card p-4 active:bg-muted"
+      >
+        <View className="h-10 w-10 items-center justify-center rounded-md bg-primary-soft">
+          <SymbolView name={templateIcon(template?.icon)} size={20} tintColor={palette.primary} />
         </View>
-        <Text className="text-[13px] leading-5 text-muted-foreground" numberOfLines={2}>
-          {preview(document.body) || '아직 내용이 없어요.'}
-        </Text>
-        {template?.tags?.length ? (
-          <View className="flex-row flex-wrap gap-1">
-            {template.tags.map((tag) => (
-              <TagBadge key={tag} tag={tag} />
-            ))}
+        <View className="flex-1 gap-1.5">
+          {/* pr-8: 오른쪽 위 삭제 버튼 자리를 비워 둬요. */}
+          <View className="flex-row items-baseline gap-2 pr-8">
+            <Text className="flex-1 text-base font-bold text-card-foreground" numberOfLines={1}>
+              {document.title}
+            </Text>
+            <Text className="text-xs text-muted-foreground">{shortDate(document.updatedAt)}</Text>
           </View>
-        ) : null}
-      </View>
-    </Pressable>
+          <Text className="text-[13px] leading-5 text-muted-foreground" numberOfLines={2}>
+            {preview(document.body) || '아직 내용이 없어요.'}
+          </Text>
+          {template?.tags?.length ? (
+            <View className="flex-row flex-wrap gap-1">
+              {template.tags.map((tag) => (
+                <TagBadge key={tag} tag={tag} />
+              ))}
+            </View>
+          ) : null}
+        </View>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${document.title} 삭제`}
+        onPress={onDelete}
+        hitSlop={8}
+        className="absolute right-2.5 top-3 h-8 w-8 items-center justify-center rounded-md active:bg-muted"
+      >
+        <SymbolView
+          name={{ ios: 'trash', android: 'delete', web: 'delete' }}
+          size={16}
+          tintColor={palette.mutedForeground}
+        />
+      </Pressable>
+    </View>
   );
 }
 
