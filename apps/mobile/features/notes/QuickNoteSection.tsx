@@ -1,12 +1,13 @@
 import type { Note } from '@noteapp/shared';
-import { colors, fontSize, space } from '@noteapp/ui';
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Link } from 'expo-router';
+import { Text, View } from 'react-native';
 
-import { listNotes, saveNote } from './data';
+import { NoteGrid } from './NoteGrid';
+import { QuickNoteInput } from './QuickNoteInput';
+import { useNotes } from './useNotes';
 
-// 오늘 화면에 보여줄 최근 메모 개수
-const LIMIT = 5;
+// 최근 메모를 몇 개까지 보여줄지
+const LIMIT = 4;
 
 interface Props {
   /** 저장한 뒤 이어서 할 일. 카드 탭에서는 카드 찾기를 넘겨요. 돌려준 글은 입력칸 아래에 보여요. */
@@ -17,126 +18,43 @@ interface Props {
   autoFocus?: boolean;
 }
 
+/** 막 쓰기 입력 + 최근 메모 몇 개 + 메모 화면 입구. 카드 탭이 맨 위에 붙여요. */
 export function QuickNoteSection({ onSaved, showRecent = true, autoFocus }: Props) {
-  const [text, setText] = useState('');
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const { notes, loading, error, addNote } = useNotes();
 
-  // useEffect: 화면이 처음 나타날 때 한 번 실행돼요. 여기서 예시 메모를 불러와요.
-  useEffect(() => {
-    listNotes()
-      .then(setNotes)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const canSave = text.trim().length > 0;
-
-  const submit = async () => {
-    try {
-      const note = await saveNote(text);
-      setNotes((prev) => [note, ...prev]); // 새 메모를 목록 맨 위에 붙여요
-      setText('');
-      setError(null);
-      setMessage((await onSaved?.(note.text)) ?? null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
+  const handleSaved = (note: Note) => {
+    addNote(note); // 새 메모를 목록 맨 위에 붙여요
+    return onSaved?.(note.text);
   };
 
   return (
-    <View style={styles.section}>
-      <Text style={styles.title}>막 쓰기</Text>
-
-      <View style={styles.box}>
-        <TextInput
-          value={text}
-          onChangeText={setText}
-          multiline
-          placeholder="생각나는 대로 적어 보세요"
-          placeholderTextColor={colors.muted}
-          accessibilityLabel="메모 입력"
-          autoFocus={autoFocus}
-          style={styles.input}
-        />
-        <View style={styles.row}>
-          <Text style={styles.message}>{error ?? message}</Text>
-          <Pressable
-            onPress={submit}
-            disabled={!canSave}
-            accessibilityRole="button"
-            style={[styles.button, !canSave && styles.disabled]}
-          >
-            <Text style={styles.buttonText}>{onSaved ? '저장하고 카드 찾기' : '저장'}</Text>
-          </Pressable>
-        </View>
+    <View className="gap-2">
+      <View className="flex-row items-baseline justify-between">
+        <Text className="text-xl font-bold text-foreground">막 쓰기</Text>
+        <Link href="/notes" className="text-[13px] font-bold text-primary">
+          메모 모두 보기
+        </Link>
       </View>
+      <QuickNoteInput
+        onSaved={handleSaved}
+        saveLabel={onSaved ? '저장하고 카드 찾기' : '저장'}
+        autoFocus={autoFocus}
+      />
 
-      {!showRecent ? null : <Text style={styles.subtitle}>최근 메모</Text>}
-      {!showRecent ? null : loading ? (
-        <Text style={styles.caption}>불러오는 중</Text>
-      ) : notes.length === 0 ? (
-        <Text style={styles.caption}>아직 쓴 메모가 없어요.</Text>
-      ) : (
-        notes.slice(0, LIMIT).map((n) => (
-          <View key={n.id} style={styles.note}>
-            <Text style={styles.noteText}>{n.text}</Text>
-            <Text style={styles.caption}>{formatTime(n.createdAt)}</Text>
-          </View>
-        ))
+      {!showRecent ? null : (
+        <>
+          <Text className="text-[13px] font-semibold text-muted-foreground">최근 메모</Text>
+          {loading ? (
+            <Text className="text-[13px] text-muted-foreground">불러오는 중</Text>
+          ) : error ? (
+            <Text className="text-[13px] text-destructive">{error}</Text>
+          ) : notes.length === 0 ? (
+            <Text className="text-[13px] text-muted-foreground">아직 쓴 메모가 없어요.</Text>
+          ) : (
+            <NoteGrid notes={notes.slice(0, LIMIT)} />
+          )}
+        </>
       )}
     </View>
   );
 }
-
-/** "10월 26일 오전 10:00"처럼 기기 시간대로 보여줘요. */
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleString('ko-KR', {
-    month: 'long',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
-const styles = StyleSheet.create({
-  section: { gap: space.sm },
-  title: { fontSize: fontSize.title, fontWeight: '700', color: colors.ink },
-  subtitle: { fontSize: fontSize.caption, fontWeight: '600', color: colors.muted },
-  box: {
-    gap: space.sm,
-    padding: space.md,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    backgroundColor: colors.surface,
-  },
-  input: {
-    minHeight: 72,
-    fontSize: fontSize.body,
-    lineHeight: 22,
-    color: colors.ink,
-    textAlignVertical: 'top',
-  },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  message: { flex: 1, fontSize: fontSize.caption, color: colors.muted },
-  caption: { fontSize: fontSize.caption, color: colors.muted },
-  button: {
-    minHeight: 36,
-    justifyContent: 'center',
-    paddingHorizontal: space.md,
-    borderRadius: 18,
-    backgroundColor: colors.accent,
-  },
-  disabled: { opacity: 0.4 },
-  buttonText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.surface },
-  note: {
-    gap: space.xs,
-    padding: space.sm,
-    borderRadius: 8,
-    backgroundColor: colors.surface,
-  },
-  noteText: { fontSize: fontSize.body, color: colors.ink },
-});
