@@ -13,6 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # check-design.mjs가 PR에서 바뀐 파일을 보려면 stage 기록이 필요해요.
+          fetch-depth: 0
 
       # package.json의 packageManager 버전으로 pnpm을 설치해요.
       - uses: pnpm/action-setup@v4
@@ -21,6 +24,12 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
+
+      # 디자인 파일은 서현만 바꿔요. 기능 폴더에 직접 적은 색은 경고만 해요.
+      - run: node scripts/check-design.mjs
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BASE: ${{ github.base_ref }}
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
