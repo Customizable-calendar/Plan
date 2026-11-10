@@ -16,6 +16,7 @@ export function CalendarScreen() {
   const [view, setView] = useState<'day' | 'week'>('day');
   const [candidateTask, setCandidateTask] = useState<Card>();
   const [message, setMessage] = useState('');
+  const [dailyListHeight, setDailyListHeight] = useState<number>();
   const days = weekDays(day);
   const shownDays = view === 'day' ? [day] : days;
   return (
@@ -94,55 +95,76 @@ export function CalendarScreen() {
       {!loading && !error && view === 'day' && (
         <CalendarTimeline days={[day]} events={events} tasks={tasks} />
       )}
-      {!loading &&
-        !error &&
-        shownDays.map((date) => {
-          const daily = eventsOnDay(events, date);
-          const scheduled = tasks.filter((task) => task.startAt && dayKey(task.startAt) === date);
-          return (
-            <View key={date} style={[styles.card, view === 'week' && { padding: 12, gap: 6 }]}>
-              <Text accessibilityRole="header" style={styles.heading}>
-                {date} · {daily.length + scheduled.length}개 일정
-              </Text>
-              {!daily.length && !scheduled.length && (
-                <Text style={styles.muted}>등록된 일정이 없어요.</Text>
-              )}
-              {daily.map((event) => (
-                <View key={event.id} style={view === 'week' ? styles.row : styles.event}>
-                  <Text style={view === 'week' ? styles.text : styles.heading}>{event.title}</Text>
-                  {view === 'day' && (
-                    <Text style={styles.muted}>
-                      {event.allDay
-                        ? '종일'
-                        : `${timeLabel(event.startAt)}–${timeLabel(event.endAt)}`}{' '}
-                      · {event.calendarId}
+      {!loading && !error && (
+        <ScrollView
+          key={view === 'day' ? day : 'week'}
+          accessibilityLabel={view === 'day' ? '일정 목록' : '주간 일정 목록'}
+          nestedScrollEnabled
+          scrollEnabled={view === 'day'}
+          onContentSizeChange={(_, height) => {
+            if (view === 'day') setDailyListHeight(height);
+          }}
+          style={
+            view === 'day'
+              ? { maxHeight: dailyListHeight && Math.max(96, dailyListHeight / 2) }
+              : undefined
+          }
+          contentContainerStyle={{ gap: 12 }}
+        >
+          {shownDays.map((date) => {
+            const daily = eventsOnDay(events, date);
+            const scheduled = tasks.filter((task) => task.startAt && dayKey(task.startAt) === date);
+            return (
+              <View key={date} style={[styles.card, view === 'week' && { padding: 12, gap: 6 }]}>
+                <Text accessibilityRole="header" style={styles.heading}>
+                  {date} · {daily.length + scheduled.length}개 일정
+                </Text>
+                {!daily.length && !scheduled.length && (
+                  <Text style={styles.muted}>등록된 일정이 없어요.</Text>
+                )}
+                {daily.map((event) => (
+                  <View key={event.id} style={view === 'week' ? styles.row : styles.event}>
+                    <Text style={view === 'week' ? styles.text : styles.heading}>
+                      {event.title}
                     </Text>
-                  )}
-                </View>
-              ))}
-              {scheduled.map((task) => (
-                <View
-                  key={task.id}
-                  style={
-                    view === 'week'
-                      ? styles.row
-                      : [
-                          styles.event,
-                          { borderLeftColor: colors.primary, backgroundColor: colors.primarySoft },
-                        ]
-                  }
-                >
-                  <Text style={view === 'week' ? styles.text : styles.heading}>{task.title}</Text>
-                  {view === 'day' && (
-                    <Text style={styles.muted}>
-                      {timeLabel(task.startAt!)}–{timeLabel(task.endAt!)} · 시간 잡은 할 일
-                    </Text>
-                  )}
-                </View>
-              ))}
-            </View>
-          );
-        })}
+                    {view === 'day' && (
+                      <Text style={styles.muted}>
+                        {event.allDay
+                          ? '종일'
+                          : `${timeLabel(event.startAt)}–${timeLabel(event.endAt)}`}{' '}
+                        · {event.calendarId}
+                      </Text>
+                    )}
+                  </View>
+                ))}
+                {scheduled.map((task) => (
+                  <View
+                    key={task.id}
+                    style={
+                      view === 'week'
+                        ? styles.row
+                        : [
+                            styles.event,
+                            {
+                              borderLeftColor: colors.primary,
+                              backgroundColor: colors.primarySoft,
+                            },
+                          ]
+                    }
+                  >
+                    <Text style={view === 'week' ? styles.text : styles.heading}>{task.title}</Text>
+                    {view === 'day' && (
+                      <Text style={styles.muted}>
+                        {timeLabel(task.startAt!)}–{timeLabel(task.endAt!)} · 시간 잡은 할 일
+                      </Text>
+                    )}
+                  </View>
+                ))}
+              </View>
+            );
+          })}
+        </ScrollView>
+      )}
       <Text accessibilityRole="header" style={styles.heading}>
         시간을 잡을 할 일
       </Text>
