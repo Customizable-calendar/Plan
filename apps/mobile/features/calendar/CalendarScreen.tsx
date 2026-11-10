@@ -7,18 +7,37 @@ import { TimeCandidates } from './TimeCandidates';
 import { CalendarTimeline } from './CalendarTimeline';
 import { confirmTask, loadCalendar, useCalendar } from './data';
 import { CalendarButton, useCalendarTheme } from './design';
-import { dayKey, eventsOnDay, shiftDay, timeLabel, weekDays } from './model';
+import { dayKey, eventsOnDay, shiftDay, shiftMonth, timeLabel, weekDays } from './model';
 
 export function CalendarScreen() {
   const { events, tasks, loading, error } = useCalendar();
   const { colors, styles } = useCalendarTheme();
   const [day, setDay] = useState(() => dayKey(new Date()));
-  const [view, setView] = useState<'day' | 'week'>('day');
+  const [view, setView] = useState<'day' | 'week' | 'month'>('day');
   const [candidateTask, setCandidateTask] = useState<Card>();
   const [message, setMessage] = useState('');
   const [dailyListHeight, setDailyListHeight] = useState<number>();
   const days = weekDays(day);
-  const shownDays = view === 'day' ? [day] : days;
+  const month = day.slice(0, 7);
+  const monthStart = month + '-01';
+  const nextMonth = shiftMonth(monthStart, 1);
+  const gridStart = weekDays(monthStart)[0];
+  const gridDays =
+    view === 'month'
+      ? Array.from({ length: 6 }, (_, week) => weekDays(shiftDay(gridStart, week * 7))).filter(
+          (week) => week[0] < nextMonth,
+        )
+      : [days];
+  const shownDays = view === 'week' ? days : [day];
+  const period = { day: '날', week: '주', month: '달' }[view];
+
+  function movePeriod(direction: number) {
+    setDay(
+      view === 'month'
+        ? shiftMonth(monthStart, direction)
+        : shiftDay(day, direction * (view === 'week' ? 7 : 1)),
+    );
+  }
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <Text style={styles.muted}>나의 시간</Text>
@@ -32,55 +51,65 @@ export function CalendarScreen() {
           selected={view === 'week'}
           onPress={() => setView('week')}
         />
-        <CalendarButton label="오늘" onPress={() => setDay(dayKey(new Date()))} />
+        <CalendarButton
+          label="월 보기"
+          selected={view === 'month'}
+          onPress={() => setView('month')}
+        />
       </View>
       <View style={styles.row}>
-        <CalendarButton
-          label={view === 'day' ? '이전 날' : '이전 주'}
-          onPress={() => setDay(shiftDay(day, view === 'day' ? -1 : -7))}
-        />
-        <Text style={styles.heading}>{day.replaceAll('-', '. ')}</Text>
-        <CalendarButton
-          label={view === 'day' ? '다음 날' : '다음 주'}
-          onPress={() => setDay(shiftDay(day, view === 'day' ? 1 : 7))}
-        />
+        <CalendarButton label={'이전 ' + period} onPress={() => movePeriod(-1)} />
+        <Text style={styles.heading}>{(view === 'month' ? month : day).replaceAll('-', '. ')}</Text>
+        <CalendarButton label={'다음 ' + period} onPress={() => movePeriod(1)} />
       </View>
-      <View style={{ flexDirection: 'row', gap: 3 }}>
-        {days.map((date, i) => (
-          <Pressable
-            key={date}
-            accessibilityRole="button"
-            accessibilityLabel={`${date} ${eventsOnDay(events, date).length}개 일정`}
-            accessibilityState={{ selected: date === day }}
-            onPress={() => setDay(date)}
-            style={{
-              flex: 1,
-              minHeight: 64,
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 10,
-              backgroundColor: date === day ? colors.primary : colors.muted,
-            }}
-          >
-            <Text
-              style={{ color: date === day ? colors.primaryForeground : colors.mutedForeground }}
-            >
-              {['월', '화', '수', '목', '금', '토', '일'][i]}
-            </Text>
-            <Text
-              style={{
-                fontWeight: '700',
-                color: date === day ? colors.primaryForeground : colors.foreground,
-              }}
-            >
-              {Number(date.slice(-2))}
-            </Text>
-            <Text style={{ color: date === day ? colors.primaryForeground : colors.cal1 }}>
-              {eventsOnDay(events, date).length ? '•' : ' '}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      {gridDays.map((week, row) => (
+        <View key={week[0]} style={{ flexDirection: 'row', gap: 3 }}>
+          {week.map((date, i) => {
+            const count =
+              eventsOnDay(events, date).length +
+              tasks.filter((task) => task.startAt && dayKey(task.startAt) === date).length;
+            return (
+              <Pressable
+                key={date}
+                accessibilityRole="button"
+                accessibilityLabel={`${date} ${count}개 일정`}
+                accessibilityState={{ selected: date === day }}
+                onPress={() => setDay(date)}
+                style={{
+                  flex: 1,
+                  minHeight: view === 'month' && row > 0 ? 44 : 64,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 10,
+                  opacity: view === 'month' && !date.startsWith(month) ? 0.55 : 1,
+                  backgroundColor: date === day ? colors.primary : colors.muted,
+                }}
+              >
+                {(view !== 'month' || row === 0) && (
+                  <Text
+                    style={{
+                      color: date === day ? colors.primaryForeground : colors.mutedForeground,
+                    }}
+                  >
+                    {['월', '화', '수', '목', '금', '토', '일'][i]}
+                  </Text>
+                )}
+                <Text
+                  style={{
+                    fontWeight: '700',
+                    color: date === day ? colors.primaryForeground : colors.foreground,
+                  }}
+                >
+                  {Number(date.slice(-2))}
+                </Text>
+                <Text style={{ color: date === day ? colors.primaryForeground : colors.cal1 }}>
+                  {count ? '•' : ' '}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ))}
       {loading && (
         <ActivityIndicator accessibilityLabel="일정 불러오는 중" color={colors.primary} />
       )}
@@ -97,15 +126,15 @@ export function CalendarScreen() {
       )}
       {!loading && !error && (
         <ScrollView
-          key={view === 'day' ? day : 'week'}
-          accessibilityLabel={view === 'day' ? '일정 목록' : '주간 일정 목록'}
+          key={view === 'week' ? 'week' : day}
+          accessibilityLabel={view === 'week' ? '주간 일정 목록' : '일정 목록'}
           nestedScrollEnabled
-          scrollEnabled={view === 'day'}
+          scrollEnabled={view !== 'week'}
           onContentSizeChange={(_, height) => {
-            if (view === 'day') setDailyListHeight(height);
+            if (view !== 'week') setDailyListHeight(height);
           }}
           style={
-            view === 'day'
+            view !== 'week'
               ? { maxHeight: dailyListHeight && Math.max(96, dailyListHeight / 2) }
               : undefined
           }
@@ -127,7 +156,7 @@ export function CalendarScreen() {
                     <Text style={view === 'week' ? styles.text : styles.heading}>
                       {event.title}
                     </Text>
-                    {view === 'day' && (
+                    {view !== 'week' && (
                       <Text style={styles.muted}>
                         {event.allDay
                           ? '종일'
@@ -153,7 +182,7 @@ export function CalendarScreen() {
                     }
                   >
                     <Text style={view === 'week' ? styles.text : styles.heading}>{task.title}</Text>
-                    {view === 'day' && (
+                    {view !== 'week' && (
                       <Text style={styles.muted}>
                         {timeLabel(task.startAt!)}–{timeLabel(task.endAt!)} · 시간 잡은 할 일
                       </Text>

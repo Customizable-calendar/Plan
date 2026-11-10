@@ -16,6 +16,11 @@ export function shiftDay(day: string, amount: number): string {
   date.setUTCDate(date.getUTCDate() + amount);
   return dayKey(date);
 }
+export function shiftMonth(monthStart: string, amount: number): string {
+  const date = new Date(monthStart + 'T12:00:00+09:00');
+  date.setUTCMonth(date.getUTCMonth() + amount, 1);
+  return dayKey(date);
+}
 export function weekDays(day: string): string[] {
   const weekday = new Date(`${day}T12:00:00+09:00`).getUTCDay();
   const monday = shiftDay(day, -((weekday + 6) % 7));
