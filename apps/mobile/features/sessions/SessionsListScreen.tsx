@@ -1,4 +1,4 @@
-import type { Template, TemplateCategory } from '@noteapp/shared';
+import type { Session, Template, TemplateCategory } from '@noteapp/shared';
 import { palette } from '@noteapp/ui';
 import { router, Stack, useFocusEffect } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
@@ -7,7 +7,14 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ConfirmDialog } from './ConfirmDialog';
-import { type DocumentItem, deleteDocument, listDocuments, listTemplates } from './data';
+import {
+  type DocumentItem,
+  deleteDocument,
+  listDocuments,
+  listDraftSessions,
+  listTemplates,
+  removeDraftSession,
+} from './data';
 import { shortDate } from './format';
 import { templateIcon } from './icons';
 import { TagBadge, TemplatePickerModal } from './TemplatePickerModal';
@@ -28,6 +35,10 @@ export function SessionsListScreen() {
   const [items, setItems] = useState<DocumentItem[] | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [picking, setPicking] = useState(false);
+  // 미완성 세션 목록과, 양식을 고르는 중인 미완성 세션
+  const [drafts, setDrafts] = useState<Session[]>([]);
+  const [completing, setCompleting] = useState<Session | null>(null);
+  const [removingDraft, setRemovingDraft] = useState<Session | null>(null);
   // 삭제 확인창에 띄울 문서. null이면 확인창이 닫혀 있어요.
   const [deleting, setDeleting] = useState<DocumentItem | null>(null);
   // 편집기에서 돌아올 때마다 1씩 올려서 목록을 다시 불러와요.
@@ -39,6 +50,13 @@ export function SessionsListScreen() {
   useEffect(() => {
     listTemplates().then(setTemplates);
   }, []);
+
+  // 막 쓰기에서 넘긴 미완성 세션. 화면에 돌아올 때마다 다시 불러와요.
+  useEffect(() => {
+    listDraftSessions()
+      .then(setDrafts)
+      .catch(() => setDrafts([]));
+  }, [reload]);
 
   useEffect(() => {
     let alive = true; // 필터를 빨리 바꿨을 때 늦게 온 옛 결과는 버려요
@@ -60,6 +78,22 @@ export function SessionsListScreen() {
   const startNew = (t: Template) => {
     setPicking(false);
     router.push({ pathname: '/editor/[id]', params: { id: 'new', templateId: t.id } });
+  };
+
+  // 미완성 세션에 양식을 고르면: 메모 원문을 맨 위에 넣은 새 문서를 열고, 미완성 목록에서 빼요.
+  const completeDraft = async (t: Template) => {
+    if (!completing) return;
+    const seed = completing.source?.text ?? completing.title;
+    setCompleting(null);
+    await removeDraftSession(completing.id);
+    router.push({ pathname: '/editor/[id]', params: { id: 'new', templateId: t.id, seed } });
+  };
+
+  const confirmRemoveDraft = async () => {
+    if (!removingDraft) return;
+    await removeDraftSession(removingDraft.id);
+    setRemovingDraft(null);
+    setReload((n) => n + 1);
   };
 
   return (
@@ -128,6 +162,24 @@ export function SessionsListScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 96 }} // FAB에 가리지 않게
         keyboardShouldPersistTaps="handled"
       >
+        {/* 미완성 세션: 분류나 검색으로 거르지 않을 때만 맨 위에 보여요. */}
+        {!category && !query && drafts.length ? (
+          <View className="gap-2">
+            <Text className="text-[13px] font-semibold text-muted-foreground">미완성 세션</Text>
+            {drafts.map((d) => (
+              <DraftCard
+                key={d.id}
+                session={d}
+                onPick={() => setCompleting(d)}
+                onRemove={() => setRemovingDraft(d)}
+              />
+            ))}
+            <Text className="pt-2 text-[13px] font-semibold text-muted-foreground">
+              작성한 문서
+            </Text>
+          </View>
+        ) : null}
+
         {items === null ? (
           <Text className="py-6 text-center text-sm text-muted-foreground">불러오는 중</Text>
         ) : items.length === 0 ? (
@@ -162,6 +214,13 @@ export function SessionsListScreen() {
         onPick={startNew}
         onClose={() => setPicking(false)}
       />
+      {/* 미완성 세션의 양식 고르기. 같은 시트를 써요. */}
+      <TemplatePickerModal
+        visible={completing !== null}
+        templates={templates}
+        onPick={completeDraft}
+        onClose={() => setCompleting(null)}
+      />
 
       <ConfirmDialog
         visible={deleting !== null}
@@ -171,6 +230,61 @@ export function SessionsListScreen() {
         onConfirm={confirmDelete}
         onCancel={() => setDeleting(null)}
       />
+      <ConfirmDialog
+        visible={removingDraft !== null}
+        title="미완성 세션을 지울까요?"
+        message="이 세션을 만든 메모 원문도 함께 사라져요. 지운 세션은 되돌릴 수 없어요."
+        confirmLabel="지우기"
+        onConfirm={confirmRemoveDraft}
+        onCancel={() => setRemovingDraft(null)}
+      />
+    </View>
+  );
+}
+
+/** 미완성 세션 한 장: 양식을 아직 안 골랐다는 표시 + 메모 원문 + 양식 고르기 */
+function DraftCard({
+  session,
+  onPick,
+  onRemove,
+}: {
+  session: Session;
+  onPick: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <View className="gap-2 rounded-lg border border-dashed border-primary bg-card p-4">
+      <View className="flex-row items-center gap-2">
+        <View className="rounded-full bg-primary-soft px-2 py-0.5">
+          <Text className="text-[11px] font-bold text-primary-soft-foreground">미완성</Text>
+        </View>
+        <Text className="flex-1 text-xs text-muted-foreground">
+          막 쓰기에서 {shortDate(session.createdAt)}
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="미완성 세션 지우기"
+          onPress={onRemove}
+          hitSlop={8}
+          className="h-8 w-8 items-center justify-center rounded-md active:bg-muted"
+        >
+          <SymbolView
+            name={{ ios: 'trash', android: 'delete', web: 'delete' }}
+            size={16}
+            tintColor={palette.mutedForeground}
+          />
+        </Pressable>
+      </View>
+      <Text className="text-[15px] leading-6 text-card-foreground" numberOfLines={4}>
+        {session.source?.text ?? session.title}
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onPick}
+        className="h-9 justify-center self-end rounded-md bg-primary px-4 active:opacity-80"
+      >
+        <Text className="text-sm font-semibold text-primary-foreground">양식 고르기</Text>
+      </Pressable>
     </View>
   );
 }

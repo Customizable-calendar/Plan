@@ -29,7 +29,12 @@ import { Toolbar } from './Toolbar';
 /** 하나로 된 단순 편집기. 지금은 양식에 상관없이 제목 + 본문 글 하나를 고쳐요. */
 export function EditorScreen() {
   // 주소에서 값 꺼내기: /editor/doc-1 → id='doc-1', /editor/new?templateId=blog → 새 문서
-  const { id, templateId } = useLocalSearchParams<{ id: string; templateId?: string }>();
+  // seed: 미완성 세션에서 왔으면 메모 원문이에요. 새 문서 맨 위에 들어가요.
+  const { id, templateId, seed } = useLocalSearchParams<{
+    id: string;
+    templateId?: string;
+    seed?: string;
+  }>();
   const insets = useSafeAreaInsets();
 
   const [status, setStatus] = useState<'loading' | 'missing' | 'ready'>('loading');
@@ -46,10 +51,12 @@ export function EditorScreen() {
 
   useEffect(() => {
     let alive = true; // 화면을 나간 뒤에 온 응답은 무시해요
-    openDocument(id, templateId).then((result) => {
+    openDocument(id, templateId, seed).then((result) => {
       if (!alive) return;
       if (!result) return setStatus('missing');
       setDoc(result.document);
+      // 메모 원문이 들어간 새 문서는 바로 저장해요. 안 고치고 나가도 메모가 사라지지 않게요.
+      if (seed) setDirty(true);
       setTemplate(result.template);
       const end = result.document.body.length;
       setSelection({ start: end, end });
@@ -59,7 +66,7 @@ export function EditorScreen() {
     return () => {
       alive = false;
     };
-  }, [id, templateId]);
+  }, [id, templateId, seed]);
 
   // 고칠 때마다 저장해요. (M1은 메모리에만) 열기만 하고 안 고친 새 문서는 저장하지 않아요.
   useEffect(() => {
