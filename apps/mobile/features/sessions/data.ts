@@ -1,6 +1,8 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   type Document,
   type Session,
+  type SessionSource,
   type Template,
   type TemplateCategory,
   fixtures,
@@ -19,11 +21,12 @@ export interface SessionItem extends Session {
   lastDocumentTitle: string | null;
 }
 
-/** 내 세션. 최근에 고친 세션이 위로 와요. (왼쪽 메뉴가 써요) */
+/** 내 세션. 최근에 고친 세션이 위로 와요. 미완성 세션도 함께예요. (왼쪽 메뉴가 써요) */
 export async function listMySessions(): Promise<SessionItem[]> {
   if (dataSource !== 'fixtures') throw new Error('sessions: Supabase 연결은 M2에서 만들어요.');
 
-  const items = fixtures.sessions.map((s) => ({
+  const complete = fixtures.sessions.filter((s) => s.templateId !== null);
+  const items = [...complete, ...(await listDraftSessions())].map((s) => ({
     ...s,
     templateName: templates.find((t) => t.id === s.templateId)?.name ?? s.title,
     lastDocumentTitle: fixtures.documents.find((d) => d.id === s.lastDocumentId)?.title ?? null,
@@ -93,4 +96,53 @@ export async function listRecentDocuments(limit = 3): Promise<Document[]> {
     .filter((d) => !deleted.has(d.id))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return fromFixture(docs.slice(0, limit));
+}
+
+// ── 미완성 세션 ──
+// 막 쓰기 기록을 오른쪽으로 넘기면 만들어져요. 양식(templateId)을 아직 고르지 않은 세션이에요.
+// 기록에서 빠진 메모가 사라지지 않게 기기 저장소(AsyncStorage)에 둬요. (웹에서는 localStorage)
+// M2: docs_ 테이블에 templateId가 빈 세션으로 저장해요.
+const DRAFTS_KEY = 'sessions.drafts';
+// 지운 예시 미완성 세션 id
+const REMOVED_KEY = 'sessions.drafts.removed';
+
+async function read<T>(key: string, fallback: T): Promise<T> {
+  const raw = await AsyncStorage.getItem(key);
+  return raw ? (JSON.parse(raw) as T) : fallback;
+}
+
+/** 미완성 세션. 최근에 만든 것이 위로 와요. */
+export async function listDraftSessions(): Promise<Session[]> {
+  const removed = await read<string[]>(REMOVED_KEY, []);
+  const examples = fixtures.sessions.filter((s) => s.templateId === null);
+  return [...(await read<Session[]>(DRAFTS_KEY, [])), ...examples]
+    .filter((s) => !removed.includes(s.id))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+/** 막 쓰기 메모로 미완성 세션을 만들어요. 제목은 메모 첫 줄, 원문은 source에 그대로 남겨요. */
+export async function createDraftSession(source: SessionSource): Promise<Session> {
+  const now = new Date().toISOString();
+  const session: Session = {
+    id: `session-draft-${Date.now()}`,
+    templateId: null,
+    title: source.text.split('\n')[0].trim().slice(0, 40) || '미완성 세션',
+    lastDocumentId: null,
+    source,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const drafts = await read<Session[]>(DRAFTS_KEY, []);
+  await AsyncStorage.setItem(DRAFTS_KEY, JSON.stringify([session, ...drafts]));
+  return session;
+}
+
+/** 미완성 세션을 목록에서 지워요. 양식을 골라 문서로 만들었을 때도 써요. */
+export async function removeDraftSession(id: string): Promise<void> {
+  const drafts = await read<Session[]>(DRAFTS_KEY, []);
+  await AsyncStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts.filter((s) => s.id !== id)));
+  if (fixtures.sessions.some((s) => s.id === id)) {
+    const removed = await read<string[]>(REMOVED_KEY, []);
+    await AsyncStorage.setItem(REMOVED_KEY, JSON.stringify([...removed, id]));
+  }
 }

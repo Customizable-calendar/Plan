@@ -23,15 +23,20 @@ const saved = new Map<string, Document>();
 
 /**
  * 문서를 열어요. id가 'new'면 templateId 양식으로 빈 문서를 새로 만들어요.
+ * seed가 있으면 새 문서 본문 맨 위에 그대로 넣어요. (미완성 세션의 메모 원문)
  * 문서를 못 찾으면 null이에요.
  */
-export async function openDocument(id: string, templateId?: string): Promise<EditorData | null> {
+export async function openDocument(
+  id: string,
+  templateId?: string,
+  seed?: string,
+): Promise<EditorData | null> {
   if (dataSource !== 'fixtures') throw new Error('editor: Supabase 연결은 M2에서 만들어요.');
 
   if (id === 'new') {
     const template = templates.find((t) => t.id === templateId);
     if (!template) return null;
-    return { document: newDraft(template), template };
+    return { document: newDraft(template, seed), template };
   }
 
   const document = saved.get(id) ?? fixtures.documents.find((d) => d.id === id);
@@ -58,14 +63,17 @@ export async function listEventsForSlash(): Promise<CalendarEvent[]> {
 }
 
 /** 양식으로 만든 새 문서 */
-function newDraft(template: Template): Document {
+function newDraft(template: Template, seed?: string): Document {
   const now = new Date();
+  // 양식에 기본 본문이 있으면 그걸, 없으면 칸 제목을 `## 제목`으로 깔아요.
+  const base =
+    template.defaultContent ?? template.sections.map((s) => `## ${s.title}\n`).join('\n');
   return {
     id: `draft-${now.getTime()}`,
     templateId: template.id,
     title: `${template.name} ${monthDay(now)}`,
-    // 양식에 기본 본문이 있으면 그걸, 없으면 칸 제목을 `## 제목`으로 깔아요.
-    body: template.defaultContent ?? template.sections.map((s) => `## ${s.title}\n`).join('\n'),
+    // seed(메모 원문)는 고치지 않고 양식 본문 위에 그대로 넣어요.
+    body: seed ? `${seed}\n\n${base}` : base,
     cardIds: [],
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
