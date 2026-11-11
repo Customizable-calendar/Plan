@@ -1,35 +1,34 @@
 import type { Note } from '@noteapp/shared';
 import { palette } from '@noteapp/ui';
 import { Link } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useRef, useState } from 'react';
 import { Pressable, ScrollView, type ScrollViewInstance, Text, View } from 'react-native';
 
-import { formatReminder, formatTime } from './format';
+import { formatTime } from './format';
 import { formatClock, formatDay, groupByDay } from './log';
 import { SwipeRow } from './SwipeRow';
 import {
   Avatar,
   CollaboratorSheet,
   HashtagSheet,
-  Option,
   ReminderBadge,
   ReminderSheet,
-  Sheet,
 } from './ToolSheets';
 import { useImportantNotes, useNotes } from './useNotes';
 
-type SheetKind = 'menu' | 'reminder' | 'collaborator' | 'hashtag';
+type SheetKind = 'reminder' | 'collaborator' | 'hashtag';
 
 /**
  * 메모 화면: 맨 위에 "중요한 메모", 그 아래에 막 쓰기 기록을 쌓아 보여줘요.
  * 기록은 카카오톡 "나에게 보내기"처럼 날짜는 하루에 한 번, 메모는 시간 순서로 쌓여요.
- * 말풍선을 꾹 누르면 메뉴가 나와요. 왼쪽으로 넘기면 휴지통, 오른쪽으로 넘기면 미완성 세션으로 보내요.
+ * 말풍선을 꾹 누르면 바로 위에 아이콘 막대가 떠요. 왼쪽으로 넘기면 휴지통, 오른쪽으로 넘기면 미완성 세션으로 보내요.
  */
 export function MemoLogScreen() {
   const { notes, loading, error, update, trash, toChecklist, toSession } = useNotes();
   const { important, isImportant, toggle, remove, reload } = useImportantNotes();
-  // 꾹 누른 메모와, 지금 열린 팝업
+  // 아이콘 막대를 띄운 메모 id, 설정 중인 메모, 지금 열린 팝업
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [target, setTarget] = useState<Note | null>(null);
   const [sheet, setSheet] = useState<SheetKind | null>(null);
   // useRef: 다시 그려져도 유지되는 상자예요. 여기서는 스크롤 화면을 가리켜 맨 아래로 내릴 때 써요.
@@ -65,7 +64,7 @@ export function MemoLogScreen() {
           </Link>
         </View>
         <Text className="text-[12px] text-muted-foreground">
-          꾹 누르면 메뉴가 나와요. 왼쪽으로 넘기면 휴지통, 오른쪽으로 넘기면 세션으로 가요.
+          꾹 누르면 설정 아이콘이 나와요. 왼쪽으로 넘기면 휴지통, 오른쪽으로 넘기면 세션으로 가요.
         </Text>
         {loading ? (
           <Text className="text-center text-[13px] text-muted-foreground">불러오는 중</Text>
@@ -86,74 +85,48 @@ export function MemoLogScreen() {
               </View>
 
               {day.notes.map((note) => (
-                <SwipeRow
-                  key={note.id}
-                  left={{
-                    label: '휴지통으로',
-                    icon: { ios: 'trash', android: 'delete', web: 'delete' },
-                    run: () => void trash(note),
-                  }}
-                  right={{
-                    label: '세션으로',
-                    icon: { ios: 'folder', android: 'folder', web: 'folder' },
-                    run: () => void toSession(note),
-                  }}
-                >
-                  <LogBubble
-                    note={note}
-                    important={isImportant(note.id)}
-                    onToggle={() => toggle(note)}
-                    onLongPress={() => {
-                      setTarget(note);
-                      setSheet('menu');
+                <View key={note.id} className="gap-1">
+                  {activeId === note.id ? (
+                    <ActionBar
+                      onClose={() => setActiveId(null)}
+                      onAction={(action) => {
+                        setActiveId(null);
+                        setTarget(note);
+                        if (action === 'checklist') void toChecklist(note);
+                        else if (action === 'session') void toSession(note);
+                        else if (action === 'trash') void trash(note);
+                        else setSheet(action);
+                      }}
+                    />
+                  ) : null}
+                  <SwipeRow
+                    left={{
+                      label: '휴지통으로',
+                      icon: { ios: 'trash', android: 'delete', web: 'delete' },
+                      run: () => void trash(note),
                     }}
-                  />
-                </SwipeRow>
+                    right={{
+                      label: '세션으로',
+                      icon: { ios: 'folder', android: 'folder', web: 'folder' },
+                      run: () => void toSession(note),
+                    }}
+                  >
+                    <LogBubble
+                      note={note}
+                      important={isImportant(note.id)}
+                      onToggle={() => toggle(note)}
+                      active={activeId === note.id}
+                      onLongPress={() => setActiveId(note.id)}
+                      onPress={() => setActiveId(null)}
+                    />
+                  </SwipeRow>
+                </View>
               ))}
             </View>
           ))
         )}
       </ScrollView>
 
-      {/* 꾹 누르면 나오는 메뉴 */}
-      <Sheet visible={sheet === 'menu'} title="메모 설정" onClose={close}>
-        <Option
-          label="리마인드"
-          sub={target?.reminder ? formatReminder(target.reminder) : '알림 시각 정하기'}
-          onPress={() => setSheet('reminder')}
-        />
-        <Option
-          label="공동 작업자"
-          sub={
-            target?.collaborators?.length ? target.collaborators.join(', ') : '함께 볼 사람 추가'
-          }
-          onPress={() => setSheet('collaborator')}
-        />
-        <Option label="해시태그" sub="글 끝에 태그 붙이기" onPress={() => setSheet('hashtag')} />
-        <Option
-          label="체크리스트로 만들기"
-          sub="기록에서 빼서 막 쓰기 아래로 옮겨요"
-          onPress={() => {
-            if (target) void toChecklist(target);
-            close();
-          }}
-        />
-        <Option
-          label="세션으로 보내기"
-          sub="기록에서 빼서 미완성 세션으로 만들어요"
-          onPress={() => {
-            if (target) void toSession(target);
-            close();
-          }}
-        />
-        <Option
-          label="휴지통으로 보내기"
-          onPress={() => {
-            if (target) void trash(target);
-            close();
-          }}
-        />
-      </Sheet>
       <ReminderSheet
         visible={sheet === 'reminder'}
         current={target?.reminder}
@@ -217,17 +190,101 @@ function ImportantSection({ notes, onRemove }: { notes: Note[]; onRemove: (id: s
   );
 }
 
+type ActionKind = SheetKind | 'checklist' | 'session' | 'trash';
+
+// 꾹 누르면 말풍선 위에 뜨는 아이콘들. 글자는 화면 읽기 기능(accessibilityLabel)에만 써요.
+const ACTIONS: { kind: ActionKind; label: string; icon: SymbolViewProps['name'] }[] = [
+  {
+    kind: 'reminder',
+    label: '리마인드',
+    icon: { ios: 'bell', android: 'notifications', web: 'notifications' },
+  },
+  {
+    kind: 'collaborator',
+    label: '공동 작업자',
+    icon: { ios: 'person.badge.plus', android: 'person_add', web: 'person_add' },
+  },
+  { kind: 'hashtag', label: '해시태그', icon: { ios: 'number', android: 'tag', web: 'tag' } },
+  {
+    kind: 'checklist',
+    label: '체크리스트로 만들기',
+    icon: { ios: 'checklist', android: 'checklist', web: 'checklist' },
+  },
+  {
+    kind: 'session',
+    label: '세션으로 보내기',
+    icon: { ios: 'folder', android: 'folder', web: 'folder' },
+  },
+  {
+    kind: 'trash',
+    label: '휴지통으로 보내기',
+    icon: { ios: 'trash', android: 'delete', web: 'delete' },
+  },
+];
+
+/** 꾹 누른 말풍선 바로 위에 뜨는 작은 아이콘 막대 */
+function ActionBar({
+  onAction,
+  onClose,
+}: {
+  onAction: (kind: ActionKind) => void;
+  onClose: () => void;
+}) {
+  return (
+    <View
+      accessibilityRole="toolbar"
+      className="flex-row items-center gap-0.5 self-end rounded-full border border-border bg-popover px-1 py-0.5 shadow-sm"
+    >
+      {ACTIONS.map((a) => (
+        <Pressable
+          key={a.kind}
+          onPress={() => onAction(a.kind)}
+          accessibilityRole="button"
+          accessibilityLabel={a.label}
+          hitSlop={4}
+          className="h-9 w-9 items-center justify-center rounded-full active:bg-muted"
+        >
+          <SymbolView
+            name={a.icon}
+            size={18}
+            tintColor={a.kind === 'trash' ? palette.destructive : palette.foreground}
+          />
+        </Pressable>
+      ))}
+      <View className="mx-0.5 h-5 w-px bg-border" />
+      <Pressable
+        onPress={onClose}
+        accessibilityRole="button"
+        accessibilityLabel="닫기"
+        hitSlop={4}
+        className="h-9 w-9 items-center justify-center rounded-full active:bg-muted"
+      >
+        <SymbolView
+          name={{ ios: 'xmark', android: 'close', web: 'close' }}
+          size={16}
+          tintColor={palette.mutedForeground}
+        />
+      </Pressable>
+    </View>
+  );
+}
+
 /** 기록 한 줄: 내가 보낸 말풍선처럼 오른쪽에 붙이고, 왼쪽에 별과 시각을 둬요. */
 function LogBubble({
   note,
   important,
+  active,
   onToggle,
   onLongPress,
+  onPress,
 }: {
   note: Note;
   important: boolean;
+  /** 아이콘 막대가 떠 있는 말풍선이면 테두리로 표시해요. */
+  active: boolean;
   onToggle: () => void;
   onLongPress: () => void;
+  onPress: () => void;
 }) {
   const people = note.collaborators ?? [];
   return (
@@ -256,11 +313,14 @@ function LogBubble({
       {/* shrink: 글이 길면 화면 밖으로 나가지 않고 말풍선 안에서 줄을 바꿔요. */}
       <Pressable
         onLongPress={onLongPress}
+        onPress={onPress}
         delayLongPress={400}
         accessibilityRole="button"
         accessibilityLabel={note.text}
-        accessibilityHint="꾹 누르면 리마인드, 공동 작업자, 해시태그, 체크리스트 메뉴가 나와요"
-        className="max-w-[80%] shrink gap-1.5 rounded-2xl rounded-br-sm bg-bubble-user px-3.5 py-2.5 active:opacity-80"
+        accessibilityHint="꾹 누르면 리마인드, 공동 작업자, 해시태그 같은 설정 아이콘이 나와요"
+        className={`max-w-[80%] shrink gap-1.5 rounded-2xl rounded-br-sm bg-bubble-user px-3.5 py-2.5 active:opacity-80 ${
+          active ? 'border-2 border-ring' : ''
+        }`}
       >
         <Text className="text-[15px] leading-6 text-bubble-user-foreground">{note.text}</Text>
         {note.reminder || people.length ? (
