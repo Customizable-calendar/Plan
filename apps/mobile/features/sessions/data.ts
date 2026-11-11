@@ -1,5 +1,13 @@
-import { type Document, type Session, type Template, fixtures, templates } from '@noteapp/shared';
+import {
+  type Document,
+  type Session,
+  type Template,
+  type TemplateCategory,
+  fixtures,
+  templates,
+} from '@noteapp/shared';
 
+import { listEditedDocuments } from '@/features/editor';
 import { dataSource, fromFixture } from '@/lib/data-source';
 
 // 세션 화면의 데이터는 여기서만 가져와요. 화면은 이 파일 함수만 불러요.
@@ -11,7 +19,7 @@ export interface SessionItem extends Session {
   lastDocumentTitle: string | null;
 }
 
-/** 내 세션. 최근에 고친 세션이 위로 와요. */
+/** 내 세션. 최근에 고친 세션이 위로 와요. (왼쪽 메뉴가 써요) */
 export async function listMySessions(): Promise<SessionItem[]> {
   if (dataSource !== 'fixtures') throw new Error('sessions: Supabase 연결은 M2에서 만들어요.');
 
@@ -30,9 +38,59 @@ export async function listTemplates(): Promise<Template[]> {
   return fromFixture(templates);
 }
 
+/** 세션 목록 카드 한 장: 문서 + 그 문서의 양식 */
+export interface DocumentItem {
+  document: Document;
+  template: Template | undefined;
+}
+
+export interface DocumentFilter {
+  /** 없으면 전체 */
+  category?: TemplateCategory;
+  /** 제목, 본문, 태그에서 찾아요. 대소문자는 가리지 않아요. */
+  query?: string;
+}
+
+// M1에서 지운 문서 id. 앱이 켜져 있는 동안만 기억해요(앱을 다시 켜면 예시 문서는 돌아와요).
+const deleted = new Set<string>();
+
+/** 문서를 지워요. 목록과 홈 최근 문서에서 빠져요. */
+export async function deleteDocument(id: string): Promise<void> {
+  if (dataSource !== 'fixtures') throw new Error('sessions: Supabase 연결은 M2에서 만들어요.');
+  deleted.add(id);
+}
+
+/** 작성한 문서 목록. 최근에 고친 문서가 위로 와요. 이번에 편집기에서 고친 문서도 합쳐요. */
+export async function listDocuments(filter: DocumentFilter = {}): Promise<DocumentItem[]> {
+  if (dataSource !== 'fixtures') throw new Error('sessions: Supabase 연결은 M2에서 만들어요.');
+
+  // 같은 id면 편집기에서 고친 쪽이 이겨요. (Map = 키로 값을 찾는 상자)
+  const byId = new Map(fixtures.documents.map((d) => [d.id, d]));
+  for (const d of await listEditedDocuments()) byId.set(d.id, d);
+
+  const q = filter.query?.trim().toLowerCase() ?? '';
+  const items = [...byId.values()]
+    .filter((d) => !deleted.has(d.id))
+    .map((document) => ({
+      document,
+      template: templates.find((t) => t.id === document.templateId),
+    }))
+    .filter(({ template }) => !filter.category || template?.category === filter.category)
+    .filter(({ document, template }) => {
+      if (!q) return true;
+      const haystack = [document.title, document.body, ...(template?.tags ?? [])].join('\n');
+      return haystack.toLowerCase().includes(q);
+    });
+
+  items.sort((a, b) => b.document.updatedAt.localeCompare(a.document.updatedAt));
+  return fromFixture(items);
+}
+
 /** 홈 최근 문서 위젯. 최근에 고친 문서부터 limit개. */
 export async function listRecentDocuments(limit = 3): Promise<Document[]> {
   if (dataSource !== 'fixtures') throw new Error('sessions: Supabase 연결은 M2에서 만들어요.');
-  const docs = [...fixtures.documents].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const docs = fixtures.documents
+    .filter((d) => !deleted.has(d.id))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return fromFixture(docs.slice(0, limit));
 }

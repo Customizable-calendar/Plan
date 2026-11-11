@@ -4,7 +4,7 @@ import { defineFeature } from '@/lib/feature';
 import { LnbSessions } from './LnbSessions';
 import { RecentDocs } from './RecentDocs';
 
-export { SessionsScreen } from './SessionsScreen';
+export { SessionsListScreen } from './SessionsListScreen';
 
 // 세션은 왼쪽 메뉴 세션 섹션에서, 최근 문서는 홈에서 들어가요.
 export const feature = defineFeature({

@@ -45,20 +45,27 @@ export async function saveDocument(document: Document): Promise<void> {
   saved.set(document.id, document);
 }
 
+/** 이번에 앱에서 고치거나 새로 쓴 문서. 세션 목록이 예시 문서와 합쳐 보여줘요. */
+export async function listEditedDocuments(): Promise<Document[]> {
+  if (dataSource !== 'fixtures') return [];
+  return fromFixture([...saved.values()]);
+}
+
 /** `/캘` 슬래시 명령에서 고를 일정. M2에는 캘린더(C)의 index.ts에서 내보낸 함수로 바꿔요. */
 export async function listEventsForSlash(): Promise<CalendarEvent[]> {
   if (dataSource !== 'fixtures') return [];
   return fromFixture([...fixtures.events].sort((a, b) => a.startAt.localeCompare(b.startAt)));
 }
 
-/** 양식의 칸 제목을 `## 제목`으로 깔아 둔 빈 문서 */
+/** 양식으로 만든 새 문서 */
 function newDraft(template: Template): Document {
   const now = new Date();
   return {
     id: `draft-${now.getTime()}`,
     templateId: template.id,
     title: `${template.name} ${monthDay(now)}`,
-    body: template.sections.map((s) => `## ${s.title}\n`).join('\n'),
+    // 양식에 기본 본문이 있으면 그걸, 없으면 칸 제목을 `## 제목`으로 깔아요.
+    body: template.defaultContent ?? template.sections.map((s) => `## ${s.title}\n`).join('\n'),
     cardIds: [],
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
