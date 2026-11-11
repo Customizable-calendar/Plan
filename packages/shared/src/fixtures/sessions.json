@@ -30,5 +30,17 @@
     "lastDocumentId": null,
     "createdAt": "2026-10-18T00:00:00.000Z",
     "updatedAt": "2026-10-18T00:00:00.000Z"
+  },
+  {
+    "id": "session-draft-note-2",
+    "templateId": null,
+    "title": "학습일지 양식을 우리 앱 템플릿으로 넣어보면 좋겠다",
+    "lastDocumentId": null,
+    "source": {
+      "noteId": "note-2",
+      "text": "학습일지 양식을 우리 앱 템플릿으로 넣어보면 좋겠다"
+    },
+    "createdAt": "2026-10-28T02:00:00.000Z",
+    "updatedAt": "2026-10-28T02:00:00.000Z"
   }
 ]

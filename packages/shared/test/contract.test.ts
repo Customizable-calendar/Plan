@@ -57,4 +57,23 @@ describe('세션 템플릿', () => {
       ).toBe(true);
     }
   });
+
+  it('양식이 있는 예시 세션은 있는 양식을 쓴다', () => {
+    for (const session of fixtures.sessions.filter((s) => s.templateId !== null)) {
+      expect(
+        templates.some((t) => t.id === session.templateId),
+        session.id,
+      ).toBe(true);
+    }
+  });
+
+  it('미완성 세션(양식 없음)은 만든 메모의 원문을 그대로 가지고 있다', () => {
+    const drafts = fixtures.sessions.filter((s) => s.templateId === null);
+    expect(drafts.length).toBeGreaterThan(0);
+    for (const session of drafts) {
+      const note = fixtures.notes.find((n) => n.id === session.source?.noteId);
+      expect(note, `${session.id}의 메모가 없어요`).toBeDefined();
+      expect(session.source?.text).toBe(note!.text);
+    }
+  });
 });
