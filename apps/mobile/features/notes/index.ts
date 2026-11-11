@@ -7,12 +7,16 @@ import { QuickNoteSection } from './QuickNoteSection';
 export { QuickNoteSection };
 export { QuickNoteInput } from './QuickNoteInput';
 export { NotesScreen } from './NotesScreen';
+export { MemoLogScreen } from './MemoLogScreen';
 
 export const feature = defineFeature({
   id: 'notes',
   owner: 'A',
-  // 메모 전체 목록 화면 (app/notes.tsx)
-  screens: [{ route: 'notes', title: '메모' }],
+  // 메모 전체 목록 화면 (app/notes.tsx), 막 쓰기 기록 화면 (app/notes-log.tsx)
+  screens: [
+    { route: 'notes', title: '메모' },
+    { route: 'notes-log', title: '막 쓰기 기록' },
+  ],
   lnb: [
     {
       section: 'quick',
@@ -28,6 +32,13 @@ export const feature = defineFeature({
       label: '메모',
       icon: { ios: 'note.text', android: 'sticky_note_2', web: 'sticky_note_2' },
       href: '/notes',
+    },
+    {
+      section: 'quick',
+      order: 12,
+      label: '막 쓰기 기록',
+      icon: { ios: 'clock', android: 'history', web: 'history' },
+      href: '/notes-log',
     },
   ],
 });

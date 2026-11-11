@@ -31,9 +31,15 @@ export function QuickNoteSection({ onSaved, showRecent = true, autoFocus }: Prop
     <View className="gap-2">
       <View className="flex-row items-baseline justify-between">
         <Text className="text-xl font-bold text-foreground">막 쓰기</Text>
-        <Link href="/notes" className="text-[13px] font-bold text-primary">
-          메모 모두 보기
-        </Link>
+        <View className="flex-row gap-3">
+          {/* 저장한 메모를 시간 순서로 쌓아 보는 곳. 입력칸 아래에 계속 보이지 않게 따로 열어요. */}
+          <Link href="/notes-log" className="text-[13px] font-bold text-primary">
+            기록 보기
+          </Link>
+          <Link href="/notes" className="text-[13px] font-bold text-primary">
+            메모 모두 보기
+          </Link>
+        </View>
       </View>
       <QuickNoteInput
         onSaved={handleSaved}
