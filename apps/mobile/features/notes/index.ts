@@ -6,12 +6,12 @@ import { QuickNoteSection } from './QuickNoteSection';
 // 막 쓰기는 카드 탭 맨 위에 붙어요(app/(tabs)/cards.tsx가 조립). 홈에는 두지 않아요.
 export { QuickNoteSection };
 export { QuickNoteInput } from './QuickNoteInput';
-export { NotesScreen } from './NotesScreen';
+export { MemoLogScreen } from './MemoLogScreen';
 
 export const feature = defineFeature({
   id: 'notes',
   owner: 'A',
-  // 메모 전체 목록 화면 (app/notes.tsx)
+  // 메모 화면: 중요한 메모 + 막 쓰기 기록 (app/notes.tsx)
   screens: [{ route: 'notes', title: '메모' }],
   lnb: [
     {

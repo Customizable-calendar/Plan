@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fixtures, type Note, type NoteReminder } from '@noteapp/shared';
 
 import { dataSource, fromFixture } from '@/lib/data-source';
@@ -35,4 +36,32 @@ export async function saveNote({ text, reminder, collaborators }: NewNote): Prom
   if (collaborators?.length) note.collaborators = collaborators;
   added.unshift(note);
   return note;
+}
+
+// ── 중요한 메모 ──
+// 사용자가 기록에서 별을 누른 메모예요. 지우기 전까지 남아야 해서, 기기 저장소(AsyncStorage)에 원문을 통째로 복사해 둬요.
+// AsyncStorage: 앱을 껐다 켜도 남는 기기 안의 작은 저장 공간이에요 (웹에서는 localStorage).
+// M2: notes_ 테이블에 중요 표시 열을 두고 그걸로 바꿔요. 화면은 그대로예요.
+const IMPORTANT_KEY = 'notes.important';
+
+/** 중요한 메모. 최근에 중요 표시한 것이 위로 와요. */
+export async function listImportantNotes(): Promise<Note[]> {
+  const raw = await AsyncStorage.getItem(IMPORTANT_KEY);
+  return raw ? (JSON.parse(raw) as Note[]) : [];
+}
+
+/** 메모를 중요한 메모에 넣어요. 이미 있으면 그대로 둬요. */
+export async function markImportant(note: Note): Promise<Note[]> {
+  const list = await listImportantNotes();
+  if (list.some((n) => n.id === note.id)) return list;
+  const next = [note, ...list];
+  await AsyncStorage.setItem(IMPORTANT_KEY, JSON.stringify(next));
+  return next;
+}
+
+/** 중요한 메모에서 지워요. 기록에 있는 원래 메모는 그대로예요. */
+export async function unmarkImportant(id: string): Promise<Note[]> {
+  const next = (await listImportantNotes()).filter((n) => n.id !== id);
+  await AsyncStorage.setItem(IMPORTANT_KEY, JSON.stringify(next));
+  return next;
 }
