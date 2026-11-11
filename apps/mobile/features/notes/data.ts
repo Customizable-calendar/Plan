@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fixtures, type Note } from '@noteapp/shared';
 
+import { createDraftSession } from '@/features/sessions';
 import { dataSource, fromFixture } from '@/lib/data-source';
 
 import { textToChecklist, type ChecklistItem } from './format';
@@ -151,6 +152,15 @@ export async function deleteForever(id: string): Promise<TrashedNote[]> {
     KEYS.trash,
     (await listTrash()).filter((t) => t.note.id !== id),
   );
+}
+
+// ── 세션으로 보내기 ──
+// 오른쪽으로 넘긴 메모는 기록에서 빠지고, 세션 화면에 양식을 아직 안 고른 "미완성 세션"으로 생겨요.
+
+/** 메모를 미완성 세션으로 보내요. 원문은 고치지 않고 세션의 출처(source)로 그대로 넘겨요. */
+export async function moveToSession(note: Note): Promise<void> {
+  await createDraftSession({ noteId: note.id, text: note.text });
+  await hide(note.id);
 }
 
 // ── 체크리스트 ──

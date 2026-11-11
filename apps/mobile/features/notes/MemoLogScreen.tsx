@@ -24,10 +24,10 @@ type SheetKind = 'menu' | 'reminder' | 'collaborator' | 'hashtag';
 /**
  * 메모 화면: 맨 위에 "중요한 메모", 그 아래에 막 쓰기 기록을 쌓아 보여줘요.
  * 기록은 카카오톡 "나에게 보내기"처럼 날짜는 하루에 한 번, 메모는 시간 순서로 쌓여요.
- * 말풍선을 꾹 누르면 메뉴가, 왼쪽으로 넘기면 휴지통으로 보내요.
+ * 말풍선을 꾹 누르면 메뉴가 나와요. 왼쪽으로 넘기면 휴지통, 오른쪽으로 넘기면 미완성 세션으로 보내요.
  */
 export function MemoLogScreen() {
-  const { notes, loading, error, update, trash, toChecklist } = useNotes();
+  const { notes, loading, error, update, trash, toChecklist, toSession } = useNotes();
   const { important, isImportant, toggle, remove, reload } = useImportantNotes();
   // 꾹 누른 메모와, 지금 열린 팝업
   const [target, setTarget] = useState<Note | null>(null);
@@ -65,7 +65,7 @@ export function MemoLogScreen() {
           </Link>
         </View>
         <Text className="text-[12px] text-muted-foreground">
-          꾹 누르면 메뉴가 나와요. 왼쪽으로 넘기면 휴지통으로 가요.
+          꾹 누르면 메뉴가 나와요. 왼쪽으로 넘기면 휴지통, 오른쪽으로 넘기면 세션으로 가요.
         </Text>
         {loading ? (
           <Text className="text-center text-[13px] text-muted-foreground">불러오는 중</Text>
@@ -92,6 +92,11 @@ export function MemoLogScreen() {
                     label: '휴지통으로',
                     icon: { ios: 'trash', android: 'delete', web: 'delete' },
                     run: () => void trash(note),
+                  }}
+                  right={{
+                    label: '세션으로',
+                    icon: { ios: 'folder', android: 'folder', web: 'folder' },
+                    run: () => void toSession(note),
                   }}
                 >
                   <LogBubble
@@ -130,6 +135,14 @@ export function MemoLogScreen() {
           sub="기록에서 빼서 막 쓰기 아래로 옮겨요"
           onPress={() => {
             if (target) void toChecklist(target);
+            close();
+          }}
+        />
+        <Option
+          label="세션으로 보내기"
+          sub="기록에서 빼서 미완성 세션으로 만들어요"
+          onPress={() => {
+            if (target) void toSession(target);
             close();
           }}
         />
