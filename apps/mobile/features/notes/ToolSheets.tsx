@@ -237,18 +237,43 @@ export function HashtagSheet({
   onPick: (tag: string) => void;
   onClose: () => void;
 }) {
+  const [input, setInput] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const pick = (tag: string) => {
+    onPick(tag);
+    setInput('');
+    setError(null);
+    onClose();
+  };
+
+  // 직접 쓴 태그: 앞의 #과 띄어쓰기는 정리하고, 맨 앞에 #을 하나 붙여요.
+  const addTyped = () => {
+    const word = input.trim().replace(/^#+/, '').replace(/\s+/g, '_');
+    if (!word) return setError('태그를 입력해 주세요.');
+    pick(`#${word}`);
+  };
+
   return (
-    <Sheet visible={visible} title="추천 태그" onClose={onClose}>
+    <Sheet visible={visible} title="해시태그" onClose={onClose}>
+      <View className="flex-row items-center gap-2">
+        <TextInput
+          value={input}
+          onChangeText={setInput}
+          onSubmitEditing={addTyped}
+          placeholder="#태그 직접 입력"
+          placeholderTextColor={palette.mutedForeground}
+          autoCapitalize="none"
+          accessibilityLabel="해시태그 직접 입력"
+          className="h-10 flex-1 rounded-md border border-input px-2 text-base text-foreground"
+        />
+        <Chip label="붙이기" selected onPress={addTyped} />
+      </View>
+      {error ? <Text className="text-[13px] text-destructive">{error}</Text> : null}
+      <Text className="text-[13px] text-muted-foreground">추천 태그</Text>
       <View className="flex-row flex-wrap gap-2">
         {SUGGESTED_TAGS.map((tag) => (
-          <Chip
-            key={tag}
-            label={tag}
-            onPress={() => {
-              onPick(tag);
-              onClose();
-            }}
-          />
+          <Chip key={tag} label={tag} onPress={() => pick(tag)} />
         ))}
       </View>
     </Sheet>
