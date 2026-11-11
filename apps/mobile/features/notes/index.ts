@@ -7,12 +7,16 @@ import { QuickNoteSection } from './QuickNoteSection';
 export { QuickNoteSection };
 export { QuickNoteInput } from './QuickNoteInput';
 export { MemoLogScreen } from './MemoLogScreen';
+export { TrashScreen } from './TrashScreen';
 
 export const feature = defineFeature({
   id: 'notes',
   owner: 'A',
-  // 메모 화면: 중요한 메모 + 막 쓰기 기록 (app/notes.tsx)
-  screens: [{ route: 'notes', title: '메모' }],
+  // 메모 화면: 중요한 메모 + 막 쓰기 기록 (app/notes.tsx), 휴지통 (app/notes-trash.tsx)
+  screens: [
+    { route: 'notes', title: '메모' },
+    { route: 'notes-trash', title: '휴지통' },
+  ],
   lnb: [
     {
       section: 'quick',
