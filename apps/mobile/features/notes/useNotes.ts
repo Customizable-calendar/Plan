@@ -11,6 +11,7 @@ import {
   listTrash,
   markImportant,
   moveToChecklist,
+  moveToSession,
   restoreNote,
   trashNote,
   unmarkImportant,
@@ -22,7 +23,7 @@ import {
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-/** 기록에 있는 메모 목록과, 고치기, 휴지통으로 보내기, 체크리스트로 옮기기 */
+/** 기록에 있는 메모 목록과, 고치기, 휴지통으로 보내기, 체크리스트나 세션으로 옮기기 */
 export function useNotes() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,7 +56,12 @@ export function useNotes() {
     await moveToChecklist(note);
   };
 
-  return { notes, loading, error, update, trash, toChecklist };
+  const toSession = async (note: Note) => {
+    without(note.id);
+    await moveToSession(note);
+  };
+
+  return { notes, loading, error, update, trash, toChecklist, toSession };
 }
 
 /** 중요한 메모 목록과 별 켜기·끄기. 기기 저장소에 남아서 지우기 전까지 사라지지 않아요. */
