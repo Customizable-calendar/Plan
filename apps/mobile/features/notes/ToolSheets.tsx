@@ -1,14 +1,15 @@
 import type { NoteReminder } from '@noteapp/shared';
 import { palette } from '@noteapp/ui';
-import { useEffect, useState, type ReactNode } from 'react';
-import { Animated, Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { SymbolView } from 'expo-symbols';
+import { useState, type ReactNode } from 'react';
+import { Modal, Pressable, Text, TextInput, View } from 'react-native';
 
 import { formatReminder, isEmail, makeReminder } from './format';
 
-// 도구 막대 버튼을 누르면 아래에서 올라오는 팝업들이에요. 모두 화면 안에서만 동작하는 가짜 UI예요.
+// 기록의 메모를 꾹 누르면 나오는 메뉴와 팝업들이에요. 아직 실제 알림·공유는 하지 않아요(M1).
 
 /** 아래에서 올라오는 공용 팝업 틀. 바깥(어두운 곳)을 누르면 닫혀요. */
-function Sheet({
+export function Sheet({
   visible,
   title,
   onClose,
@@ -31,7 +32,15 @@ function Sheet({
   );
 }
 
-function Option({ label, sub, onPress }: { label: string; sub?: string; onPress: () => void }) {
+export function Option({
+  label,
+  sub,
+  onPress,
+}: {
+  label: string;
+  sub?: string;
+  onPress: () => void;
+}) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -246,48 +255,20 @@ export function HashtagSheet({
   );
 }
 
-// 5. 음성 입력 ----------------------------------------------------------------
+// 배지 ----------------------------------------------------------------------
 
-export function VoiceSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  // Animated.Value: 애니메이션으로 바뀌는 숫자예요. 이 값으로 동그라미 크기를 키웠다 줄여요.
-  // useState(() => ...): 처음 한 번만 만들고 다시 그려도 같은 값을 써요.
-  const [pulse] = useState(() => new Animated.Value(0));
-
-  useEffect(() => {
-    if (!visible) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 700, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop(); // 팝업이 닫히면 애니메이션도 멈춰요.
-  }, [visible, pulse]);
-
-  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.35] });
-
+/** 종 아이콘 + 알림 시각 배지 (기록 말풍선이 써요) */
+export function ReminderBadge({ reminder }: { reminder: NoteReminder }) {
   return (
-    <Sheet visible={visible} title="음성 입력" onClose={onClose}>
-      <View className="h-32 items-center justify-center">
-        {/* Animated.View는 className을 못 받아서 크기·색을 style로 줘요. 색은 디자인 토큰이에요. */}
-        <Animated.View
-          style={{
-            position: 'absolute',
-            width: 80,
-            height: 80,
-            borderRadius: 40,
-            backgroundColor: palette.primarySoft,
-            transform: [{ scale }],
-          }}
-        />
-        <View className="h-12 w-12 rounded-full bg-primary" />
-      </View>
-      <Text className="text-center text-base text-foreground">음성 인식 중...</Text>
-      <Text className="text-center text-[13px] text-muted-foreground">
-        실제 음성 인식은 나중에 붙여요. (M1 가짜 화면)
+    <View className="flex-row items-center gap-1 self-start rounded-full bg-muted px-2 py-0.5">
+      <SymbolView
+        name={{ ios: 'bell', android: 'notifications', web: 'notifications' }}
+        size={11}
+        tintColor={palette.mutedForeground}
+      />
+      <Text className="text-[11px] text-foreground" numberOfLines={1}>
+        {formatReminder(reminder)}
       </Text>
-      <Option label="그만하기" onPress={onClose} />
-    </Sheet>
+    </View>
   );
 }

@@ -1,8 +1,11 @@
 import type { Note } from '@noteapp/shared';
+import { palette } from '@noteapp/ui';
 import { Link } from 'expo-router';
-import { Text, View } from 'react-native';
+import { SymbolView } from 'expo-symbols';
+import { Pressable, Text, View } from 'react-native';
 
 import { QuickNoteInput } from './QuickNoteInput';
+import { useChecklists } from './useNotes';
 
 interface Props {
   /** 저장한 뒤 이어서 할 일. 카드 탭에서는 카드 찾기를 넘겨요. 돌려준 글은 입력칸 아래에 보여요. */
@@ -13,7 +16,7 @@ interface Props {
   autoFocus?: boolean;
 }
 
-/** 막 쓰기 입력 + 메모 화면 입구. 카드 탭이 맨 위에 붙여요. 저장한 메모는 메모 화면에 쌓여요. */
+/** 막 쓰기 입력 + 메모 화면 입구 + 바로 아래 체크리스트. 카드 탭이 맨 위에 붙여요. */
 export function QuickNoteSection({ onSaved, autoFocus }: Props) {
   const handleSaved = (note: Note) => onSaved?.(note.text);
 
@@ -27,6 +30,72 @@ export function QuickNoteSection({ onSaved, autoFocus }: Props) {
         </Link>
       </View>
       <QuickNoteInput onSaved={handleSaved} autoFocus={autoFocus} />
+      <ChecklistSection />
+    </View>
+  );
+}
+
+/** 기록에서 "체크리스트로 만들기"를 한 메모. 막 쓰기와 같이 볼 수 있게 바로 아래에 둬요. */
+function ChecklistSection() {
+  const { checklists, toggleItem, remove } = useChecklists();
+  if (checklists.length === 0) return null;
+
+  return (
+    <View className="gap-2">
+      <Text className="text-[13px] font-semibold text-muted-foreground">체크리스트</Text>
+      {checklists.map((cl) => (
+        <View
+          key={cl.id}
+          className="flex-row items-start gap-2 rounded-lg border border-border bg-card p-3"
+        >
+          <View className="flex-1 gap-1.5">
+            {cl.items.map((it, i) => (
+              <Pressable
+                key={i}
+                onPress={() => toggleItem(cl, i)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: it.checked }}
+                accessibilityLabel={it.text}
+                className="flex-row items-start gap-2"
+              >
+                <View
+                  className={`mt-0.5 h-5 w-5 items-center justify-center rounded-sm border-2 ${
+                    it.checked ? 'border-primary bg-primary' : 'border-muted-foreground'
+                  }`}
+                >
+                  {it.checked ? (
+                    <SymbolView
+                      name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                      size={12}
+                      tintColor={palette.primaryForeground}
+                    />
+                  ) : null}
+                </View>
+                <Text
+                  className={`flex-1 text-[15px] leading-6 ${
+                    it.checked ? 'text-muted-foreground line-through' : 'text-card-foreground'
+                  }`}
+                >
+                  {it.text}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Pressable
+            onPress={() => remove(cl.id)}
+            accessibilityRole="button"
+            accessibilityLabel="체크리스트 지우기"
+            hitSlop={8}
+            className="h-7 w-7 items-center justify-center rounded-full active:bg-muted"
+          >
+            <SymbolView
+              name={{ ios: 'xmark', android: 'close', web: 'close' }}
+              size={16}
+              tintColor={palette.mutedForeground}
+            />
+          </Pressable>
+        </View>
+      ))}
     </View>
   );
 }
