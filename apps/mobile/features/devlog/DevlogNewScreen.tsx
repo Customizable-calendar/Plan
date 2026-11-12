@@ -24,6 +24,7 @@ import { devlogPrompt, devlogRequest, type PickedWork, reviseRequest, TEMPLATE }
 import { saveDevlog } from './store';
 import { shiftWeek, weekKey, weekLabel } from './week';
 import { type Picked, WorkPicker } from './WorkPicker';
+import { useMyTeamRole } from '@/lib/auth';
 
 // 1) 이번 주 PR·이슈를 고르고 배운 점 한두 줄 2) 앱 안 AI가 공통 템플릿으로 채워요
 // 3) 대화로 더 고쳐 달라고 하거나 직접 고치고 4) 저장. 키가 없으면 코딩 AI에 부탁 문장을 보내요.
@@ -41,8 +42,10 @@ interface Bubble {
 const SUGGESTIONS = ['스터디 질문을 더 쉽게', '배운 개념을 더 자세히', '전체를 더 짧게'];
 
 export function DevlogNewScreen() {
-  // TODO(B, M2): 로그인한 사람으로 고정해요.
-  const [author, setAuthor] = useState<Role>('B');
+  // 고르기 전에는 로그인한 팀원 본인으로 둬요. (Supabase에서는 내 이름으로만 쓸 수 있어요)
+  const myRole = useMyTeamRole();
+  const [pickedAuthor, setAuthor] = useState<Role | null>(null);
+  const author: Role = pickedAuthor ?? myRole ?? 'B';
   const [range, setRange] = useState<Range>(1);
   const [picked, setPicked] = useState<Record<number, Picked>>({});
   const [note, setNote] = useState('');

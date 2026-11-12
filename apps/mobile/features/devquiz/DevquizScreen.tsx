@@ -21,6 +21,7 @@ import {
 import { gradeQuiz, makeQuiz, POINTS, type Question } from './quiz';
 import { type Rank, rankBoard } from './rank';
 import { type QuizResult, resultOf, saveQuizResult, useQuizResults } from './store';
+import { useMyTeamRole } from '@/lib/auth';
 
 // 개발 기간 이벤트: 본인 일지로 AI가 낸 퀴즈를 풀고 빌보드에 순위가 박제돼요.
 // 출시 빌드에는 안 보여요(index.ts). 출시 전에 이 폴더째 지워요(README).
@@ -35,7 +36,10 @@ export function DevquizScreen() {
   const { logs } = useDevlogs();
   const week = weekKey(new Date());
   const [scope, setScope] = useState<'week' | 'all'>('week');
-  const [author, setAuthor] = useState<Role>('B');
+  // 고르기 전에는 로그인한 팀원 본인으로 둬요. (Supabase에서는 내 이름으로만 쓸 수 있어요)
+  const myRole = useMyTeamRole();
+  const [pickedAuthor, setAuthor] = useState<Role | null>(null);
+  const author: Role = pickedAuthor ?? myRole ?? 'B';
   const [phase, setPhase] = useState<Phase>({ kind: 'board' });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

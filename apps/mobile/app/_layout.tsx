@@ -6,6 +6,7 @@ import { DefaultTheme, ThemeProvider } from 'expo-router/react-navigation';
 import { StatusBar } from 'expo-status-bar';
 
 import { stackScreens } from '@/features/registry';
+import { loginRequired, useSession } from '@/lib/auth';
 import { Lnb } from '@/shell/Lnb';
 import { LnbProvider } from '@/shell/LnbContext';
 
@@ -34,21 +35,31 @@ const navTheme = {
 };
 
 export default function RootLayout() {
+  // loginRequired가 아니면 바로 null이라 예시 데이터로 로그인 없이 써요. (lib/auth.ts)
+  const session = useSession();
+  if (session === undefined) return null; // 저장된 로그인을 읽는 동안 (스플래시가 보여요)
+  const signedIn = session !== null || !loginRequired;
+
   return (
     <ThemeProvider value={navTheme}>
       <LnbProvider>
         <StatusBar style="dark" />
         <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          {stackScreens.map((s) => (
-            <Stack.Screen
-              key={s.route}
-              name={s.route}
-              options={{ title: s.title, presentation: s.modal ? 'modal' : undefined }}
-            />
-          ))}
+          <Stack.Protected guard={signedIn}>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            {stackScreens.map((s) => (
+              <Stack.Screen
+                key={s.route}
+                name={s.route}
+                options={{ title: s.title, presentation: s.modal ? 'modal' : undefined }}
+              />
+            ))}
+          </Stack.Protected>
+          <Stack.Protected guard={!signedIn}>
+            <Stack.Screen name="login" options={{ headerShown: false }} />
+          </Stack.Protected>
         </Stack>
-        <Lnb />
+        {signedIn ? <Lnb /> : null}
       </LnbProvider>
     </ThemeProvider>
   );
