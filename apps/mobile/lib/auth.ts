@@ -6,7 +6,7 @@ import { env } from './env';
 import { getSupabase } from './supabase';
 
 // 로그인 관련 호출은 이 파일에만 모아요. 인증 방식을 바꾸게 되면 이 파일만 고쳐요.
-// 방식: 이메일로 받은 6자리 코드 (비밀번호 없음). docs/auth.md
+// 방식: 이메일로 받은 숫자 코드 (비밀번호 없음, 길이는 대시보드 Email OTP Length). docs/auth.md
 
 /** Supabase를 쓰는 기능이 하나라도 있으면 로그인해야 앱을 써요. 예시 데이터만 쓰면 로그인 없이 돼요. */
 export const loginRequired =
@@ -42,7 +42,7 @@ export function useSession(): Session | null | undefined {
 
 const normalize = (email: string) => email.trim().toLowerCase();
 
-/** 이메일로 6자리 코드를 보내요. 처음 쓰는 이메일이면 계정이 같이 만들어져요. */
+/** 이메일로 로그인 코드를 보내요. 처음 쓰는 이메일이면 계정이 같이 만들어져요. */
 export async function sendLoginCode(email: string) {
   const { error } = await getSupabase().auth.signInWithOtp({
     email: normalize(email),

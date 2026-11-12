@@ -15,7 +15,7 @@ type Step = { kind: 'email' } | { kind: 'code'; email: string };
 
 const looksLikeEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 
-/** 이메일로 6자리 코드를 받아 로그인해요. 로그인하면 루트 레이아웃이 앱 화면으로 보내요. */
+/** 이메일로 받은 코드(6~10자리, 대시보드 OTP 길이 설정)로 로그인해요. 로그인하면 루트 레이아웃이 앱 화면으로 보내요. */
 export function LoginScreen() {
   const [step, setStep] = useState<Step>({ kind: 'email' });
   const [email, setEmail] = useState('');
@@ -48,7 +48,7 @@ export function LoginScreen() {
     });
 
   const canSend = looksLikeEmail(email) && !busy;
-  const canVerify = /^\d{6}$/.test(code.trim()) && !busy;
+  const canVerify = /^\d{6,10}$/.test(code.trim()) && !busy;
 
   return (
     <KeyboardAvoidingView
@@ -60,8 +60,8 @@ export function LoginScreen() {
           <Text className="text-[26px] font-bold text-foreground">로그인</Text>
           <Text className="text-[15px] leading-6 text-muted-foreground">
             {step.kind === 'email'
-              ? '이메일로 6자리 코드를 보내 드려요. 비밀번호는 없어요.'
-              : `${step.email}로 보낸 6자리 코드를 넣어 주세요.`}
+              ? '이메일로 로그인 코드를 보내 드려요. 비밀번호는 없어요.'
+              : `${step.email}로 보낸 코드(숫자)를 넣어 주세요.`}
           </Text>
         </View>
 
@@ -82,12 +82,12 @@ export function LoginScreen() {
           />
         ) : (
           <TextInput
-            className="rounded-xl border border-border bg-card px-4 py-3 text-center text-[24px] tracking-[8px] text-foreground"
-            placeholder="000000"
+            className="rounded-xl border border-border bg-card px-4 py-3 text-center text-[24px] tracking-[6px] text-foreground"
+            placeholder="코드"
             keyboardType="number-pad"
             autoComplete="one-time-code"
             textContentType="oneTimeCode"
-            maxLength={6}
+            maxLength={10}
             value={code}
             onChangeText={(v) => setCode(v.replace(/\D/g, ''))}
             onSubmitEditing={() => canVerify && void verify()}

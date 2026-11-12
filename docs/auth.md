@@ -37,7 +37,7 @@ insert into public.team_members (email, role) values
    <p style="font-size:28px;letter-spacing:6px"><b>{{ .Token }}</b></p>
    ```
 
-2. **Authentication → Sign In / Providers → Email**에서 **Email OTP Length**가 6인지 봐요.
+2. **Authentication → Sign In / Providers → Email**에서 **Email OTP Length**를 6으로 둬요. (앱은 6~10자리를 다 받아요. 새 프로젝트 기본값이 8일 수 있어요)
 3. **Authentication → Sign In / Providers**에서 **Allow anonymous sign-ins**를 꺼요. (개발용 익명 로그인은 지웠어요)
 4. 기본 메일 발송은 시간당 몇 통으로 막혀 있어요. 팀원이 늘거나 코드가 안 오면 **Authentication → Emails → SMTP Settings**에 메일 서버를 붙여요.
 
