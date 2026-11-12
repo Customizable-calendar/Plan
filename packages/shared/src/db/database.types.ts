@@ -47,13 +47,29 @@ export type Database = {
                   Relationships: [
                     
                   ]
+                },"team_members": {
+                  Row: {
+                    "email": string,"role": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "email": string,"role": string
+                  }
+                  Update: {
+                    "email"?: string,"role"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 }
           }
           Views: {
             [_ in never]: never
           }
           Functions: {
-            [_ in never]: never
+            "my_team_role":
+{ Args: Record<PropertyKey, never>; Returns: string
+                           }
           }
           Enums: {
             "cards_card_status": "suggested"|"confirmed"|"dismissed","cards_card_type": "event"|"task"|"person"|"idea"
