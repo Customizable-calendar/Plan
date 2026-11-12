@@ -52,12 +52,28 @@ export async function loadCalendar(): Promise<void> {
               ).toISOString(),
             }),
       }));
+      const demoEvents: CalendarEvent[] = [
+        { id: 'demo-morning', title: '예시 · 아침 산책', startAt: '07:00', endAt: '08:00' },
+        { id: 'demo-overlap-1', title: '예시 · 자료 검토', startAt: '15:00', endAt: '16:00' },
+        { id: 'demo-overlap-2', title: '예시 · 팀 체크인', startAt: '15:00', endAt: '16:00' },
+      ].map((event) => ({
+        ...event,
+        calendarId: 'demo',
+        allDay: false,
+        timezone: 'Asia/Seoul',
+        source: 'google' as const,
+        startAt: new Date(`${today}T${event.startAt}:00+09:00`).toISOString(),
+        endAt: new Date(`${today}T${event.endAt}:00+09:00`).toISOString(),
+      }));
       publish({
-        events: events.map((event) => ({
-          ...event,
-          startAt: shift(event.startAt),
-          endAt: shift(event.endAt),
-        })),
+        events: [
+          ...events.map((event) => ({
+            ...event,
+            startAt: shift(event.startAt),
+            endAt: shift(event.endAt),
+          })),
+          ...demoEvents,
+        ],
         tasks,
         loading: false,
         error: '',

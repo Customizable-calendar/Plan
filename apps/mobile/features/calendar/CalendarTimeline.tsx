@@ -1,4 +1,5 @@
 import type { CalendarEvent, Card } from '@noteapp/shared';
+import { type ComponentRef, useRef } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 
 import { useCalendarTheme } from './design';
@@ -14,6 +15,8 @@ export function CalendarTimeline({
   tasks: Card[];
 }) {
   const { colors, styles } = useCalendarTheme();
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  const didSetInitialHour = useRef(false);
   const items = [
     ...events.filter((event) => !event.allDay).map((event) => ({ ...event, task: false })),
     ...tasks.flatMap((task) =>
@@ -34,16 +37,23 @@ export function CalendarTimeline({
       }))
       .sort((a, b) => a.from - b.from);
   });
-  const from = Math.min(9, ...columns.flat().map((item) => Math.floor(item.from)));
-  const to = Math.max(18, ...columns.flat().map((item) => Math.ceil(item.to)));
+  const from = 0;
+  const to = 24;
   const height = 64;
   return (
     <View style={{ gap: 8 }}>
-      <Text style={styles.muted}>
-        시간표 · 파랑: 캘린더 · 청록: 할 일{days.length > 1 ? ' · 좌우로 넘겨 보세요' : ''}
-      </Text>
-      <ScrollView horizontal contentContainerStyle={{ minWidth: '100%' }}>
-        <View style={{ flexDirection: 'row', minWidth: days.length > 1 ? 800 : 280, flex: 1 }}>
+      <ScrollView
+        accessibilityLabel="24시간 시간표"
+        nestedScrollEnabled
+        ref={scrollRef}
+        style={{ maxHeight: (32 + 9 * height) / 2 }}
+        onContentSizeChange={() => {
+          if (didSetInitialHour.current || !scrollRef.current) return;
+          scrollRef.current.scrollTo({ y: 32 + 9 * height, animated: false });
+          didSetInitialHour.current = true;
+        }}
+      >
+        <View style={{ flexDirection: 'row' }}>
           <View style={{ width: 46, paddingTop: 32 }}>
             {Array.from({ length: to - from }, (_, i) => (
               <Text key={i} style={[styles.muted, { height }]}>
@@ -61,7 +71,7 @@ export function CalendarTimeline({
               return { ...item, lane };
             });
             return (
-              <View key={days[index]} style={{ flex: 1, minWidth: days.length > 1 ? 104 : 230 }}>
+              <View key={days[index]} style={{ flex: 1 }}>
                 <Text style={[styles.muted, { height: 32, textAlign: 'center' }]}>
                   {days[index].slice(5)}
                 </Text>
@@ -87,7 +97,7 @@ export function CalendarTimeline({
                   ))}
                   {positioned.map((item) => (
                     <View
-                      key={item.id}
+                      key={(item.task ? 'task:' : 'event:') + item.id}
                       accessibilityLabel={`${item.title} ${timeLabel(item.startAt)}부터 ${timeLabel(item.endAt)}까지`}
                       style={{
                         position: 'absolute',
@@ -110,7 +120,7 @@ export function CalendarTimeline({
                         {item.title}
                       </Text>
                       <Text style={{ color: colors.mutedForeground, fontSize: 10 }}>
-                        {timeLabel(item.startAt)}
+                        {timeLabel(item.startAt)}–{timeLabel(item.endAt)}
                       </Text>
                     </View>
                   ))}
