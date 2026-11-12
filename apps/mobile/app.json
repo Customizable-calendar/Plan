@@ -2,15 +2,18 @@
   "expo": {
     "name": "noteApp",
     "slug": "noteapp",
+    "owner": "choengs-team",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "noteapp",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.customizablecalendar.noteapp"
     },
     "android": {
+      "package": "com.customizablecalendar.noteapp",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -36,6 +39,17 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e7dbadd9-887e-4ef1-9ebe-ce6d7f41e8ce"
+      }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/e7dbadd9-887e-4ef1-9ebe-ce6d7f41e8ce"
     }
   }
 }
