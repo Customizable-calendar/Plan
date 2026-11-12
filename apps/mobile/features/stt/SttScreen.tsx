@@ -108,16 +108,13 @@ function ModelItem({
 type Found =
   { kind: 'finding' } | { kind: 'found'; cards: Card[] } | { kind: 'error'; message: string };
 
-/** 구간마다 줄을 나눠서 넘겨요. 말이 끊긴 곳이 문장 경계일 때가 많아요. */
-const transcriptText = (r: SttResult) =>
-  r.segments.length > 1 ? r.segments.map((s) => s.text).join('\n') : r.text;
-
 function Recorder({ model }: { model: SttModel }) {
   const [found, setFound] = useState<Found | null>(null);
 
   // 받아쓰기가 끝나면 바로 회의록에서 일정·약속·할 일을 찾아 확인 기다리는 카드로 넣어요.
   const findCards = useCallback(async (result: SttResult) => {
-    const text = transcriptText(result);
+    // 엔진이 문장마다 줄을 나눠 둔 글이에요(punctuateSpoken).
+    const text = result.text;
     if (!text.trim()) return;
     setFound({ kind: 'finding' });
     try {

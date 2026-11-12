@@ -8,7 +8,7 @@ import { fromLocalFrame, toLocalFrame } from './zone';
 export { parseEvent, toRRule, toSegments, ko } from './rules';
 export type { Assumption, ParsedEvent, ParseOptions, Recurrence, Span, Segment } from './rules';
 export { cardHints, splitPieces } from './extract';
-export { markSpokenBreaks, tidySpokenTitle } from './spoken';
+export { markSpokenBreaks, punctuateSpoken, tidySpokenTitle } from './spoken';
 
 export interface ExtractOptions {
   /** "내일", "다음 주" 같은 표현을 계산할 기준 시각 */

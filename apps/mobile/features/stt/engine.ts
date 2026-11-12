@@ -1,3 +1,4 @@
+import { punctuateSpoken } from '@noteapp/extractor';
 import { NativeModules, PermissionsAndroid, Platform, TurboModuleRegistry } from 'react-native';
 
 import { SttError } from './errors';
@@ -6,6 +7,14 @@ import { isDownloaded, modelFile, type SttModel } from './models';
 // 기기 안에서 받아써요(whisper.rn = whisper.cpp). 소리는 기기 밖으로 나가지 않아요.
 // 네이티브 모듈이라 Expo Go에는 없어요. 개발 빌드(EAS)에서만 돌아요.
 // 그래서 라이브러리는 쓸 때 불러오고(require), 없으면 isSttAvailable()이 false예요.
+
+/**
+ * whisper에 먼저 들려주는 예시 문장. 부호가 찍힌 문장을 보여 주면 받아쓴 글에도 마침표·물음표를
+ * 찍고 문장을 나눠요. 자주 나오는 팀 이름·말도 같이 넣어서 맞게 받아쓰게 해요.
+ */
+const PROMPT =
+  '안녕하세요. 오늘 회의를 시작하겠습니다. 민성, 준호, 재민, 서현이 참석했어요. ' +
+  '다음 주 화요일 오후 2시에 디자인 리뷰를 해요. 금요일까지 발표 자료를 만들어 주세요. 질문 있나요?';
 
 /** 녹음 형식: whisper가 받는 16kHz, 모노, 16비트 PCM */
 const SAMPLE_RATE = 16_000;
@@ -37,7 +46,7 @@ interface WhisperResult {
 interface WhisperContext {
   transcribeData(
     pcm: ArrayBuffer,
-    options: { language: string; onProgress?: (percent: number) => void },
+    options: { language: string; prompt?: string; onProgress?: (percent: number) => void },
   ): { stop(): Promise<void>; promise: Promise<WhisperResult> };
   release(): Promise<void>;
 }
@@ -174,12 +183,15 @@ export async function startDictation(model: SttModel): Promise<Dictation> {
       try {
         const { promise } = context.transcribeData(pcm, {
           language: 'ko',
+          prompt: PROMPT,
           onProgress: (p) => onProgress?.(p / 100),
         });
         const result = await promise;
         if (result.isAborted) throw new SttError('받아쓰기를 멈췄어요.');
+        const spoken = result.segments.map((s) => s.text.trim()).join(' ') || result.result;
         return {
-          text: result.result.trim(),
+          // 부호가 빠진 곳에 마침표·물음표를 찍고 문장마다 줄을 나눠요. 카드도 이 글에서 찾아요.
+          text: punctuateSpoken(spoken),
           // whisper.cpp 시간 단위는 10ms예요.
           segments: result.segments.map((s) => ({
             text: s.text.trim(),
