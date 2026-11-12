@@ -11,6 +11,8 @@ export { useCards } from './store';
 export { cardDetail, typeLabel } from './format';
 // 카드 탭 맨 위 막 쓰기(notes)가 저장한 글을 카드로 나눌 때 써요.
 export { findCardsFromMemo } from './lnb';
+// 개발일지·퀴즈(같은 B)도 같은 로그인 확인을 써요.
+export { failed, isTestBuild, signedIn } from './session';
 
 const cardsIcon = { ios: 'rectangle.stack', android: 'style', web: 'style' } as const;
 

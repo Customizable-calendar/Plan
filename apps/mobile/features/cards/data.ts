@@ -1,8 +1,9 @@
 import { cardHints, extractCards } from '@noteapp/extractor';
 import { type Card, type CardRow, fixtures, toCard, toCardInsert } from '@noteapp/shared';
 
-import { dataSource, fromFixture } from '@/lib/data-source';
-import { getSupabase } from '@/lib/supabase';
+import { fromFixture, sourceFor } from '@/lib/data-source';
+
+import { failed, signedIn } from './session';
 
 // 카드 데이터는 여기서만 가져오고 저장해요. 화면은 store.ts를 거쳐요.
 // fixtures: 예시 JSON, 앱이 켜져 있는 동안만 기억해요.
@@ -12,38 +13,7 @@ import { getSupabase } from '@/lib/supabase';
 const timezone = 'Asia/Seoul';
 
 const TABLE = 'cards_cards';
-
-// TODO(B): 개발 때만 쓰는 익명 로그인이에요. lib/auth.ts(D)에 로그인이 생기면 지우고, 출시 전에 꼭 빼요.
-// 동시에 여러 번 불려도 익명 사용자가 하나만 생기게 한 번만 시도해요.
-let devSignIn: Promise<boolean> | null = null;
-
-function signInForDev(supabase: ReturnType<typeof getSupabase>) {
-  devSignIn ??= supabase.auth.signInAnonymously().then(({ error }) => {
-    if (!error) return true;
-    console.warn(
-      '[cards] 개발용 익명 로그인 실패. Anonymous sign-ins가 켜져 있는지 봐 주세요.',
-      error.message,
-    );
-    devSignIn = null;
-    return false;
-  });
-  return devSignIn;
-}
-
-/** 로그인 전이면 RLS에 막히니까 미리 알려 줘요. 로그인은 lib/auth.ts(D)예요. */
-async function signedIn() {
-  const supabase = getSupabase();
-  const { data } = await supabase.auth.getSession();
-  if (data.session) return supabase;
-  if (__DEV__ && (await signInForDev(supabase))) return supabase;
-  throw new Error('카드를 쓰려면 로그인이 필요해요. 로그인한 뒤 다시 해 주세요.');
-}
-
-function failed(action: string, error: { message: string }): never {
-  throw new Error(
-    `카드를 ${action} 못했어요. 인터넷 연결을 확인하고 다시 해 주세요. (${error.message})`,
-  );
-}
+const dataSource = sourceFor('cards');
 
 export async function listCards(): Promise<Card[]> {
   if (dataSource === 'fixtures') return fromFixture(fixtures.cards);
@@ -52,7 +22,7 @@ export async function listCards(): Promise<Card[]> {
     .from(TABLE)
     .select('*')
     .order('created_at', { ascending: false });
-  if (error) failed('불러오지', error);
+  if (error) failed('카드를 불러오지', error);
   return (data as CardRow[]).map(toCard);
 }
 
@@ -64,7 +34,7 @@ export async function saveCards(list: Card[]): Promise<void> {
   const { error } = await supabase
     .from(TABLE)
     .upsert(list.map(toCardInsert), { onConflict: 'user_id,id' });
-  if (error) failed('저장하지', error);
+  if (error) failed('카드를 저장하지', error);
 }
 
 export const saveCard = (card: Card) => saveCards([card]);

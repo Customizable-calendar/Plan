@@ -19,6 +19,34 @@ export type Database = {
                   Relationships: [
                     
                   ]
+                },"devlog_devlogs": {
+                  Row: {
+                    "author": string,"body": string,"created_at": string,"user_id": string,"week": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "author": string,"body": string,"created_at"?: string,"user_id"?: string,"week": string
+                  }
+                  Update: {
+                    "author"?: string,"body"?: string,"created_at"?: string,"user_id"?: string,"week"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"devquiz_results": {
+                  Row: {
+                    "answers": NonNullable<Json>,"author": string,"comment": string,"created_at": string,"score": number,"user_id": string,"week": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "answers"?: NonNullable<Json>,"author": string,"comment"?: string,"created_at"?: string,"score": number,"user_id"?: string,"week": string
+                  }
+                  Update: {
+                    "answers"?: NonNullable<Json>,"author"?: string,"comment"?: string,"created_at"?: string,"score"?: number,"user_id"?: string,"week"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 }
           }
           Views: {
