@@ -67,7 +67,9 @@ export type Database = {
             [_ in never]: never
           }
           Functions: {
-            "my_team_role": { Args: never; Returns: string }
+            "my_team_role":
+{ Args: Record<PropertyKey, never>; Returns: string
+                           }
           }
           Enums: {
             "cards_card_status": "suggested"|"confirmed"|"dismissed","cards_card_type": "event"|"task"|"person"|"idea"
