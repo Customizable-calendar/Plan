@@ -46,14 +46,17 @@ export interface AiProvider {
 export class AiError extends Error {}
 
 export const CLAUDE_MODEL = 'claude-opus-5-5';
+/** 안정판 Flash. 글만 보내는 정리·추출에 써요. */
+export const GEMINI_MODEL = 'gemini-3.6-flash';
 
 /**
  * 사용자 키로 AI 회사 어댑터를 만들어요. 키는 기기에서 AI 회사로만 가요 (docs/decisions/0002).
- * TODO(B): openai, gemini 어댑터
+ * TODO(B): openai 어댑터
  */
 export function createProvider(name: AiProviderName, apiKey: string): AiProvider {
   if (!apiKey) throw new AiError('AI 키가 없어요. 키를 먼저 저장해 주세요.');
   if (name === 'claude') return claudeProvider(apiKey);
+  if (name === 'gemini') return geminiProvider(apiKey);
   return {
     name,
     async complete() {
@@ -115,4 +118,74 @@ function toAiError(e: unknown): Error {
   if (e instanceof Anthropic.APIError)
     return new AiError(`AI 오류 (${e.status ?? '?'}): ${e.message}`);
   return e instanceof Error ? e : new Error(String(e));
+}
+
+// ---------- Gemini ----------
+// SDK 없이 REST(generateContent)로 불러요. 키는 헤더(x-goog-api-key)로만 보내고 주소에 넣지 않아요.
+
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+interface GeminiResponse {
+  candidates?: {
+    content?: { parts?: { text?: string }[] };
+    finishReason?: string;
+  }[];
+  promptFeedback?: { blockReason?: string };
+  error?: { code?: number; message?: string; status?: string };
+}
+
+function geminiProvider(apiKey: string, model = GEMINI_MODEL): AiProvider {
+  return {
+    name: 'gemini',
+    async complete({ system, history = [], prompt, maxTokens = 16000, json }) {
+      const body = {
+        ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+        contents: [
+          ...history.map((m) => ({
+            role: m.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: m.content }],
+          })),
+          { role: 'user', parts: [{ text: prompt }] },
+        ],
+        generationConfig: {
+          maxOutputTokens: maxTokens,
+          ...(json ? { responseMimeType: 'application/json', responseJsonSchema: json } : {}),
+        },
+      };
+      let res: Response;
+      try {
+        res = await fetch(`${GEMINI_URL}/${model}:generateContent`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+          body: JSON.stringify(body),
+        });
+      } catch {
+        throw new AiError('AI 서버에 연결하지 못했어요. 인터넷을 확인해 주세요.');
+      }
+      const data = (await res.json().catch(() => ({}))) as GeminiResponse;
+      if (!res.ok) throw geminiError(res.status, data);
+      if (data.promptFeedback?.blockReason)
+        throw new AiError('AI가 이 요청에는 답하지 않았어요. 내용을 바꿔서 다시 해 주세요.');
+      const candidate = data.candidates?.[0];
+      const text = (candidate?.content?.parts ?? [])
+        .map((p) => p.text ?? '')
+        .join('')
+        .trim();
+      if (!text) throw new AiError('AI 답이 비어 있어요. 다시 해 주세요.');
+      if (candidate?.finishReason === 'MAX_TOKENS') {
+        if (json) throw new AiError('AI 답이 너무 길어서 끊겼어요. 글을 나눠서 다시 해 주세요.');
+        return `${text}\n\n(답이 길어서 중간에 끊겼어요)`;
+      }
+      return text;
+    },
+  };
+}
+
+function geminiError(status: number, data: GeminiResponse): AiError {
+  const message = data.error?.message ?? '';
+  if (status === 400 && /api key/i.test(message)) return new AiError('AI 키가 맞지 않아요.');
+  if (status === 401 || status === 403) return new AiError('이 키로는 이 모델을 쓸 수 없어요.');
+  if (status === 429)
+    return new AiError('요청이 많거나 무료 한도를 넘었어요. 잠시 뒤에 다시 해 주세요.');
+  return new AiError(`AI 오류 (${status}): ${message || data.error?.status || '알 수 없음'}`);
 }

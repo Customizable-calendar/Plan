@@ -39,6 +39,14 @@ export async function saveCards(list: Card[]): Promise<void> {
 
 export const saveCard = (card: Card) => saveCards([card]);
 
+/** 카드를 지워요. AI가 찾은 카드로 바꿀 때 규칙으로 찾은 카드를 빼요. */
+export async function deleteCards(ids: string[]): Promise<void> {
+  if (dataSource === 'fixtures' || ids.length === 0) return;
+  const supabase = await signedIn();
+  const { error } = await supabase.from(TABLE).delete().in('id', ids);
+  if (error) failed('카드를 지우지', error);
+}
+
 // "메모로 카드 만들기"로 넣어 본 메모. M2에는 메모(A)가 저장하고, 여기서는 noteId만 받아요.
 const tried = new Map<string, string>();
 
@@ -52,6 +60,13 @@ export async function extractFromText(
   tried.set(note.id, text);
   // spoken: 받아쓴 말(회의록). 마침표 없이도 말끝으로 나누고 지난 일은 빼요.
   return extractCards(note, { now, timezone, spoken: options.spoken });
+}
+
+/** AI가 찾은 카드의 원문을 기억해요(카드에서 원문으로 돌아갈 때 써요). 원문 id를 돌려줘요. */
+export function rememberText(text: string): string {
+  const id = `try-${Date.now()}`;
+  tried.set(id, text);
+  return id;
 }
 
 /** 카드가 나온 메모 원문. M2에는 메모(A)의 index.ts에서 내보낸 함수로 바꿔요. */
