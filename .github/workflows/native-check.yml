@@ -1,0 +1,68 @@
+name: Native check
+
+# PR이 네이티브 부분(라이브러리, app.json 권한·플러그인, SDK)을 바꾸는지 봐요.
+# 바꾸면 "머지 뒤에 stage APK를 새로 깔아야 해요" 댓글을 남겨요. 머지되면 deploy-stage가 알아서 빌드해요.
+# 필수 검사는 아니에요. (scripts/native-check.mjs)
+on:
+  pull_request:
+    branches: [stage]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
+      - 'package.json'
+
+concurrency:
+  group: native-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    # 포크 PR에는 EXPO_TOKEN이 없어서 건너뛰어요.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: stage
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: pnpm install --frozen-lockfile
+      - id: native
+        run: node scripts/native-check.mjs
+      - name: 댓글 남기기
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          NEEDS: ${{ steps.native.outputs.needs_build }}
+          RUNTIME: ${{ steps.native.outputs.runtime }}
+        run: |
+          marker='<!-- native-check -->'
+          id=$(gh api "repos/${{ github.repository }}/issues/$PR/comments" --paginate \
+            -q ".[] | select(.body | contains(\"$marker\")) | .id" | tail -1)
+          if [ "$NEEDS" = "true" ]; then
+            body="$marker
+          📦 **이 PR은 네이티브 부분을 바꿔요.** 머지되면 stage APK를 자동으로 새로 빌드하고, 팀원은 새 APK를 한 번 다시 깔아야 해요. (예전 APK는 이 뒤의 업데이트를 못 받아요)
+
+          fingerprint: \`$RUNTIME\`"
+          elif [ -n "$id" ]; then
+            body="$marker
+          ✅ 이제 네이티브 변경이 없어요. 머지하면 지금 APK로 업데이트를 받아요."
+          else
+            echo "네이티브 변경 없음. 댓글 안 남겨요."
+            exit 0
+          fi
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$id" -f body="$body" >/dev/null
+          else
+            gh pr comment "$PR" -R "${{ github.repository }}" --body "$body"
+          fi

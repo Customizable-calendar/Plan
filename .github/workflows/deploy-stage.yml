@@ -72,6 +72,10 @@ jobs:
     if: always() && needs.ready.outputs.app == 'true' && needs.supabase.result != 'failure'
     runs-on: ubuntu-latest
     environment: stage
+    # 새 APK를 빌드하면 머지된 PR에 링크를 남겨요.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -97,3 +101,33 @@ jobs:
           EXPO_PUBLIC_SUPABASE_FEATURES: ${{ vars.EXPO_PUBLIC_SUPABASE_FEATURES }}
           MESSAGE: ${{ github.event.head_commit.message }}
         run: eas update --channel stage --message "${MESSAGE:-수동 배포}" --non-interactive
+      # 네이티브 부분(라이브러리, app.json 권한·플러그인, SDK)이 바뀌면 예전 APK는 위 업데이트를 못 받아요.
+      # 같은 fingerprint의 stage APK가 없으면 새로 빌드해요. (scripts/native-check.mjs)
+      - name: APK를 새로 빌드해야 하는지 보기
+        id: native
+        run: node scripts/native-check.mjs
+      - name: stage APK 새로 빌드
+        if: steps.native.outputs.needs_build == 'true'
+        id: build
+        working-directory: apps/mobile
+        run: |
+          eas build --profile stage --platform android --non-interactive --no-wait --json > build.json
+          id=$(node -e "console.log(require('./build.json')[0].id)")
+          url="https://expo.dev/accounts/choengs-team/projects/noteapp/builds/$id"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          {
+            echo "### 📦 stage APK를 새로 빌드해요"
+            echo "네이티브 부분이 바뀌어서 예전 APK는 이번 업데이트를 못 받아요. 15~20분 뒤 아래 링크에서 새로 깔아 주세요."
+            echo ""
+            echo "$url"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: 머지된 PR에 새 APK 링크 남기기
+        if: steps.native.outputs.needs_build == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ steps.build.outputs.url }}
+        run: |
+          pr=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" -q '.[0].number' || true)
+          if [ -n "$pr" ]; then
+            gh pr comment "$pr" -R "${{ github.repository }}" --body "📦 이 PR로 네이티브 부분이 바뀌어서 stage APK를 새로 빌드하고 있어요. 15~20분 뒤 새로 깔아 주세요 (예전 APK는 이 뒤의 업데이트를 못 받아요). $URL"
+          fi

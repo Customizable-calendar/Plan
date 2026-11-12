@@ -15,7 +15,10 @@ main 브랜치: 운영 전까지 배포하지 않아요. 마일스톤이 끝나�
 
 - dev 환경은 따로 두지 않아요. 머지 전 확인은 각자 로컬 화면(Expo Go)으로 해요.
 - stage에서 확인하려면 폰에 **stage 빌드**를 한 번 깔아 둬요. 그 뒤로는 머지될 때마다 앱을 다시 열면 새 코드를 받아요.
-- 네이티브 라이브러리를 추가하거나 `app.json`을 크게 바꾸면 기존 stage 빌드가 업데이트를 못 받아요. 그때는 D가 stage 빌드를 다시 만들어 공유해요.
+- 네이티브 라이브러리를 추가하거나 `app.json` 권한·플러그인, SDK를 바꾸면 fingerprint가 달라져서 기존 stage 빌드가 업데이트를 못 받아요.
+  - PR에서 미리 알려 줘요: `native-check.yml`이 "머지 뒤 새 APK가 필요해요" 댓글을 남겨요.
+  - 머지되면 `deploy-stage.yml`이 같은 fingerprint의 stage APK가 없을 때 **자동으로 새로 빌드**하고 PR에 링크를 남겨요. 팀원은 그 링크로 한 번 다시 깔아요.
+  - 직접 확인: `node scripts/native-check.mjs` (EXPO_TOKEN 또는 `eas login` 필요)
 
 ## 1. 환경과 값
 
