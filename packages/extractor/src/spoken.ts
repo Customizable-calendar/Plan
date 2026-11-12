@@ -22,6 +22,25 @@ export function markSpokenBreaks(text: string): string {
     .replace(TOPIC_START, (_m, ws: string, word: string) => `\n${ws.slice(1)}${word}`);
 }
 
+/** 묻는 말끝 */
+const QUESTION_END = /(까요|나요|가요|[을할볼갈]까|습니까|입니까|ㄴ가요|는지요)(?=[ \t]|$)/g;
+/** 마침표를 찍을 말끝. 이미 부호가 있으면 안 찍어요. */
+const STATEMENT_END = /(니다|요|죠|[었았였했]다|한다|된다|이다|겠다)(?=[ \t]|$)/g;
+
+/**
+ * 받아쓴 말을 읽기 좋게: 말끝에 마침표·물음표를 찍고 문장마다 줄을 나눠요.
+ * 받아쓰기 엔진이 부호를 이미 찍었으면 그대로 두고 줄만 나눠요.
+ */
+export function punctuateSpoken(text: string): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  if (!flat) return '';
+  return flat
+    .replace(QUESTION_END, '$1?')
+    .replace(STATEMENT_END, '$1.')
+    .replace(/([.?!])[.?!]+/g, '$1')
+    .replace(/([.?!。])\s+/g, '$1\n');
+}
+
 /** 제목 앞의 군말 */
 const LEAD =
   /^(?:(?:네|아|어|음|자|그럼|그러면|그리고|그래서|일단|또|그다음에?|마지막으로)[,\s]+)+/;

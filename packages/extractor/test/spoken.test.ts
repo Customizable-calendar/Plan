@@ -52,3 +52,31 @@ describe('받아쓴 말에서 카드 찾기', () => {
     expect(tidySpokenTitle('네')).toBe('네');
   });
 });
+
+describe('받아쓴 말 부호 찍기', () => {
+  it('말끝에 마침표, 묻는 말에 물음표를 찍고 문장마다 줄을 나눈다', async () => {
+    const { punctuateSpoken } = await import('../src');
+    expect(
+      punctuateSpoken('회의 시작하겠습니다 다음 주에 리뷰해요 자료는 누가 만들까요 제가 할게요'),
+    ).toBe('회의 시작하겠습니다.\n다음 주에 리뷰해요.\n자료는 누가 만들까요?\n제가 할게요.');
+  });
+
+  it('이미 찍힌 부호는 그대로 두고 줄만 나눈다', async () => {
+    const { punctuateSpoken } = await import('../src');
+    expect(punctuateSpoken('좋아요. 그럼 내일 봐요!  끝')).toBe('좋아요.\n그럼 내일 봐요!\n끝');
+    expect(punctuateSpoken('   ')).toBe('');
+  });
+
+  it('부호를 찍은 회의록에서도 같은 카드를 찾는다', async () => {
+    const { punctuateSpoken } = await import('../src');
+    const text = punctuateSpoken(meeting);
+    const cards = await extractCards({ id: 'm', text, createdAt: '' }, options);
+    expect(cards.map((c) => c.title)).toEqual([
+      '디자인 리뷰',
+      '민성이는 편집기 버그를 고치기',
+      '중간 발표',
+      '발표 자료는 재민이가 만들기',
+      '팀 회식',
+    ]);
+  });
+});
