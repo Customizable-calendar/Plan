@@ -10,6 +10,9 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "말한 내용을 기기 안에서 글로 받아쓰려고 마이크를 써요."
+      },
       "bundleIdentifier": "com.customizablecalendar.noteapp"
     },
     "android": {
@@ -20,7 +23,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["android.permission.RECORD_AUDIO"]
     },
     "web": {
       "bundler": "metro",

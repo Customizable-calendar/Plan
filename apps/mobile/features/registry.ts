@@ -15,6 +15,7 @@ import { feature as devlog } from './devlog';
 import { feature as devquiz } from './devquiz';
 import { feature as dev } from './dev';
 import { feature as search } from './search';
+import { feature as stt } from './stt';
 // new-feature:import
 
 export const features: Feature[] = [
@@ -31,6 +32,7 @@ export const features: Feature[] = [
   devquiz,
   dev,
   search,
+  stt,
   // new-feature:entry
 ];
 
