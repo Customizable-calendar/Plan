@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -23,6 +24,21 @@ const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2,
 
 /** 받아쓰기 확인 화면: 모델 받기, 말하기, 받아쓴 글로 카드 찾기 */
 export function SttScreen() {
+  // 웹(아이폰 stage 링크)에는 기기 안 음성 인식도, 모델 파일 저장도 없어요.
+  if (Platform.OS === 'web')
+    return (
+      <View className="flex-1 gap-2 bg-background p-5">
+        <Text className="text-[22px] font-bold text-foreground">받아쓰기</Text>
+        <Text className="text-[14px] leading-5 text-muted-foreground">
+          받아쓰기는 폰 안에서 음성 인식을 돌려서 앱(Android stage APK)에서만 돼요. 웹에서는 못
+          써요.
+        </Text>
+      </View>
+    );
+  return <SttMain />;
+}
+
+function SttMain() {
   const { rows, error, download, stop, remove, available } = useModels();
   const [picked, setPicked] = useState<SttModelId | null>(null);
 

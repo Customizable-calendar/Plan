@@ -76,6 +76,7 @@ npx eas-cli build --profile stage --platform ios       # Apple 개발자 계정�
 
 - Android는 링크로 바로 설치돼요.
 - iOS는 Apple 개발자 계정(유료)이 있어야 하고, `npx eas-cli device:create`로 팀원 기기를 먼저 등록해요. 계정이 없으면 iOS 팀원은 stage 대신 로컬(Expo Go)로 확인해요.
+- **웹 버전**: stage에 머지할 때마다 `deploy-stage.yml`이 웹으로 export해서 EAS Hosting에 올려요 → https://customcal-noteapp.expo.app (아이폰은 사파리로). 받아쓰기처럼 폰 네이티브가 필요한 기능은 웹에서 안 돼요. 웹에는 업데이트 채널이 없어서 `EXPO_PUBLIC_TEST_BUILD=true`로 stage 메뉴를 켜요. 웹 배포가 실패해도 앱 업데이트·APK 빌드는 그대로 가요(`continue-on-error`).
 
 ## 5. main (운영)
 

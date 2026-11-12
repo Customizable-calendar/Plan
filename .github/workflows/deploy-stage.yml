@@ -76,6 +76,17 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+    # 앱 업데이트와 웹 버전이 같은 stage 설정을 써요. (공개돼도 되는 EXPO_PUBLIC_* Variable만)
+    env:
+      EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_KEY }}
+      EXPO_PUBLIC_STORAGE_PROVIDER: supabase
+      # 기능 데이터 출처: fixtures(예시 JSON) | supabase. M2에 stage 환경 변수로 supabase로 바꿔요
+      EXPO_PUBLIC_DATA_SOURCE: ${{ vars.EXPO_PUBLIC_DATA_SOURCE || 'fixtures' }}
+      # 연결 끝난 기능만 supabase로 (쉼표로 기능 id). lib/data-source.ts sourceFor
+      EXPO_PUBLIC_SUPABASE_FEATURES: ${{ vars.EXPO_PUBLIC_SUPABASE_FEATURES }}
+      # 웹 주소 https://<이 값>.expo.app (처음 올릴 때 정해지고 그 뒤로 그대로)
+      WEB_DOMAIN: customcal-noteapp
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -92,13 +103,6 @@ jobs:
       - name: stage 채널로 업데이트 올리기
         working-directory: apps/mobile
         env:
-          EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
-          EXPO_PUBLIC_SUPABASE_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_KEY }}
-          EXPO_PUBLIC_STORAGE_PROVIDER: supabase
-          # 기능 데이터 출처: fixtures(예시 JSON) | supabase. M2에 stage 환경 변수로 supabase로 바꿔요
-          EXPO_PUBLIC_DATA_SOURCE: ${{ vars.EXPO_PUBLIC_DATA_SOURCE || 'fixtures' }}
-          # 연결 끝난 기능만 supabase로 (쉼표로 기능 id). lib/data-source.ts sourceFor
-          EXPO_PUBLIC_SUPABASE_FEATURES: ${{ vars.EXPO_PUBLIC_SUPABASE_FEATURES }}
           MESSAGE: ${{ github.event.head_commit.message }}
         run: eas update --channel stage --message "${MESSAGE:-수동 배포}" --non-interactive
       # 네이티브 부분(라이브러리, app.json 권한·플러그인, SDK)이 바뀌면 예전 APK는 위 업데이트를 못 받아요.
@@ -131,3 +135,19 @@ jobs:
           if [ -n "$pr" ]; then
             gh pr comment "$pr" -R "${{ github.repository }}" --body "📦 이 PR로 네이티브 부분이 바뀌어서 stage APK를 새로 빌드하고 있어요. 15~20분 뒤 새로 깔아 주세요 (예전 APK는 이 뒤의 업데이트를 못 받아요). $URL"
           fi
+      # 아이폰은 이 웹 주소로 봐요(설치·컴퓨터 없이). 받아쓰기처럼 폰 네이티브가 필요한 건 웹에서 안 돼요.
+      # 웹이 실패해도 앱 업데이트·APK 빌드는 그대로 가요.
+      - name: 웹 버전 올리기 (EAS Hosting)
+        id: web
+        continue-on-error: true
+        working-directory: apps/mobile
+        env:
+          # 웹에는 업데이트 채널이 없어서 stage 표시를 따로 줘요 (features/cards/session.ts isTestBuild)
+          EXPO_PUBLIC_TEST_BUILD: 'true'
+        run: |
+          npx expo export --platform web --output-dir dist
+          eas deploy --prod --non-interactive --dev-domain "$WEB_DOMAIN"
+          {
+            echo "### 🌐 웹 버전 (아이폰은 사파리로)"
+            echo "https://$WEB_DOMAIN.expo.app"
+          } >> "$GITHUB_STEP_SUMMARY"

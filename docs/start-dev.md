@@ -34,7 +34,14 @@ pnpm dev
 
 회사·학교 와이파이처럼 폰이 컴퓨터를 못 찾으면 `pnpm --filter mobile start --tunnel`로 띄워요.
 
-### stage 최신 버전을 아이폰으로 보기 (딸깍)
+### stage 최신 버전을 아이폰으로 보기 (링크, 제일 쉬움)
+
+사파리로 **https://customcal-noteapp.expo.app** 를 열고, 공유 → "홈 화면에 추가" 하면 앱처럼 열려요. stage에 머지할 때마다 자동으로 새로 올라가요(`deploy-stage.yml`).
+
+- 웹이라 **받아쓰기는 안 돼요**(폰 안 음성 인식). AI 키를 쓰는 기능(개발일지 AI, 퀴즈, AI 정리)도 웹에서는 안 될 수 있어요. 이건 Android stage APK로 확인해요.
+- 아이폰에서 앱 그대로(받아쓰기까지) 보려면 Apple 개발자 계정(유료)이 있어야 해요.
+
+### stage 최신 버전을 아이폰 Expo Go로 보기 (딸깍)
 
 레포 맨 위의 **`stage-iphone.cmd`(Windows)** 또는 **`stage-iphone.command`(Mac)** 를 더블클릭하거나, 터미널에서 `pnpm stage` 한 번이면 돼요.
 
