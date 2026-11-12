@@ -34,6 +34,15 @@ pnpm dev
 
 회사·학교 와이파이처럼 폰이 컴퓨터를 못 찾으면 `pnpm --filter mobile start --tunnel`로 띄워요.
 
+### stage 최신 버전을 아이폰으로 보기 (딸깍)
+
+레포 맨 위의 **`stage-iphone.cmd`(Windows)** 또는 **`stage-iphone.command`(Mac)** 를 더블클릭하거나, 터미널에서 `pnpm stage` 한 번이면 돼요.
+
+- stage 브랜치 최신으로 받기 → `pnpm install` → GitHub `stage` 환경의 `EXPO_PUBLIC_*` 값으로 개발 서버 켜기까지 해요. 내 `.env`는 안 건드려요.
+- 처음 한 번 `gh auth login`이 필요해요. 고친 파일이 있으면 브랜치를 안 바꾸고 멈춰요.
+- 폰이 컴퓨터를 못 찾으면 `pnpm stage --tunnel`, 지금 브랜치 그대로 stage DB에 붙이려면 `pnpm stage --here`.
+- Android는 stage 빌드(APK)를 깔면 이것 없이 머지될 때마다 자동으로 받아요(`docs/deploy.md`).
+
 ## 3. 내 화면 찾기
 
 앱 **오늘** 탭 왼쪽 위 **「개발」** 버튼 → 개발 메뉴. 등록된 기능의 탭·오늘 섹션·화면이 담당별로 나오고, 탭에서 바로 갈 수 없는 화면(세션·편집기·AI 초안·수행 확인)도 여기서 열려요.
