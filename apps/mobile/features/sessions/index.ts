@@ -4,7 +4,9 @@ import { defineFeature } from '@/lib/feature';
 import { LnbSessions } from './LnbSessions';
 import { RecentDocs } from './RecentDocs';
 
-export { SessionsScreen } from './SessionsScreen';
+export { SessionsListScreen } from './SessionsListScreen';
+// 막 쓰기(notes)가 기록을 오른쪽으로 넘기면 불러요.
+export { createDraftSession } from './data';
 
 // 세션은 왼쪽 메뉴 세션 섹션에서, 최근 문서는 홈에서 들어가요.
 export const feature = defineFeature({

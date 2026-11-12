@@ -2,22 +2,29 @@
   "expo": {
     "name": "noteApp",
     "slug": "noteapp",
+    "owner": "choengs-team",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "noteapp",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "말한 내용을 기기 안에서 글로 받아쓰려고 마이크를 써요."
+      },
+      "bundleIdentifier": "com.customizablecalendar.noteapp"
     },
     "android": {
+      "package": "com.customizablecalendar.noteapp",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["android.permission.RECORD_AUDIO"]
     },
     "web": {
       "bundler": "metro",
@@ -36,6 +43,17 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e7dbadd9-887e-4ef1-9ebe-ce6d7f41e8ce"
+      }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/e7dbadd9-887e-4ef1-9ebe-ce6d7f41e8ce"
     }
   }
 }
