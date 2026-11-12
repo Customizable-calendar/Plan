@@ -35,14 +35,14 @@ export type Database = {
                   ]
                 },"devquiz_results": {
                   Row: {
-                    "answers": Json,"author": string,"comment": string,"created_at": string,"score": number,"user_id": string,"week": string
+                    "answers": NonNullable<Json>,"author": string,"comment": string,"created_at": string,"score": number,"user_id": string,"week": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "answers"?: Json,"author": string,"comment"?: string,"created_at"?: string,"score": number,"user_id"?: string,"week": string
+                    "answers"?: NonNullable<Json>,"author": string,"comment"?: string,"created_at"?: string,"score": number,"user_id"?: string,"week": string
                   }
                   Update: {
-                    "answers"?: Json,"author"?: string,"comment"?: string,"created_at"?: string,"score"?: number,"user_id"?: string,"week"?: string
+                    "answers"?: NonNullable<Json>,"author"?: string,"comment"?: string,"created_at"?: string,"score"?: number,"user_id"?: string,"week"?: string
                   }
                   Relationships: [
                     
