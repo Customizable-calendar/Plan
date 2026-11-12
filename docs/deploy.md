@@ -19,15 +19,16 @@ main 브랜치: 운영 전까지 배포하지 않아요. 마일스톤이 끝나�
 
 ## 1. 환경과 값
 
-| 이름                       | 종류(GitHub `stage` 환경) | 어디서 얻나                                           |
-| -------------------------- | ------------------------- | ----------------------------------------------------- |
-| `SUPABASE_PROJECT_REF`     | Variable                  | stage 프로젝트 주소 `https://<ref>.supabase.co`의 ref |
-| `SUPABASE_ACCESS_TOKEN`    | Secret                    | Supabase 계정 → Access Tokens                         |
-| `SUPABASE_DB_PASSWORD`     | Secret                    | stage 프로젝트 만들 때 정한 DB 비밀번호               |
-| `EXPO_PUBLIC_SUPABASE_URL` | Variable                  | stage 프로젝트 → Project Settings → API               |
-| `EXPO_PUBLIC_SUPABASE_KEY` | Variable                  | 같은 곳의 publishable(anon) 키. service_role은 금지   |
-| `EXPO_PUBLIC_DATA_SOURCE`  | Variable                  | `fixtures`(기본) 또는 `supabase`. M2부터 `supabase`   |
-| `EXPO_TOKEN`               | Secret                    | expo.dev → Account settings → Access tokens           |
+| 이름                            | 종류(GitHub `stage` 환경) | 어디서 얻나                                                                |
+| ------------------------------- | ------------------------- | -------------------------------------------------------------------------- |
+| `SUPABASE_PROJECT_REF`          | Variable                  | stage 프로젝트 주소 `https://<ref>.supabase.co`의 ref                      |
+| `SUPABASE_ACCESS_TOKEN`         | Secret                    | Supabase 계정 → Access Tokens                                              |
+| `SUPABASE_DB_PASSWORD`          | Secret                    | stage 프로젝트 만들 때 정한 DB 비밀번호                                    |
+| `EXPO_PUBLIC_SUPABASE_URL`      | Variable                  | stage 프로젝트 → Project Settings → API                                    |
+| `EXPO_PUBLIC_SUPABASE_KEY`      | Variable                  | 같은 곳의 publishable(anon) 키. service_role은 금지                        |
+| `EXPO_PUBLIC_DATA_SOURCE`       | Variable                  | `fixtures`(기본) 또는 `supabase`. M2부터 `supabase`                        |
+| `EXPO_PUBLIC_SUPABASE_FEATURES` | Variable                  | 앱 전체는 `fixtures`일 때 supabase로 켤 기능 id (쉼표). 예: `cards,devlog` |
+| `EXPO_TOKEN`                    | Secret                    | expo.dev → Account settings → Access tokens                                |
 
 ```bash
 gh variable set SUPABASE_PROJECT_REF --env stage --body "<ref>"
