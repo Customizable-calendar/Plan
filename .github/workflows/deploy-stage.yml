@@ -57,7 +57,7 @@ jobs:
           version: 2.122.0
       - run: supabase link --project-ref "$PROJECT_REF"
       # 아직 적용 안 된 마이그레이션만 순서대로 적용해요.
-      - run: supabase db push
+      - run: supabase db push --linked
       - name: Edge Functions 배포
         run: |
           if ls -d supabase/functions/*/ >/dev/null 2>&1; then
