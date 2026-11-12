@@ -83,6 +83,7 @@ export interface Dictation {
 }
 
 export function isSttAvailable(): boolean {
+  if (Platform.OS === 'web') return false; // 웹(아이폰 stage 링크)에는 기기 안 음성 인식이 없어요.
   return TurboModuleRegistry.get('RNWhisper') != null && NativeModules.RNLiveAudioStream != null;
 }
 

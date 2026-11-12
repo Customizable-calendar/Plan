@@ -2,8 +2,12 @@ import * as Updates from 'expo-updates';
 
 import { getSupabase } from '@/lib/supabase';
 
-/** 개발 빌드이거나 팀이 같이 쓰는 stage 빌드. 운영(production) 빌드에서는 false예요. */
-export const isTestBuild = __DEV__ || Updates.channel === 'stage';
+/**
+ * 개발 빌드이거나 팀이 같이 쓰는 stage 빌드(APK는 채널, 웹은 EXPO_PUBLIC_TEST_BUILD).
+ * 운영(production) 빌드에서는 false예요.
+ */
+export const isTestBuild =
+  __DEV__ || Updates.channel === 'stage' || process.env.EXPO_PUBLIC_TEST_BUILD === 'true';
 
 // 카드·일지·퀴즈 테이블은 로그인한 사람만 읽고 써요(RLS). 로그인 화면은 lib/auth.ts와 app/login.tsx예요.
 
