@@ -64,22 +64,59 @@ export function suggestSlots(
   events: CalendarEvent[],
   tasks: Card[],
   dueAt?: string,
+  now = Date.now(),
 ): TimeSlot[] {
-  const slots: TimeSlot[] = [];
-  // M1: 업무 시간 내 30분 단위의 빈 시간에서 60분 후보를 최대 3개 골라요.
-  for (let minute = 9 * 60; minute <= 17 * 60 && slots.length < 3; minute += 30) {
-    const startAt = new Date(Date.parse(`${day}T00:00:00+09:00`) + minute * 60000).toISOString();
-    const endAt = new Date(Date.parse(startAt) + 60 * 60000).toISOString();
-    if (dueAt && Date.parse(endAt) > Date.parse(dueAt)) continue;
-    const busy = [...events, ...tasks.filter((task) => task.startAt && task.endAt)];
-    if (
-      busy.some(
-        (item) => item.startAt && item.endAt && overlaps(startAt, endAt, item.startAt, item.endAt),
-      )
+  const minute = 60000;
+  const duration = 60 * minute;
+  const step = 15 * minute;
+  const midnight = Date.parse(day + 'T00:00:00+09:00');
+  const start = Math.max(midnight + 9 * 60 * minute, now);
+  const end = Math.min(midnight + 18 * 60 * minute, dueAt ? Date.parse(dueAt) : Infinity);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return [];
+
+  // 시작 순으로 훑어 겹친 일정을 합치고 그 사이의 빈 구간을 구해요.
+  const busy = [...events, ...tasks.filter((task) => task.status !== 'dismissed')]
+    .filter((item) => item.startAt && item.endAt)
+    .map((item) => ({ from: Date.parse(item.startAt!), to: Date.parse(item.endAt!) }));
+  if (
+    busy.some(
+      (item) => !Number.isFinite(item.from) || !Number.isFinite(item.to) || item.to < item.from,
     )
-      continue;
+  )
+    return [];
+  busy.sort((a, b) => a.from - b.from);
+  const gaps: { from: number; to: number }[] = [];
+  let cursor = start;
+  for (const item of busy) {
+    if (item.to <= cursor || item.from >= end) continue;
+    if (item.from > cursor) gaps.push({ from: cursor, to: item.from });
+    cursor = Math.max(cursor, item.to);
+  }
+  if (cursor < end) gaps.push({ from: cursor, to: end });
+
+  // Best fit: 작은 빈 구간부터 채워 긴 빈 시간을 남겨요. 길이가 같으면 이른 순서예요.
+  const candidates: { from: number; gapLength: number }[] = [];
+  for (const gap of gaps) {
+    const from = midnight + Math.ceil((gap.from - midnight) / step) * step;
+    for (let time = from; time + duration <= gap.to; time += step) {
+      candidates.push({ from: time, gapLength: gap.to - gap.from });
+    }
+  }
+  candidates.sort((a, b) => a.gapLength - b.gapLength || a.from - b.from);
+  const slots: TimeSlot[] = [];
+  for (const candidate of candidates) {
+    const startAt = new Date(candidate.from).toISOString();
+    const endAt = new Date(candidate.from + duration).toISOString();
     if (slots.some((slot) => overlaps(startAt, endAt, slot.startAt, slot.endAt))) continue;
-    slots.push({ startAt, endAt, reason: '다른 일정과 겹치지 않는 60분이에요.' });
+    slots.push({
+      startAt,
+      endAt,
+      reason:
+        candidate.gapLength < 2 * duration
+          ? '짧은 빈 구간을 활용해 긴 빈 시간을 남겨요.'
+          : '기존 일정과 겹치지 않는 연속 60분이에요.',
+    });
+    if (slots.length === 3) break;
   }
   return slots;
 }

@@ -1,4 +1,5 @@
 import type { Card } from '@noteapp/shared';
+import { space } from '@noteapp/ui';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
@@ -135,10 +136,10 @@ export function CalendarScreen() {
           }}
           style={
             view !== 'week'
-              ? { maxHeight: dailyListHeight && Math.max(96, dailyListHeight / 2) }
+              ? { maxHeight: dailyListHeight && Math.max(192, dailyListHeight) }
               : undefined
           }
-          contentContainerStyle={{ gap: 12 }}
+          contentContainerStyle={{ gap: space.md }}
         >
           {shownDays.map((date) => {
             const daily = eventsOnDay(events, date);
