@@ -5,7 +5,7 @@ import { Pressable, ScrollView, Share, Text, View } from 'react-native';
 
 import { cardDetail, findCardsFromTranscript, typeLabel } from '@/features/cards';
 
-import { MAX_SECONDS, type SttResult } from './engine';
+import { discardLeftover, leftoverSeconds, MAX_SECONDS, type SttResult } from './engine';
 import type { SttModel, SttModelId } from './models';
 import { useDictation } from './useDictation';
 import { type ModelRow, useModels } from './useModels';
@@ -110,6 +110,8 @@ type Found =
 
 function Recorder({ model }: { model: SttModel }) {
   const [found, setFound] = useState<Found | null>(null);
+  // 앱이 꺼져서 다 못 받아쓴 녹음(초). 없으면 null
+  const [left, setLeft] = useState(() => leftoverSeconds());
 
   // 받아쓰기가 끝나면 바로 회의록에서 일정·약속·할 일을 찾아 확인 기다리는 카드로 넣어요.
   const findCards = useCallback(async (result: SttResult) => {
@@ -124,25 +126,60 @@ function Recorder({ model }: { model: SttModel }) {
     }
   }, []);
 
-  const { state, start, finish, cancel, reset } = useDictation(model, findCards);
+  const { state, start, finish, resume, cancel, reset } = useDictation(model, findCards);
 
   return (
     <View className="gap-4">
+      {left !== null && (state.phase === 'idle' || state.phase === 'error') ? (
+        <View className="gap-3 rounded-xl bg-muted p-4">
+          <Text className="text-[14px] leading-5 text-foreground">
+            다 못 받아쓴 녹음이 있어요({clock(left)}). 앱이 꺼졌을 때 남은 거예요.
+          </Text>
+          <View className="flex-row gap-2">
+            <SmallButton
+              label="이어서 받아쓰기"
+              primary
+              onPress={() => {
+                setLeft(null);
+                setFound(null);
+                void resume();
+              }}
+            />
+            <SmallButton
+              label="버리기"
+              onPress={() => {
+                discardLeftover();
+                setLeft(null);
+              }}
+            />
+          </View>
+        </View>
+      ) : null}
+
       {state.phase === 'recording' ? (
         <View className="gap-3">
           <BigButton label={`끝내기  ${clock(state.seconds)}`} onPress={finish} danger />
-          <Text className="text-center text-[13px] text-muted-foreground">
-            최대 {MAX_SECONDS / 60}분까지 받아써요
+          <Text className="text-center text-[13px] leading-5 text-muted-foreground">
+            최대 {MAX_SECONDS / 3600}시간까지 받아써요. 화면을 켜 두고 앱을 나가지 마세요.
           </Text>
+          <View className="gap-2 rounded-xl border border-border bg-card p-4">
+            <Text className="text-[13px] font-bold text-muted-foreground">
+              {state.backlog > 0 ? `받아쓰는 중 (밀린 조각 ${state.backlog}개)` : '받아쓰는 중'}
+            </Text>
+            <Text className="text-[16px] leading-6 text-foreground">
+              {state.partial || '말이 쉬는 곳마다(20~30초) 글이 나와요.'}
+            </Text>
+          </View>
           <SmallButton label="녹음 버리기" onPress={cancel} />
         </View>
       ) : state.phase === 'transcribing' ? (
-        <BigButton label={`받아쓰는 중 ${Math.round(state.ratio * 100)}%`} disabled />
+        <BigButton label={`남은 부분 받아쓰는 중 ${Math.round(state.ratio * 100)}%`} disabled />
       ) : (
         <BigButton
           label="말하기 시작"
           onPress={() => {
             setFound(null);
+            setLeft(null); // 새로 녹음하면 남은 녹음은 지워져요.
             void start();
           }}
         />
