@@ -1,10 +1,19 @@
 import type { Card } from '@noteapp/shared';
 import { router } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Share, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  Share,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { cardDetail, findCardsFromTranscript, typeLabel } from '@/features/cards';
 
+import { hasGeminiKey, organizeTranscript, saveGeminiKey } from './ai';
 import { discardLeftover, leftoverSeconds, MAX_SECONDS, type SttResult } from './engine';
 import type { SttModel, SttModelId } from './models';
 import { useDictation } from './useDictation';
@@ -106,7 +115,9 @@ function ModelItem({
 
 /** 받아쓴 글에서 카드를 찾는 상태: 찾는 중, 찾은 카드, 실패 */
 type Found =
-  { kind: 'finding' } | { kind: 'found'; cards: Card[] } | { kind: 'error'; message: string };
+  | { kind: 'finding' }
+  | { kind: 'found'; cards: Card[]; byAi?: boolean }
+  | { kind: 'error'; message: string };
 
 function Recorder({ model }: { model: SttModel }) {
   const [found, setFound] = useState<Found | null>(null);
@@ -212,6 +223,15 @@ function Recorder({ model }: { model: SttModel }) {
       ) : null}
 
       {state.phase === 'done' && found ? <FoundCards found={found} /> : null}
+
+      {state.phase === 'done' && state.result.text && found?.kind !== 'finding' ? (
+        <AiOrganize
+          key={`${state.result.durationMs}:${state.result.text.length}`}
+          text={state.result.text}
+          replaced={found?.kind === 'found' ? found.cards.map((c) => c.id) : []}
+          onCards={(cards) => setFound({ kind: 'found', cards, byAi: true })}
+        />
+      ) : null}
     </View>
   );
 }
@@ -234,7 +254,7 @@ function FoundCards({ found }: { found: Found }) {
   return (
     <View className="gap-3 rounded-xl bg-primary-soft p-4">
       <Text className="text-[15px] font-bold text-foreground">
-        카드 {found.cards.length}장을 추천해요
+        {found.byAi ? 'AI가 찾은 ' : ''}카드 {found.cards.length}장을 추천해요
       </Text>
       {found.cards.map((c) => {
         const when = cardDetail(c);
@@ -248,6 +268,121 @@ function FoundCards({ found }: { found: Found }) {
         );
       })}
       <SmallButton label="카드 탭에서 확인하기" onPress={() => router.push('/cards')} primary />
+    </View>
+  );
+}
+
+type AiState =
+  | { kind: 'checking' }
+  | { kind: 'no-key' }
+  | { kind: 'ready' }
+  | { kind: 'running' }
+  | { kind: 'done'; summary: string }
+  | { kind: 'error'; message: string };
+
+/**
+ * 받아쓴 글을 사용자 Gemini 키로 요약하고 카드를 다시 찾아요. 소리는 안 보내고 글만 보내요.
+ * 규칙으로 찾은 카드(확인 안 한 것)는 AI가 찾은 카드로 바뀌어요.
+ */
+function AiOrganize({
+  text,
+  replaced,
+  onCards,
+}: {
+  text: string;
+  replaced: string[];
+  onCards: (cards: Card[]) => void;
+}) {
+  const [ai, setAi] = useState<AiState>({ kind: 'checking' });
+  const [key, setKey] = useState('');
+
+  useEffect(() => {
+    hasGeminiKey().then(
+      (has) => setAi({ kind: has ? 'ready' : 'no-key' }),
+      () => setAi({ kind: 'no-key' }),
+    );
+  }, []);
+
+  const run = async () => {
+    setAi({ kind: 'running' });
+    try {
+      const result = await organizeTranscript(text, replaced);
+      onCards(result.cards);
+      setAi({ kind: 'done', summary: result.summary });
+    } catch (e) {
+      setAi({ kind: 'error', message: e instanceof Error ? e.message : String(e) });
+    }
+  };
+
+  if (ai.kind === 'checking') return null;
+
+  return (
+    <View className="gap-3 rounded-xl border border-border bg-card p-4">
+      <Text className="text-[15px] font-bold text-foreground">AI로 정리하기 (Gemini)</Text>
+      <Text className="text-[13px] leading-5 text-muted-foreground">
+        받아쓴 글만 내 Gemini 키로 Google에 보내서 요약하고 일정·할 일을 다시 찾아요. 소리는 안
+        보내요. 회의 참석자에게 미리 알려 주세요.
+      </Text>
+
+      {ai.kind === 'no-key' ? (
+        <View className="gap-2">
+          <Text className="text-[13px] leading-5 text-muted-foreground">
+            Google AI Studio에서 만든 Gemini API 키를 넣어 주세요. 이 폰의 보안 저장소에만 저장되고
+            우리 서버로는 안 가요.
+          </Text>
+          <TextInput
+            className="rounded-md border border-border bg-background px-3 py-2 text-[15px] text-foreground"
+            value={key}
+            onChangeText={setKey}
+            placeholder="Gemini API 키"
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            accessibilityLabel="Gemini API 키"
+          />
+          <SmallButton
+            label="키 저장"
+            primary
+            onPress={() => {
+              if (!key.trim()) return;
+              saveGeminiKey(key).then(
+                () => {
+                  setKey('');
+                  setAi({ kind: 'ready' });
+                },
+                (e: unknown) =>
+                  setAi({ kind: 'error', message: e instanceof Error ? e.message : String(e) }),
+              );
+            }}
+          />
+        </View>
+      ) : ai.kind === 'running' ? (
+        <View className="flex-row items-center gap-2">
+          <ActivityIndicator />
+          <Text className="text-[14px] text-muted-foreground">정리하는 중이에요</Text>
+        </View>
+      ) : ai.kind === 'done' ? (
+        <View className="gap-2">
+          <Text className="text-[13px] font-bold text-muted-foreground">요약</Text>
+          <Text selectable className="text-[15px] leading-6 text-foreground">
+            {ai.summary || '요약할 내용이 없었어요.'}
+          </Text>
+          {ai.summary ? (
+            <SmallButton label="요약 공유" onPress={() => Share.share({ message: ai.summary })} />
+          ) : null}
+        </View>
+      ) : (
+        <View className="gap-2">
+          {ai.kind === 'error' ? (
+            <Text className="text-[14px] leading-5 text-destructive">{ai.message}</Text>
+          ) : null}
+          <SmallButton
+            label={ai.kind === 'error' ? '다시 해 보기' : 'AI로 요약하고 카드 다시 찾기'}
+            primary
+            onPress={() => void run()}
+          />
+        </View>
+      )}
     </View>
   );
 }

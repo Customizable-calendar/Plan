@@ -1,6 +1,7 @@
 import type { Card, CardType } from '@noteapp/shared';
 
-import { addFromText, useCards } from './store';
+import { rememberText } from './data';
+import { addFromText, replaceCards, useCards } from './store';
 
 // 왼쪽 메뉴 카드 섹션의 개수 배지에 쓰는 훅이에요.
 export function useWaitingCount() {
@@ -31,3 +32,52 @@ export async function findCardsFromMemo(text: string): Promise<string> {
  */
 export const findCardsFromTranscript = (text: string): Promise<Card[]> =>
   addFromText(text, { spoken: true });
+
+/** AI가 받아쓴 글에서 찾은 일정·할 일. 시간은 ISO 8601(시간대 포함), quote는 원문 그대로 */
+export interface TranscriptItem {
+  type: 'event' | 'task';
+  title: string;
+  startAt?: string;
+  endAt?: string;
+  dueAt?: string;
+  quote: string;
+}
+
+const iso = (v?: string) => {
+  if (!v) return undefined;
+  const t = Date.parse(v);
+  return Number.isNaN(t) ? undefined : new Date(t).toISOString();
+};
+
+/**
+ * AI가 찾은 일정·할 일로 확인 기다리는 카드를 만들어요. 규칙으로 먼저 찾은 카드(replaced)는 빼요.
+ * 원문 위치(span)는 quote를 받아쓴 글에서 찾아서 정해요.
+ */
+export async function addAiCardsFromTranscript(
+  text: string,
+  items: TranscriptItem[],
+  replaced: string[],
+): Promise<Card[]> {
+  const noteId = rememberText(text);
+  const now = new Date().toISOString();
+  const cards = items.flatMap((item, i): Card[] => {
+    const title = item.title.trim();
+    if (!title) return [];
+    const at = item.quote ? text.indexOf(item.quote.trim()) : -1;
+    const span: [number, number] = at >= 0 ? [at, at + item.quote.trim().length] : [0, 0];
+    const startAt = iso(item.startAt);
+    return [
+      {
+        id: `${noteId}:ai:${item.type}:${i}`,
+        type: item.type === 'event' && startAt ? 'event' : 'task',
+        status: 'suggested',
+        title,
+        ...(item.type === 'event' && startAt ? { startAt, endAt: iso(item.endAt) } : {}),
+        ...(item.type === 'task' || !startAt ? { dueAt: iso(item.dueAt) ?? startAt } : {}),
+        source: { kind: 'note', noteId, span },
+        createdAt: now,
+      },
+    ];
+  });
+  return replaceCards(replaced, cards);
+}
