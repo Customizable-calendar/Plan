@@ -24,5 +24,9 @@
       "hint": "배운 점이나 다음 이야기"
     }
   ],
-  "aiInstructions": "사용자의 말투를 살리고, 카드에 없는 사실은 추가하지 않아요."
+  "aiInstructions": "사용자의 말투를 살리고, 카드에 없는 사실은 추가하지 않아요.",
+  "category": "blog",
+  "icon": "pencil",
+  "tags": ["#블로그", "#초안"],
+  "defaultContent": "## 타겟 독자\n- \n\n## 도입\n\n\n## 본문\n\n### 소제목 1\n\n\n### 소제목 2\n\n\n## 결론\n\n"
 }
