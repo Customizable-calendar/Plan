@@ -43,11 +43,15 @@ export const saveCard = (card: Card) => saveCards([card]);
 const tried = new Map<string, string>();
 
 /** 메모 원문으로 카드 후보를 만들어요. 규칙 추출기(@noteapp/extractor)를 기기에서 바로 돌려요. */
-export async function extractFromText(text: string): Promise<Card[]> {
+export async function extractFromText(
+  text: string,
+  options: { spoken?: boolean } = {},
+): Promise<Card[]> {
   const now = new Date();
   const note = { id: `try-${now.getTime()}`, text, createdAt: now.toISOString() };
   tried.set(note.id, text);
-  return extractCards(note, { now, timezone });
+  // spoken: 받아쓴 말(회의록). 마침표 없이도 말끝으로 나누고 지난 일은 빼요.
+  return extractCards(note, { now, timezone, spoken: options.spoken });
 }
 
 /** 카드가 나온 메모 원문. M2에는 메모(A)의 index.ts에서 내보낸 함수로 바꿔요. */

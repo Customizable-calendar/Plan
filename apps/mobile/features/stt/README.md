@@ -5,7 +5,7 @@
 - **화면**: `/stt` (모델 받기, 말하기, 받아쓴 글로 카드 찾기)
 - **데이터**: 서버 데이터 없음. 모델 파일만 기기 `Documents/stt/`에 받아요.
 - **다른 기능에 주는 것**: `useDictation`, `startDictation`, `isSttAvailable`, `MODELS`, `isDownloaded`
-- **받는 것**: 카드(cards)의 `findCardsFromMemo`
+- **받는 것**: 카드(cards)의 `findCardsFromTranscript` (받아쓰기가 끝나면 회의록에서 일정, 약속, 할 일을 찾아 확인 기다리는 카드로 넣어요)
 
 ## 꼭 알아 둘 것
 

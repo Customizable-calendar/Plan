@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import type { Card } from '@noteapp/shared';
+import { router } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Share, Text, View } from 'react-native';
 
-import { findCardsFromMemo } from '@/features/cards';
+import { cardDetail, findCardsFromTranscript, typeLabel } from '@/features/cards';
 
-import { MAX_SECONDS } from './engine';
+import { MAX_SECONDS, type SttResult } from './engine';
 import type { SttModel, SttModelId } from './models';
 import { useDictation } from './useDictation';
 import { type ModelRow, useModels } from './useModels';
@@ -102,17 +104,30 @@ function ModelItem({
   );
 }
 
-function Recorder({ model }: { model: SttModel }) {
-  const { state, start, finish, cancel, reset } = useDictation(model);
-  const [cardMessage, setCardMessage] = useState<string | null>(null);
+/** 받아쓴 글에서 카드를 찾는 상태: 찾는 중, 찾은 카드, 실패 */
+type Found =
+  { kind: 'finding' } | { kind: 'found'; cards: Card[] } | { kind: 'error'; message: string };
 
-  const findCards = async (text: string) => {
+/** 구간마다 줄을 나눠서 넘겨요. 말이 끊긴 곳이 문장 경계일 때가 많아요. */
+const transcriptText = (r: SttResult) =>
+  r.segments.length > 1 ? r.segments.map((s) => s.text).join('\n') : r.text;
+
+function Recorder({ model }: { model: SttModel }) {
+  const [found, setFound] = useState<Found | null>(null);
+
+  // 받아쓰기가 끝나면 바로 회의록에서 일정·약속·할 일을 찾아 확인 기다리는 카드로 넣어요.
+  const findCards = useCallback(async (result: SttResult) => {
+    const text = transcriptText(result);
+    if (!text.trim()) return;
+    setFound({ kind: 'finding' });
     try {
-      setCardMessage(await findCardsFromMemo(text));
+      setFound({ kind: 'found', cards: await findCardsFromTranscript(text) });
     } catch (e) {
-      setCardMessage(e instanceof Error ? e.message : String(e));
+      setFound({ kind: 'error', message: e instanceof Error ? e.message : String(e) });
     }
-  };
+  }, []);
+
+  const { state, start, finish, cancel, reset } = useDictation(model, findCards);
 
   return (
     <View className="gap-4">
@@ -130,7 +145,7 @@ function Recorder({ model }: { model: SttModel }) {
         <BigButton
           label="말하기 시작"
           onPress={() => {
-            setCardMessage(null);
+            setFound(null);
             void start();
           }}
         />
@@ -153,16 +168,52 @@ function Recorder({ model }: { model: SttModel }) {
           </Text>
           {state.result.text ? (
             <View className="flex-row flex-wrap gap-2">
-              <SmallButton label="카드 찾기" onPress={() => findCards(state.result.text)} primary />
               <SmallButton
                 label="공유"
                 onPress={() => Share.share({ message: state.result.text })}
               />
             </View>
           ) : null}
-          {cardMessage ? <Text className="text-[14px] text-foreground">{cardMessage}</Text> : null}
         </View>
       ) : null}
+
+      {state.phase === 'done' && found ? <FoundCards found={found} /> : null}
+    </View>
+  );
+}
+
+/** 받아쓴 글에서 찾은 카드. 카드 탭의 "확인 기다리는 카드"에도 같이 들어가요. */
+function FoundCards({ found }: { found: Found }) {
+  if (found.kind === 'finding')
+    return (
+      <Text className="text-[14px] text-muted-foreground">일정, 약속, 할 일을 찾는 중이에요</Text>
+    );
+  if (found.kind === 'error')
+    return <Text className="text-[14px] text-destructive">{found.message}</Text>;
+  if (found.cards.length === 0)
+    return (
+      <Text className="text-[14px] text-muted-foreground">
+        등록할 만한 일정이나 할 일은 못 찾았어요.
+      </Text>
+    );
+
+  return (
+    <View className="gap-3 rounded-xl bg-primary-soft p-4">
+      <Text className="text-[15px] font-bold text-foreground">
+        카드 {found.cards.length}장을 추천해요
+      </Text>
+      {found.cards.map((c) => {
+        const when = cardDetail(c);
+        return (
+          <View key={c.id} className="gap-0.5">
+            <Text className="text-[15px] text-foreground">
+              <Text className="font-bold">{typeLabel[c.type]}</Text> {c.title}
+            </Text>
+            {when ? <Text className="text-[13px] text-muted-foreground">{when}</Text> : null}
+          </View>
+        );
+      })}
+      <SmallButton label="카드 탭에서 확인하기" onPress={() => router.push('/cards')} primary />
     </View>
   );
 }

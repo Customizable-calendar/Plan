@@ -51,11 +51,11 @@ async function update(id: string, patch: Partial<Pick<Card, 'status' | 'title'>>
   }
 }
 
-/** 새로 찾은 카드를 맨 앞에 붙이고 저장해요. 저장이 실패하면 다시 빼요. 몇 장 붙였는지 돌려줘요. */
-export async function addFromText(text: string): Promise<number> {
+/** 새로 찾은 카드를 맨 앞에 붙이고 저장해요. 저장이 실패하면 다시 빼요. 붙인 카드를 돌려줘요. */
+export async function addFromText(text: string, options?: { spoken?: boolean }): Promise<Card[]> {
   await load();
-  const found = await extractFromText(text);
-  if (found.length === 0) return 0;
+  const found = await extractFromText(text, options);
+  if (found.length === 0) return [];
   const ids = new Set(found.map((c) => c.id));
   cards = [...found, ...(cards ?? []).filter((c) => !ids.has(c.id))];
   emit();
@@ -66,7 +66,7 @@ export async function addFromText(text: string): Promise<number> {
     emit();
     throw error;
   }
-  return found.length;
+  return found;
 }
 
 // ---------- 되돌리기 ----------

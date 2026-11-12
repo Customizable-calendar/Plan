@@ -17,10 +17,15 @@ const messageOf = (e: unknown) =>
 /**
  * 녹음 버튼 하나로 쓰는 받아쓰기 훅이에요. 편집기(A) 녹음 버튼도 이걸 쓰면 돼요.
  * start() → 말하기 → finish() → state.result.text
+ * onDone: 받아쓰기가 끝나면 결과로 한 번 불러요. (최대 길이에서 알아서 끝나도요)
  */
-export function useDictation(model: SttModel) {
+export function useDictation(model: SttModel, onDone?: (result: SttResult) => void) {
   const [state, setState] = useState<DictationState>({ phase: 'idle' });
   const current = useRef<Dictation | null>(null);
+  const done = useRef(onDone);
+  useEffect(() => {
+    done.current = onDone;
+  }, [onDone]);
 
   const start = useCallback(async () => {
     try {
@@ -39,6 +44,7 @@ export function useDictation(model: SttModel) {
     try {
       const result = await dictation.finish((ratio) => setState({ phase: 'transcribing', ratio }));
       setState({ phase: 'done', result });
+      done.current?.(result);
     } catch (e) {
       setState({ phase: 'error', message: messageOf(e) });
     }
