@@ -80,3 +80,33 @@ export function deleteModel(model: SttModel): void {
   const file = modelFile(model);
   if (file.exists) file.delete();
 }
+
+// ---------- 말소리 감지(VAD) 모델 ----------
+// Silero VAD(MIT)의 ggml 판이에요. 작아서(약 0.9MB) 처음 받아쓸 때 알아서 받아요.
+// 못 받으면 소리 크기만 보고 잘라요(받아쓰기는 그대로 돼요).
+
+const VAD_MODEL = {
+  file: 'ggml-silero-v6.2.0.bin',
+  bytes: 885_098,
+  url: 'https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin',
+};
+
+export function vadFile(): File {
+  return new File(folder(), VAD_MODEL.file);
+}
+
+/** VAD 모델이 없으면 받아요. 실패하면 던져요. */
+export async function ensureVadModel(): Promise<File> {
+  const file = vadFile();
+  if (file.exists && file.size === VAD_MODEL.bytes) return file;
+  const part = new File(folder(), `${VAD_MODEL.file}.part`);
+  if (part.exists) part.delete();
+  await File.downloadFileAsync(VAD_MODEL.url, part, { idempotent: true });
+  if (part.size !== VAD_MODEL.bytes) {
+    part.delete();
+    throw new SttError('말소리 감지 모델이 덜 받아졌어요.');
+  }
+  if (file.exists) file.delete();
+  part.move(file);
+  return file;
+}

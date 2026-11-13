@@ -1,22 +1,23 @@
 import { punctuateSpoken } from '@noteapp/extractor';
 import { NativeModules, PermissionsAndroid, Platform, TurboModuleRegistry } from 'react-native';
 
-import { BYTES_PER_SECOND, createChunker, SAMPLE_RATE } from './chunker';
+import { BYTES_PER_SECOND, type Chunk, createChunker, SAMPLE_RATE } from './chunker';
 import { SttError } from './errors';
 import { isDownloaded, modelFile, type SttModel } from './models';
 import { clearSession, leftover, type SavedChunk, saveChunk, saveSegments } from './session';
+import { cutAtGap, keepSpeech } from './speech';
+import { cleanSegment, promptFor } from './text';
+import { prepareVad, releaseVad, speechIn } from './vad';
 
 // 기기 안에서 받아써요(whisper.rn = whisper.cpp). 소리는 기기 밖으로 나가지 않아요.
 // 네이티브 모듈이라 Expo Go에는 없어요. 개발 빌드(EAS)에서만 돌아요.
 // 그래서 라이브러리는 쓸 때 불러오고(require), 없으면 isSttAvailable()이 false예요.
 
-/**
- * whisper에 먼저 들려주는 예시 문장. 부호가 찍힌 문장을 보여 주면 받아쓴 글에도 마침표·물음표를
- * 찍고 문장을 나눠요. 자주 나오는 팀 이름·말도 같이 넣어서 맞게 받아쓰게 해요.
- */
-const PROMPT =
-  '안녕하세요. 오늘 회의를 시작하겠습니다. 민성, 준호, 재민, 서현이 참석했어요. ' +
-  '다음 주 화요일 오후 2시에 디자인 리뷰를 해요. 금요일까지 발표 자료를 만들어 주세요. 질문 있나요?';
+/** 밀린 조각이 이만큼 이하면 후보 여러 개를 비교해서(beam search) 더 정확하게 받아써요. */
+const BEAM_BACKLOG = 1;
+const BEAM_SIZE = 5;
+/** 미리 받아쓰기(회색 글) 사이에 쉬는 시간. 폰이 쉴 틈을 줘요. */
+const PREVIEW_EVERY_MS = 1500;
 
 /**
  * 한 번에 녹음할 수 있는 최대 길이. 녹음 형식은 whisper가 받는 16kHz 모노 16비트 PCM이에요.
@@ -48,7 +49,13 @@ interface WhisperResult {
 interface WhisperContext {
   transcribeData(
     pcm: ArrayBuffer,
-    options: { language: string; prompt?: string; onProgress?: (percent: number) => void },
+    options: {
+      language: string;
+      prompt?: string;
+      beamSize?: number;
+      bestOf?: number;
+      onProgress?: (percent: number) => void;
+    },
   ): { stop(): Promise<void>; promise: Promise<WhisperResult> };
   release(): Promise<void>;
 }
@@ -74,6 +81,8 @@ export interface Dictation {
   seconds(): number;
   /** 지금까지 받아쓴 글. 말하는 동안 조각(20~30초)마다 늘어나요. */
   partial(): string;
+  /** 아직 조각이 안 된 말을 미리 받아쓴 글. 조각을 받아쓰면 partial로 넘어가요. */
+  preview(): string;
   /** 녹음은 됐지만 아직 못 받아쓴 조각 수 */
   backlog(): number;
   /** 녹음을 끝내고 남은 조각을 받아써요. onProgress는 0~1 */
@@ -125,11 +134,34 @@ function decodeBase64(base64: string): Uint8Array {
   return bytes;
 }
 
-/** 조용할 때 whisper가 자주 지어내는 말. 예시 문장(PROMPT)이 그대로 나온 것도 빼요. */
-const PROMPT_SENTENCES = PROMPT.split(/(?<=[.?])\s+/).filter((t) => t.length >= 15);
-const isMadeUp = (text: string) =>
-  /시청해\s?주셔서\s?감사합니다|구독과\s?좋아요|자막\s?제공/.test(text) ||
-  PROMPT_SENTENCES.includes(text);
+const toArrayBuffer = (bytes: Uint8Array) =>
+  bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+
+/** whisper 조각들을 다듬어서 붙여요. 앞 글(previous)과 같은 문장은 빼요. */
+function cleanTexts(result: WhisperResult, previous?: string): string[] {
+  const texts: string[] = [];
+  for (const s of result.segments) {
+    const text = cleanSegment(s.text, texts[texts.length - 1] ?? previous);
+    if (text) texts.push(text);
+  }
+  return texts;
+}
+
+/**
+ * 조각을 말소리만 남게 다듬어요(VAD). 말소리가 없으면 null이라 받아쓰지 않아요.
+ * VAD를 못 쓰면 소리 크기로 본 결과(silent)를 따라요.
+ */
+async function speechOnly(chunk: Chunk): Promise<{ pcm: Uint8Array; offsetMs: number } | null> {
+  const spans = await speechIn(chunk.pcm);
+  if (spans === null) return chunk.silent ? null : chunk;
+  return keepSpeech(chunk.pcm, chunk.offsetMs, spans);
+}
+
+/** 30초가 되도록 쉬는 곳이 없을 때 말소리 감지로 말이 끊기지 않는 곳을 찾아요. */
+async function findGap(pcm: Uint8Array, minBytes: number): Promise<number | null> {
+  const spans = await speechIn(pcm);
+  return spans === null ? null : cutAtGap(spans, pcm.length, minBytes);
+}
 
 function resultOf(segments: SttSegment[], durationMs: number): SttResult {
   return {
@@ -146,6 +178,9 @@ function resultOf(segments: SttSegment[], durationMs: number): SttResult {
  */
 function createTranscriber(context: Promise<WhisperContext>, segments: SttSegment[]) {
   let chain: Promise<void> = Promise.resolve();
+  // 미리 받아쓰기는 조각이 없을 때만 돌고, 조각이 오면 멈춰요(모델 하나를 같이 써요).
+  let previewJob: { stop(): Promise<void> } | null = null;
+  let previewDone: Promise<unknown> = Promise.resolve();
   let queued = 0;
   let done = 0;
   let inChunk = 0; // 지금 조각 진행 0~1
@@ -153,28 +188,36 @@ function createTranscriber(context: Promise<WhisperContext>, segments: SttSegmen
   let cancelled = false;
   let running: { stop(): Promise<void> } | null = null;
 
-  const run = async (saved: Promise<SavedChunk>) => {
+  const run = async (saved: Promise<SavedChunk | null>) => {
     const chunk = await saved;
+    if (!chunk) return; // 말소리가 없는 조각
     const bytes = await chunk.file.bytes();
-    const pcm = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-    const job = (await context).transcribeData(pcm, {
+    await previewJob?.stop().catch(() => {});
+    await previewDone;
+    // 밀린 게 적으면 후보 여러 개를 비교해서 더 정확하게, 많으면 빠르게 받아써요.
+    const careful = queued - done <= BEAM_BACKLOG;
+    const job = (await context).transcribeData(toArrayBuffer(bytes), {
       language: 'ko',
-      prompt: PROMPT,
+      // 앞에서 받아쓴 글 끝을 같이 줘서 조각이 바뀌어도 말이 이어지게 해요.
+      prompt: promptFor(segments.map((s) => s.text)),
+      ...(careful ? { beamSize: BEAM_SIZE } : { bestOf: 2 }),
       onProgress: (p) => (inChunk = p / 100),
     });
     running = job;
     const result = await job.promise;
     running = null;
     if (result.isAborted || cancelled) return;
+    let previous = segments[segments.length - 1]?.text;
     for (const s of result.segments) {
-      const text = s.text.trim();
+      const text = cleanSegment(s.text, previous);
+      if (!text) continue;
+      previous = text;
       // whisper.cpp 시간 단위는 10ms예요.
-      if (text && !isMadeUp(text))
-        segments.push({
-          text,
-          startMs: chunk.offsetMs + s.t0 * 10,
-          endMs: chunk.offsetMs + s.t1 * 10,
-        });
+      segments.push({
+        text,
+        startMs: chunk.offsetMs + s.t0 * 10,
+        endMs: chunk.offsetMs + s.t1 * 10,
+      });
     }
     await saveSegments(segments);
     chunk.file.delete();
@@ -183,7 +226,8 @@ function createTranscriber(context: Promise<WhisperContext>, segments: SttSegmen
   const progress = () => (queued === 0 ? 1 : Math.min(1, (done + inChunk) / queued));
 
   return {
-    add(saved: Promise<SavedChunk>) {
+    /** onDone: 이 조각을 다 받아쓰면(건너뛰어도) 불러요. */
+    add(saved: Promise<SavedChunk | null>, onDone?: () => void) {
       queued++;
       saved.catch(() => {});
       chain = chain.then(async () => {
@@ -195,10 +239,35 @@ function createTranscriber(context: Promise<WhisperContext>, segments: SttSegmen
           failure = e;
         } finally {
           done++;
+          onDone?.();
         }
       });
     },
     backlog: () => queued - done,
+    /**
+     * 아직 조각이 안 된 소리를 빠르게(후보 하나로) 받아써 봐요. 기기에 적지 않아요.
+     * 받아쓸 조각이 있거나 이미 돌고 있으면 null이에요.
+     */
+    async preview(pcm: Uint8Array): Promise<string | null> {
+      if (queued > done || cancelled || previewJob) return null;
+      const ctx = await context;
+      if (queued > done || cancelled || previewJob) return null;
+      try {
+        const job = ctx.transcribeData(toArrayBuffer(pcm), {
+          language: 'ko',
+          prompt: promptFor(segments.map((s) => s.text)),
+        });
+        previewJob = job;
+        previewDone = job.promise.catch(() => {});
+        const result = await job.promise;
+        if (result.isAborted || cancelled) return null;
+        return cleanTexts(result, segments[segments.length - 1]?.text).join(' ');
+      } catch {
+        return null;
+      } finally {
+        previewJob = null;
+      }
+    },
     /** 넣은 조각을 다 받아쓸 때까지 기다려요. 실패했으면 던져요. */
     async idle(onProgress?: (ratio: number) => void) {
       const timer = onProgress ? setInterval(() => onProgress(progress()), 300) : null;
@@ -217,8 +286,10 @@ function createTranscriber(context: Promise<WhisperContext>, segments: SttSegmen
     },
     async cancel() {
       cancelled = true;
+      await previewJob?.stop().catch(() => {});
       await running?.stop().catch(() => {});
       await chain;
+      await previewDone;
     },
   };
 }
@@ -232,13 +303,20 @@ export async function startDictation(model: SttModel): Promise<Dictation> {
   // 모델은 녹음하는 동안 미리 열어 둬요.
   const contextReady = contextFor(model);
   contextReady.catch(() => {});
+  prepareVad();
 
   const segments: SttSegment[] = [];
   const transcriber = createTranscriber(contextReady, segments);
+  /** 여기(바이트)까지는 조각으로 받아써서 partial에 들어갔어요. */
+  let confirmed = 0;
   const chunker = createChunker((chunk) => {
+    const end = Math.round((chunk.offsetMs / 1000) * BYTES_PER_SECOND) + chunk.pcm.length;
     // 말이 없는 조각은 받아쓰지 않아요(없는 말을 지어내지 않게).
-    if (!chunk.silent) transcriber.add(saveChunk(chunk.offsetMs, chunk.pcm));
-  });
+    const saved = speechOnly(chunk).then((kept) =>
+      kept ? saveChunk(kept.offsetMs, kept.pcm) : null,
+    );
+    transcriber.add(saved, () => (confirmed = Math.max(confirmed, end)));
+  }, findGap);
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const audio = require('@fugood/react-native-audio-pcm-stream').default as LiveAudioStream;
@@ -268,9 +346,25 @@ export async function startDictation(model: SttModel): Promise<Dictation> {
     subscription?.remove();
   };
 
+  // 말하는 동안 아직 조각이 안 된 말을 계속 미리 받아써요(회색 글).
+  // 조각을 받아쓰는 동안에는 쉬어요. 조각이 먼저예요.
+  let preview = { text: '', from: 0 };
+  void (async () => {
+    while (!stopped) {
+      await new Promise((r) => setTimeout(r, PREVIEW_EVERY_MS));
+      const pending = chunker.pendingPcm();
+      if (stopped || pending.length < BYTES_PER_SECOND) continue;
+      const from = chunker.emittedBytes();
+      const text = await transcriber.preview(pending);
+      if (text !== null && !stopped) preview = { text, from };
+    }
+  })();
+
   return {
     seconds: () => Math.floor(total / BYTES_PER_SECOND),
     partial: () => resultOf(segments, 0).text,
+    // 이 말이 든 조각을 받아쓰고 나면 partial에 들어가서 여기서는 빼요.
+    preview: () => (preview.from >= confirmed ? preview.text : ''),
     backlog: () => transcriber.backlog(),
     async cancel() {
       await stop();
@@ -325,6 +419,7 @@ export const discardLeftover = clearSession;
 
 /** 열어 둔 모델을 닫아요(메모리 정리). 모델을 지우기 전에 불러요. */
 export async function releaseStt(): Promise<void> {
+  await releaseVad();
   if (!loaded) return;
   await loaded.context.release();
   loaded = null;
