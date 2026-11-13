@@ -48,7 +48,7 @@ export function EditorScreen() {
   // 한 번이라도 고쳤는지, 마지막으로 '저장'을 누른 시각
   const [dirty, setDirty] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
-  // 미리보기: 본문의 마크다운 기호를 제목, 표, 체크 모양으로 꾸며서 보여줘요. 읽기 전용이에요.
+  // 미리보기: 본문의 마크다운 기호를 제목, 표, 체크 모양으로 꾸며서 보여주고, 그 자리에서 고칠 수 있어요.
   const [previewing, setPreviewing] = useState(false);
   const bodyRef = useRef<TextInputInstance>(null);
 
@@ -209,7 +209,7 @@ export function EditorScreen() {
           </Text>
           <View style={styles.divider} />
           {previewing ? (
-            <Preview body={doc.body} />
+            <Preview body={doc.body} onChange={(body) => edit({ body })} />
           ) : (
             <TextInput
               ref={bodyRef}
