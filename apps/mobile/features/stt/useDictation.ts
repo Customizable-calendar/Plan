@@ -13,8 +13,8 @@ import type { SttModel } from './models';
 
 export type DictationState =
   | { phase: 'idle' }
-  /** partial: 지금까지 받아쓴 글, backlog: 아직 못 받아쓴 조각 수 */
-  | { phase: 'recording'; seconds: number; partial: string; backlog: number }
+  /** partial: 받아쓴 글, preview: 아직 조각이 안 된 말을 미리 받아쓴 글, backlog: 못 받아쓴 조각 수 */
+  | { phase: 'recording'; seconds: number; partial: string; preview: string; backlog: number }
   | { phase: 'transcribing'; ratio: number }
   | { phase: 'done'; result: SttResult }
   | { phase: 'error'; message: string };
@@ -26,7 +26,7 @@ const KEEP_AWAKE_TAG = 'stt';
 
 /**
  * 녹음 버튼 하나로 쓰는 받아쓰기 훅이에요. 편집기(A) 녹음 버튼도 이걸 쓰면 돼요.
- * start() → 말하기(조각마다 state.partial이 늘어나요) → finish() → state.result.text
+ * start() → 말하기(state.preview에 바로, 조각마다 state.partial에 글이 늘어나요) → finish() → state.result.text
  * resume(): 앱이 꺼져서 다 못 받아쓴 녹음을 이어서 받아써요(leftoverSeconds()로 있는지 봐요).
  * onDone: 받아쓰기가 끝나면 결과로 한 번 불러요. (최대 길이에서 알아서 끝나도요)
  */
@@ -41,7 +41,7 @@ export function useDictation(model: SttModel, onDone?: (result: SttResult) => vo
   const start = useCallback(async () => {
     try {
       current.current = await startDictation(model);
-      setState({ phase: 'recording', seconds: 0, partial: '', backlog: 0 });
+      setState({ phase: 'recording', seconds: 0, partial: '', preview: '', backlog: 0 });
     } catch (e) {
       setState({ phase: 'error', message: messageOf(e) });
     }
@@ -90,7 +90,14 @@ export function useDictation(model: SttModel, onDone?: (result: SttResult) => vo
       if (!d) return;
       const seconds = d.seconds();
       if (seconds >= MAX_SECONDS) void finish();
-      else setState({ phase: 'recording', seconds, partial: d.partial(), backlog: d.backlog() });
+      else
+        setState({
+          phase: 'recording',
+          seconds,
+          partial: d.partial(),
+          preview: d.preview(),
+          backlog: d.backlog(),
+        });
     }, 500);
     return () => clearInterval(timer);
   }, [recording, finish]);

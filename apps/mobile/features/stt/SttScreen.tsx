@@ -193,9 +193,18 @@ function Recorder({ model }: { model: SttModel }) {
             <Text className="text-[13px] font-bold text-muted-foreground">
               {state.backlog > 0 ? `받아쓰는 중 (밀린 조각 ${state.backlog}개)` : '받아쓰는 중'}
             </Text>
-            <Text className="text-[16px] leading-6 text-foreground">
-              {state.partial || '말이 쉬는 곳마다(20~30초) 글이 나와요.'}
-            </Text>
+            {state.partial || state.preview ? (
+              <Text className="text-[16px] leading-6 text-foreground">
+                {state.partial}
+                {state.partial && state.preview ? ' ' : ''}
+                {/* 미리 받아쓴 글이라 조각을 받아쓰면 조금 바뀔 수 있어요. */}
+                <Text className="text-muted-foreground">{state.preview}</Text>
+              </Text>
+            ) : (
+              <Text className="text-[16px] leading-6 text-muted-foreground">
+                말하면 몇 초 뒤에 글이 나와요. 회색 글은 미리 받아쓴 거라 조금 바뀔 수 있어요.
+              </Text>
+            )}
           </View>
           <SmallButton label="녹음 버리기" onPress={cancel} />
         </View>
