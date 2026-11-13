@@ -28,5 +28,5 @@
   "category": "meeting",
   "icon": "bubble",
   "tags": ["#회의록", "#협업"],
-  "defaultContent": "## 일시\n- \n\n## 참석자\n- \n\n## 안건\n1. \n\n## 주요 논의\n- \n\n## 결정 사항\n- \n\n## Action Items\n- [ ] 담당: / 마감: \n"
+  "defaultContent": "## 회의 정보\n- 일시: \n- 장소: \n- 참석자: \n- 기록: \n\n## 안건\n1. \n2. \n\n## 논의 내용\n### 안건 1\n- \n\n### 안건 2\n- \n\n## 결정 사항\n- \n\n## 할 일\n- [ ] 할 일: , 담당: , 마감: \n\n## 남은 질문\n- \n\n## 다음 회의\n- 일시: \n- 다룰 것: \n"
 }
