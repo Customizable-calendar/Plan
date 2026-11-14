@@ -28,5 +28,5 @@
   "category": "work",
   "icon": "calendar",
   "tags": ["#업무일지", "#데일리"],
-  "defaultContent": "## 오늘의 목표\n- \n\n## 진행 업무\n- \n\n## 이슈\n- \n\n## 내일 할 일\n- [ ] \n"
+  "defaultContent": "## 오늘의 목표\n- [ ] \n- [ ] \n\n## 한 일\n- \n\n## 못 한 일과 이유\n- 못 한 일: \n- 이유: \n\n## 이슈와 공유할 것\n- \n\n## 내일 할 일\n- [ ] \n\n## 한 줄 회고\n> \n"
 }
