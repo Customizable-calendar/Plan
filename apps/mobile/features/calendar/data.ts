@@ -3,7 +3,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 
 import { dataSource, fromFixture } from '@/lib/data-source';
 
-import { dayKey, overlaps, type TimeSlot } from './model';
+import { overlaps, type TimeSlot } from './model';
 import taskExamples from './tasks.fixture.json';
 
 type State = { events: CalendarEvent[]; tasks: Card[]; loading: boolean; error: string };
@@ -27,10 +27,9 @@ export async function loadCalendar(): Promise<void> {
         fromFixture(fixtures.events),
         fromFixture(fixtures.cards),
       ]);
-      // 고정된 예시의 날짜를 오늘로 옮겨 처음 열어도 내용을 볼 수 있게 해요.
-      const today = dayKey(new Date());
+      // 공용 일정 예시는 서울 시간 11월 12일과 14일로 옮겨 표시해요.
       const offset =
-        Date.parse(`${today}T00:00:00+09:00`) - Date.parse('2026-10-27T00:00:00+09:00');
+        Date.parse('2026-11-14T00:00:00+09:00') - Date.parse('2026-10-27T00:00:00+09:00');
       const shift = (value: string) => new Date(Date.parse(value) + offset).toISOString();
       const template = cards.find((card) => card.id === 'card-2');
       if (!template) throw new Error('할 일 예시를 불러오지 못했어요.');
@@ -40,30 +39,48 @@ export async function loadCalendar(): Promise<void> {
         title: example.title,
         status: 'confirmed',
         createdAt: shift(template.createdAt),
-        dueAt: new Date(`${today}T18:00:00+09:00`).toISOString(),
+        dueAt: new Date(`${example.date}T18:00:00+09:00`).toISOString(),
         ...(example.hour === undefined
           ? {}
           : {
               startAt: new Date(
-                `${today}T${String(example.hour).padStart(2, '0')}:00:00+09:00`,
+                `${example.date}T${String(example.hour).padStart(2, '0')}:00:00+09:00`,
               ).toISOString(),
               endAt: new Date(
-                `${today}T${String(example.hour + 1).padStart(2, '0')}:00:00+09:00`,
+                `${example.date}T${String(example.hour + 1).padStart(2, '0')}:00:00+09:00`,
               ).toISOString(),
             }),
       }));
       const demoEvents: CalendarEvent[] = [
-        { id: 'demo-morning', title: '예시 · 아침 산책', startAt: '07:00', endAt: '08:00' },
-        { id: 'demo-overlap-1', title: '예시 · 자료 검토', startAt: '15:00', endAt: '16:00' },
-        { id: 'demo-overlap-2', title: '예시 · 팀 체크인', startAt: '15:00', endAt: '16:00' },
-      ].map((event) => ({
+        {
+          id: 'demo-morning',
+          date: '2026-11-13',
+          title: '예시 아침 산책',
+          startAt: '07:00',
+          endAt: '08:00',
+        },
+        {
+          id: 'demo-overlap-1',
+          date: '2026-11-14',
+          title: '예시 자료 검토',
+          startAt: '15:00',
+          endAt: '16:00',
+        },
+        {
+          id: 'demo-overlap-2',
+          date: '2026-11-14',
+          title: '예시 팀 체크인',
+          startAt: '15:00',
+          endAt: '16:00',
+        },
+      ].map(({ date, ...event }) => ({
         ...event,
         calendarId: 'demo',
         allDay: false,
         timezone: 'Asia/Seoul',
         source: 'google' as const,
-        startAt: new Date(`${today}T${event.startAt}:00+09:00`).toISOString(),
-        endAt: new Date(`${today}T${event.endAt}:00+09:00`).toISOString(),
+        startAt: new Date(`${date}T${event.startAt}:00+09:00`).toISOString(),
+        endAt: new Date(`${date}T${event.endAt}:00+09:00`).toISOString(),
       }));
       publish({
         events: [
@@ -127,9 +144,14 @@ export async function saveTimeSlot(id: string, slot: TimeSlot): Promise<void> {
     Date.parse(slot.endAt) <= Date.parse(slot.startAt)
   )
     throw new Error('시간 범위를 확인해 주세요.');
+  if (Date.parse(slot.startAt) < Date.now())
+    throw new Error('지난 시간이에요. 후보를 다시 골라 주세요.');
   if (task.dueAt && Date.parse(slot.endAt) > Date.parse(task.dueAt))
     throw new Error('마감 전 시간을 골라 주세요.');
-  const busy = [...state.events, ...state.tasks.filter((item) => item.id !== id)];
+  const busy = [
+    ...state.events,
+    ...state.tasks.filter((item) => item.id !== id && item.status !== 'dismissed'),
+  ];
   if (
     busy.some(
       (item) =>

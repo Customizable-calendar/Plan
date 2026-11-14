@@ -1,4 +1,5 @@
 import type { Card } from '@noteapp/shared';
+import { space } from '@noteapp/ui';
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -44,45 +45,51 @@ export function TimeCandidates({
     <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={styles.screen}>
         <ScrollView contentContainerStyle={styles.content}>
-          <Text style={styles.muted}>시간 잡기 · {day} · 서울 시간</Text>
+          <Text style={styles.muted}>시간 잡기 ({day}, 서울 시간)</Text>
           <Text accessibilityRole="header" style={styles.title}>
             {task.title}
           </Text>
-          <Text style={styles.text}>어느 시간이 좋을까요?</Text>
-          <Text style={styles.muted}>각 60분 · 선택 후 저장해야 반영돼요.</Text>
-          {slots.map((slot, i) => (
-            <Pressable
-              key={slot.startAt}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: selected === slot.startAt }}
-              onPress={() => {
-                setSelected(slot.startAt);
-                setError('');
-              }}
-              style={[
-                styles.card,
-                {
-                  borderColor: selected === slot.startAt ? colors.primary : colors.border,
-                  borderWidth: selected === slot.startAt ? 2 : 1,
-                  backgroundColor: selected === slot.startAt ? colors.primarySoft : colors.card,
-                },
-              ]}
+          <Text style={styles.muted}>60분씩 제안해요.</Text>
+          {slots.length > 0 && (
+            <ScrollView
+              accessibilityLabel="시간 후보 목록"
+              nestedScrollEnabled
+              style={{ maxHeight: 180 }}
+              contentContainerStyle={{ gap: space.md }}
             >
-              <Text style={styles.heading}>
-                {selected === slot.startAt ? '●' : '○'} {timeLabel(slot.startAt)}–
-                {timeLabel(slot.endAt)}
-              </Text>
-              <Text style={{ color: colors.primary, fontWeight: '600' }}>
-                {i === 0 ? '잘 맞음' : '다른 후보'}
-              </Text>
-              <Text style={styles.muted}>{slot.reason}</Text>
-            </Pressable>
-          ))}
-          {slots.length < 3 && (
+              {slots.map((slot, i) => (
+                <Pressable
+                  key={slot.startAt}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selected === slot.startAt }}
+                  onPress={() => {
+                    setSelected(slot.startAt);
+                    setError('');
+                  }}
+                  style={[
+                    styles.card,
+                    {
+                      borderColor: selected === slot.startAt ? colors.primary : colors.border,
+                      borderWidth: selected === slot.startAt ? 2 : 1,
+                      backgroundColor: selected === slot.startAt ? colors.primarySoft : colors.card,
+                    },
+                  ]}
+                >
+                  <Text style={styles.heading}>
+                    {selected === slot.startAt ? '●' : '○'} {timeLabel(slot.startAt)} ~
+                    {timeLabel(slot.endAt)}
+                  </Text>
+                  <Text style={{ color: colors.primary, fontWeight: '600' }}>
+                    {i === 0 ? '잘 맞음' : '다른 후보'}
+                  </Text>
+                  <Text style={styles.muted}>{slot.reason}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+          {slots.length === 0 && (
             <Text style={styles.text}>
-              {slots.length === 0
-                ? '마감과 일정을 고려하면 이 날짜에는 빈 시간이 없어요. 다른 날짜를 골라 주세요.'
-                : '마감과 일정을 고려해 가능한 후보만 표시했어요.'}
+              현재 시각과 마감, 기존 일정을 고려하면 가능한 시간이 없어요.
             </Text>
           )}
           {chosen && (
@@ -93,7 +100,7 @@ export function TimeCandidates({
               ]}
             >
               <Text style={styles.text}>
-                선택한 후보 · {timeLabel(chosen.startAt)}–{timeLabel(chosen.endAt)}
+                선택한 시간 {timeLabel(chosen.startAt)} ~ {timeLabel(chosen.endAt)}
               </Text>
               <Text style={styles.muted}>아직 저장되지 않았어요.</Text>
             </View>
