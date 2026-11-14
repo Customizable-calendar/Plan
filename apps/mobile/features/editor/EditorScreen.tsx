@@ -22,6 +22,7 @@ import { listEventsForSlash, openDocument, saveDocument } from './data';
 import { FormatBar } from './FormatBar';
 import { longDate, savedTime, writingMethod } from './format';
 import { applyLineFormat, type LineFormat } from './markdown';
+import { Preview } from './Preview';
 import { buildSlashItems, findSlashQuery, type SlashItem } from './slash';
 import { SlashMenu } from './SlashMenu';
 import { Toolbar } from './Toolbar';
@@ -47,6 +48,8 @@ export function EditorScreen() {
   // 한 번이라도 고쳤는지, 마지막으로 '저장'을 누른 시각
   const [dirty, setDirty] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  // 미리보기: 본문의 마크다운 기호를 제목, 표, 체크 모양으로 꾸며서 보여주고, 그 자리에서 고칠 수 있어요.
+  const [previewing, setPreviewing] = useState(false);
   const bodyRef = useRef<TextInputInstance>(null);
 
   useEffect(() => {
@@ -151,6 +154,22 @@ export function EditorScreen() {
             <View style={styles.headerActions}>
               <Pressable
                 accessibilityRole="button"
+                accessibilityLabel={previewing ? '편집으로 돌아가기' : '미리보기'}
+                hitSlop={10}
+                onPress={() => setPreviewing((on) => !on)}
+              >
+                <SymbolView
+                  name={
+                    previewing
+                      ? { ios: 'pencil', android: 'edit', web: 'edit' }
+                      : { ios: 'eye', android: 'visibility', web: 'visibility' }
+                  }
+                  size={22}
+                  tintColor={colors.ink}
+                />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
                 accessibilityLabel="공유"
                 hitSlop={10}
                 onPress={share}
@@ -189,36 +208,42 @@ export function EditorScreen() {
             {savedAt ? `, ${savedTime(savedAt)} 임시 저장됨` : ''}
           </Text>
           <View style={styles.divider} />
-          <TextInput
-            ref={bodyRef}
-            value={doc.body}
-            onChangeText={(body) => edit({ body })}
-            onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
-            onFocus={() => setBodyFocused(true)}
-            onBlur={() => setBodyFocused(false)}
-            placeholder="자유롭게 써요. / 를 치면 명령이 나와요."
-            placeholderTextColor={colors.muted}
-            multiline
-            scrollEnabled={false} // 바깥 ScrollView가 스크롤해요
-            textAlignVertical="top"
-            style={styles.body}
-          />
+          {previewing ? (
+            <Preview body={doc.body} onChange={(body) => edit({ body })} />
+          ) : (
+            <TextInput
+              ref={bodyRef}
+              value={doc.body}
+              onChangeText={(body) => edit({ body })}
+              onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
+              onFocus={() => setBodyFocused(true)}
+              onBlur={() => setBodyFocused(false)}
+              placeholder="자유롭게 써요. / 를 치면 명령이 나와요."
+              placeholderTextColor={colors.muted}
+              multiline
+              scrollEnabled={false} // 바깥 ScrollView가 스크롤해요
+              textAlignVertical="top"
+              style={styles.body}
+            />
+          )}
         </View>
       </ScrollView>
 
-      {slash && <SlashMenu items={slashItems} onPick={pickSlash} />}
+      {!previewing && slash && <SlashMenu items={slashItems} onPick={pickSlash} />}
 
-      <FormatBar onFormat={format} />
+      {!previewing && <FormatBar onFormat={format} />}
       <View style={{ paddingBottom: insets.bottom, backgroundColor: colors.surface }}>
-        <Toolbar
-          onSlash={() => insert(before && !/\s/.test(before) ? ' /' : '/')}
-          onMic={() => Alert.alert('녹음', '음성 메모는 나중에 붙여요.')}
-          onAi={() =>
-            Alert.alert('AI로 다듬기', 'AI 초안 기능(B)과 이어지면 여기서 글을 다듬어요.')
-          }
-          onPhoto={() => Alert.alert('사진 넣기', '사진 첨부는 나중에 붙여요.')}
-          onCheckbox={() => insert(atLineStart ? '- [ ] ' : '\n- [ ] ')}
-        />
+        {!previewing && (
+          <Toolbar
+            onSlash={() => insert(before && !/\s/.test(before) ? ' /' : '/')}
+            onMic={() => Alert.alert('녹음', '음성 메모는 나중에 붙여요.')}
+            onAi={() =>
+              Alert.alert('AI로 다듬기', 'AI 초안 기능(B)과 이어지면 여기서 글을 다듬어요.')
+            }
+            onPhoto={() => Alert.alert('사진 넣기', '사진 첨부는 나중에 붙여요.')}
+            onCheckbox={() => insert(atLineStart ? '- [ ] ' : '\n- [ ] ')}
+          />
+        )}
       </View>
     </KeyboardAvoidingView>
   );
