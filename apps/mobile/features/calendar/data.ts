@@ -62,14 +62,14 @@ export async function loadCalendar(): Promise<void> {
         {
           id: 'demo-overlap-1',
           date: '2026-11-14',
-          title: '예시 자료 검토',
+          title: '예시 자료 검토 #기획 #자료검토',
           startAt: '15:00',
           endAt: '16:00',
         },
         {
           id: 'demo-overlap-2',
           date: '2026-11-14',
-          title: '예시 팀 체크인',
+          title: '예시 팀 체크인 #기획 #팀회의',
           startAt: '15:00',
           endAt: '16:00',
         },

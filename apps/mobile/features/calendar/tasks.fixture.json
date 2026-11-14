@@ -1,6 +1,11 @@
 [
   { "id": "card-2", "title": "견적서 보내기", "date": "2026-11-14" },
   { "id": "calendar-demo-2", "title": "회의 자료 정리", "date": "2026-11-12", "hour": 10 },
-  { "id": "calendar-demo-3", "title": "기획안 검토", "date": "2026-11-13", "hour": 13 },
+  {
+    "id": "calendar-demo-3",
+    "title": "기획안 검토 #기획 #자료검토",
+    "date": "2026-11-13",
+    "hour": 13
+  },
   { "id": "calendar-demo-4", "title": "개발 내용 정리", "date": "2026-11-14", "hour": 17 }
 ]

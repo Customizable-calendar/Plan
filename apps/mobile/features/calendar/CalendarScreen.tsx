@@ -8,6 +8,7 @@ import { TimeCandidates } from './TimeCandidates';
 import { CalendarTimeline } from './CalendarTimeline';
 import { confirmTask, loadCalendar, useCalendar } from './data';
 import { CalendarButton, useCalendarTheme } from './design';
+import { HashtagGraphSheet } from './HashtagGraphSheet';
 import { dayKey, eventsOnDay, shiftDay, shiftMonth, timeLabel, weekDays } from './model';
 
 export function CalendarScreen() {
@@ -17,6 +18,7 @@ export function CalendarScreen() {
   const [view, setView] = useState<'day' | 'week' | 'month'>('day');
   const [candidateTask, setCandidateTask] = useState<Card>();
   const [message, setMessage] = useState('');
+  const [showHashtags, setShowHashtags] = useState(false);
   const [dailyListHeight, setDailyListHeight] = useState<number>();
   const days = weekDays(day);
   const month = day.slice(0, 7);
@@ -45,6 +47,9 @@ export function CalendarScreen() {
       <Text accessibilityRole="header" style={styles.title}>
         캘린더
       </Text>
+      <View style={styles.row}>
+        <CalendarButton label="해시태그 연결망" onPress={() => setShowHashtags(true)} />
+      </View>
       <View style={styles.row}>
         <CalendarButton label="일 보기" selected={view === 'day'} onPress={() => setView('day')} />
         <CalendarButton
@@ -239,6 +244,9 @@ export function CalendarScreen() {
           day={day}
           onClose={() => setCandidateTask(undefined)}
         />
+      )}
+      {showHashtags && (
+        <HashtagGraphSheet events={events} tasks={tasks} onClose={() => setShowHashtags(false)} />
       )}
     </ScrollView>
   );
