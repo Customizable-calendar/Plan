@@ -55,11 +55,13 @@ export function CalendarButton({
   onPress,
   selected = false,
   disabled = false,
+  singleLine = false,
 }: {
   label: string;
   onPress: () => void;
   selected?: boolean;
   disabled?: boolean;
+  singleLine?: boolean;
 }) {
   const { colors } = useCalendarTheme();
   return (
@@ -82,6 +84,7 @@ export function CalendarButton({
       })}
     >
       <Text
+        numberOfLines={singleLine ? 1 : undefined}
         style={{
           fontSize: 14,
           fontWeight: '600',
