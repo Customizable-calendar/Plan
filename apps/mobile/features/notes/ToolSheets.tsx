@@ -4,7 +4,15 @@ import { SymbolView } from 'expo-symbols';
 import { useState, type ReactNode } from 'react';
 import { Modal, Pressable, Text, TextInput, View } from 'react-native';
 
-import { dayKeyOf, formatReminders, isEmail, makeReminders, monthWeeks } from './format';
+import {
+  dayKeyOf,
+  formatReminders,
+  isEmail,
+  makeReminders,
+  monthWeeks,
+  parseNumber,
+  to24Hour,
+} from './format';
 
 // 기록의 메모를 꾹 누르면 나오는 메뉴와 팝업들이에요. 아직 실제 알림·공유는 하지 않아요(M1).
 
@@ -83,7 +91,6 @@ function Chip({
 // 1. 리마인드 ----------------------------------------------------------------
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
-const HOURS = [9, 12, 15, 18, 21];
 
 interface ReminderProps {
   current: NoteReminder[];
@@ -100,7 +107,7 @@ export function ReminderSheet({ visible, ...props }: ReminderProps & { visible: 
   );
 }
 
-/** 달력에서 날짜를 여러 개 고르고, 알림 시각 하나를 정해요. */
+/** 달력에서 날짜를 여러 개 고르고, 알림 시각(오전 오후, 시, 분) 하나를 정해요. */
 function ReminderCalendar({ current, onPick, onClose }: ReminderProps) {
   const today = new Date();
   const todayKey = dayKeyOf(today);
@@ -110,11 +117,19 @@ function ReminderCalendar({ current, onPick, onClose }: ReminderProps) {
   const [days, setDays] = useState(() =>
     current.map((r) => dayKeyOf(new Date(r.at))).filter((key) => key >= todayKey),
   );
-  // 알림 시각. 이미 정한 시각이 고를 수 있는 시각이면 그걸로, 아니면 9시로 시작해요.
-  const [hour, setHour] = useState(() => {
-    const saved = current[0] ? new Date(current[0].at).getHours() : 9;
-    return HOURS.includes(saved) ? saved : 9;
-  });
+  // 알림 시각. 이미 정한 리마인드가 있으면 그 시각에서, 없으면 오전 9:00에서 시작해요.
+  const saved = current[0] ? new Date(current[0].at) : null;
+  const savedHour = saved ? saved.getHours() : 9;
+  const [meridiem, setMeridiem] = useState<'am' | 'pm'>(savedHour < 12 ? 'am' : 'pm');
+  // 시와 분은 입력칸이라 글자로 들고 있어요. 저장할 때 숫자로 바꿔요.
+  const [hourText, setHourText] = useState(String(savedHour % 12 || 12));
+  const [minuteText, setMinuteText] = useState(
+    String(saved ? saved.getMinutes() : 0).padStart(2, '0'),
+  );
+  const hour12 = parseNumber(hourText, 1, 12);
+  const minute = parseNumber(minuteText, 0, 59);
+  const timeOk = hour12 !== null && minute !== null;
+  const ready = days.length > 0 && timeOk;
 
   const toggle = (key: string) =>
     setDays((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
@@ -187,31 +202,75 @@ function ReminderCalendar({ current, onPick, onClose }: ReminderProps) {
 
       <View className="gap-1.5">
         <Text className="text-[13px] text-muted-foreground">알림 시각</Text>
-        <View className="flex-row flex-wrap gap-2">
-          {HOURS.map((h) => (
-            <Chip key={h} label={`${h}시`} selected={hour === h} onPress={() => setHour(h)} />
-          ))}
+        <View className="flex-row flex-wrap items-center gap-2">
+          <Chip label="오전" selected={meridiem === 'am'} onPress={() => setMeridiem('am')} />
+          <Chip label="오후" selected={meridiem === 'pm'} onPress={() => setMeridiem('pm')} />
+          <TimeInput label="시" value={hourText} onChange={setHourText} bad={hour12 === null} />
+          <TimeInput label="분" value={minuteText} onChange={setMinuteText} bad={minute === null} />
         </View>
+        {timeOk ? null : (
+          <Text className="text-[13px] text-destructive">
+            시는 1부터 12까지, 분은 0부터 59까지 넣어 주세요.
+          </Text>
+        )}
       </View>
 
       <Pressable
         accessibilityRole="button"
-        accessibilityState={{ disabled: days.length === 0 }}
-        disabled={days.length === 0}
-        onPress={() => done(makeReminders(days, hour))}
+        accessibilityState={{ disabled: !ready }}
+        disabled={!ready}
+        onPress={() => {
+          if (hour12 === null || minute === null) return;
+          done(makeReminders(days, to24Hour(meridiem, hour12), minute));
+        }}
         className={`h-11 items-center justify-center rounded-md ${
-          days.length ? 'bg-primary active:opacity-80' : 'bg-muted'
+          ready ? 'bg-primary active:opacity-80' : 'bg-muted'
         }`}
       >
         <Text
           className={`text-base font-bold ${
-            days.length ? 'text-primary-foreground' : 'text-muted-foreground'
+            ready ? 'text-primary-foreground' : 'text-muted-foreground'
           }`}
         >
-          {days.length ? `${days.length}일 정하기` : '날짜를 골라 주세요'}
+          {days.length === 0
+            ? '날짜를 골라 주세요'
+            : timeOk
+              ? `${days.length}일 정하기`
+              : '시간을 확인해 주세요'}
         </Text>
       </Pressable>
       {current.length ? <Option label="리마인드 지우기" onPress={() => done([])} /> : null}
+    </View>
+  );
+}
+
+/** 시나 분을 숫자로 넣는 작은 입력칸. 뒤에 "시", "분" 글자가 붙어요. */
+function TimeInput({
+  label,
+  value,
+  onChange,
+  bad,
+}: {
+  label: string;
+  value: string;
+  onChange: (text: string) => void;
+  bad: boolean;
+}) {
+  return (
+    <View className="flex-row items-center gap-1">
+      <TextInput
+        value={value}
+        // 숫자만, 두 자리까지 받아요.
+        onChangeText={(text) => onChange(text.replace(/\D/g, '').slice(0, 2))}
+        keyboardType="number-pad"
+        maxLength={2}
+        selectTextOnFocus
+        accessibilityLabel={label}
+        className={`h-10 w-12 rounded-md border px-2 text-center text-base text-foreground ${
+          bad ? 'border-destructive' : 'border-input'
+        }`}
+      />
+      <Text className="text-base text-foreground">{label}</Text>
     </View>
   );
 }

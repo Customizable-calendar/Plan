@@ -54,12 +54,24 @@ export function dayKeyOf(date: Date): string {
   return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`;
 }
 
-/** 고른 날짜들의 hour시 정각을 리마인드로 만들어요. 날짜 순서로 돌려줘요. (기기 시간 기준) */
-export function makeReminders(dayKeys: string[], hour: number): NoteReminder[] {
+/** 오전 오후와 1~12시를 하루 24시간 기준 시(0~23)로 바꿔요. 오전 12시는 0시, 오후 12시는 12시예요. */
+export function to24Hour(meridiem: 'am' | 'pm', hour12: number): number {
+  return (hour12 % 12) + (meridiem === 'pm' ? 12 : 0);
+}
+
+/** 글자로 받은 숫자가 min~max 사이 정수면 그 숫자, 아니면 null */
+export function parseNumber(text: string, min: number, max: number): number | null {
+  if (!/^\d{1,2}$/.test(text.trim())) return null;
+  const value = Number(text);
+  return value >= min && value <= max ? value : null;
+}
+
+/** 고른 날짜들의 hour시 minute분을 리마인드로 만들어요. 날짜 순서로 돌려줘요. (기기 시간 기준) */
+export function makeReminders(dayKeys: string[], hour: number, minute: number): NoteReminder[] {
   const timeZone = deviceTimeZone();
   return [...dayKeys].sort().map((key) => {
     const [year, month, day] = key.split('-').map(Number);
-    return { at: new Date(year, month - 1, day, hour).toISOString(), timeZone };
+    return { at: new Date(year, month - 1, day, hour, minute).toISOString(), timeZone };
   });
 }
 
