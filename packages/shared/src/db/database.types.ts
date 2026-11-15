@@ -47,6 +47,20 @@ export type Database = {
                   Relationships: [
                     
                   ]
+                },"files": {
+                  Row: {
+                    "created_at": string,"id": string,"key": string,"mime": string,"size": number,"status": Database["public"]['Enums']["files_status"],"thumbnail_key": string | null,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"id"?: string,"key": string,"mime": string,"size": number,"status"?: Database["public"]['Enums']["files_status"],"thumbnail_key"?: string | null,"user_id"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"key"?: string,"mime"?: string,"size"?: number,"status"?: Database["public"]['Enums']["files_status"],"thumbnail_key"?: string | null,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"notes_checklists": {
                   Row: {
                     "created_at": string,"id": string,"items": NonNullable<Json>,"note_id": string,"user_id": string
@@ -106,7 +120,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "cards_card_status": "suggested"|"confirmed"|"dismissed","cards_card_type": "event"|"task"|"person"|"idea","notes_moved_to": "checklist"|"session"
+            "cards_card_status": "suggested"|"confirmed"|"dismissed","cards_card_type": "event"|"task"|"person"|"idea","files_status": "pending"|"ready","notes_moved_to": "checklist"|"session"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -222,7 +236,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "cards_card_status": ["suggested", "confirmed", "dismissed"],"cards_card_type": ["event", "task", "person", "idea"],"notes_moved_to": ["checklist", "session"]
+            "cards_card_status": ["suggested", "confirmed", "dismissed"],"cards_card_type": ["event", "task", "person", "idea"],"files_status": ["pending", "ready"],"notes_moved_to": ["checklist", "session"]
           }
         }
 } as const
