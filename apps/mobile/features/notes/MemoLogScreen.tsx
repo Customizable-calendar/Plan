@@ -41,9 +41,10 @@ export function MemoLogScreen() {
     await update(note);
     reload();
   };
-  // 태그는 사용자가 고른 것만, 글 끝에 붙여요.
+  // 태그는 사용자가 고른 것만 붙여요. 원문은 고치지 않고 tags에 따로 둬요.
   const addTag = (tag: string) => {
-    if (target) void save({ ...target, text: `${target.text} ${tag}` });
+    if (!target || target.tags?.includes(tag)) return;
+    void save({ ...target, tags: [...(target.tags ?? []), tag] });
   };
 
   return (
@@ -323,6 +324,11 @@ function LogBubble({
         }`}
       >
         <Text className="text-[15px] leading-6 text-bubble-user-foreground">{note.text}</Text>
+        {note.tags?.length ? (
+          <Text className="text-[13px] font-semibold text-bubble-user-foreground">
+            {note.tags.join(' ')}
+          </Text>
+        ) : null}
         {note.reminders?.length || people.length ? (
           <View className="flex-row flex-wrap items-center gap-1">
             {note.reminders?.length ? <ReminderBadge reminders={note.reminders} /> : null}
