@@ -4,8 +4,8 @@ export interface Note {
   text: string;
   /** ISO 8601 (UTC) */
   createdAt: string;
-  /** 리마인드 알림. 없으면 알림 없음 */
-  reminder?: NoteReminder;
+  /** 리마인드 알림. 여러 날을 고를 수 있어서 목록이에요. 없으면 알림 없음 */
+  reminders?: NoteReminder[];
   /** 함께 보는 사람의 이메일. 없으면 나만 봐요. */
   collaborators?: string[];
 }

@@ -129,12 +129,12 @@ export function MemoLogScreen() {
 
       <ReminderSheet
         visible={sheet === 'reminder'}
-        current={target?.reminder}
-        onPick={(reminder) => {
+        current={target?.reminders ?? []}
+        onPick={(reminders) => {
           if (!target) return;
-          // 리마인드를 지우면 키를 아예 빼요.
-          const { reminder: _old, ...rest } = target;
-          void save(reminder ? { ...rest, reminder } : rest);
+          // 리마인드를 다 지우면 키를 아예 빼요.
+          const { reminders: _old, ...rest } = target;
+          void save(reminders.length ? { ...rest, reminders } : rest);
         }}
         onClose={close}
       />
@@ -323,9 +323,9 @@ function LogBubble({
         }`}
       >
         <Text className="text-[15px] leading-6 text-bubble-user-foreground">{note.text}</Text>
-        {note.reminder || people.length ? (
+        {note.reminders?.length || people.length ? (
           <View className="flex-row flex-wrap items-center gap-1">
-            {note.reminder ? <ReminderBadge reminder={note.reminder} /> : null}
+            {note.reminders?.length ? <ReminderBadge reminders={note.reminders} /> : null}
             {people.map((e) => (
               <Avatar key={e} email={e} size="sm" />
             ))}
