@@ -11,8 +11,9 @@ const iso = (value: string) => new Date(value).toISOString();
 export function toNote(row: NoteRow): Note {
   const note: Note = { id: row.id, text: row.text, createdAt: iso(row.created_at) };
   // 없는 값은 칸을 아예 만들지 않아요. 앱 타입에서 선택 항목(?)이라서요.
-  if (row.reminder_at !== null && row.reminder_time_zone !== null) {
-    note.reminder = { at: iso(row.reminder_at), timeZone: row.reminder_time_zone };
+  const timeZone = row.reminder_time_zone;
+  if (row.reminder_ats.length > 0 && timeZone !== null) {
+    note.reminders = row.reminder_ats.map((at) => ({ at: iso(at), timeZone }));
   }
   if (row.collaborators.length > 0) note.collaborators = row.collaborators;
   return note;
@@ -23,8 +24,9 @@ export function toNoteInsert(note: Note): NoteInsert {
   return {
     id: note.id,
     text: note.text,
-    reminder_at: note.reminder?.at ?? null,
-    reminder_time_zone: note.reminder?.timeZone ?? null,
+    reminder_ats: (note.reminders ?? []).map((r) => r.at),
+    // 시간대는 메모 하나에 하나만 저장해요. 리마인드는 한 번에 같은 시간대로 만들어져요.
+    reminder_time_zone: note.reminders?.[0]?.timeZone ?? null,
     collaborators: note.collaborators ?? [],
     created_at: note.createdAt,
   };

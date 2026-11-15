@@ -7,10 +7,10 @@ import { fixtures } from '../src';
 function asRow(insert: ReturnType<typeof toNoteInsert>): NoteRow {
   return {
     user_id: '00000000-0000-0000-0000-000000000001',
-    reminder_at: null,
     reminder_time_zone: null,
     collaborators: [],
     ...insert,
+    reminder_ats: (insert.reminder_ats ?? []).map((at) => at.replace('Z', '+00:00')),
     // DB는 시각을 +00:00 형태로 돌려줘요.
     created_at: insert.created_at!.replace('Z', '+00:00'),
   } as NoteRow;
@@ -29,11 +29,11 @@ describe('notes mapper', () => {
       text: '메모',
       createdAt: '2026-11-15T00:00:00.000Z',
     });
-    expect(insert.reminder_at).toBeNull();
+    expect(insert.reminder_ats).toEqual([]);
     expect(insert.reminder_time_zone).toBeNull();
     expect(insert.collaborators).toEqual([]);
     const back = toNote(asRow(insert));
-    expect('reminder' in back).toBe(false);
+    expect('reminders' in back).toBe(false);
     expect('collaborators' in back).toBe(false);
   });
 });

@@ -8,14 +8,15 @@ create table public.notes_notes (
   id text not null,
   -- 원문은 고치지 않아요. 앞뒤 공백만 지운 글이에요.
   text text not null check (length(text) between 1 and 20000),
-  -- 리마인드: 시각은 UTC, 시간대(IANA, 예: Asia/Seoul)는 따로. 둘은 같이 있거나 같이 없어요.
-  reminder_at timestamptz,
+  -- 리마인드: 여러 날을 고를 수 있어서 시각 목록이에요. 시각은 UTC, 시간대(IANA, 예: Asia/Seoul)는 따로.
+  -- 시간대는 메모 하나에 하나예요. 리마인드가 있으면 시간대도 있고, 없으면 시간대도 없어요.
+  reminder_ats timestamptz[] not null default '{}',
   reminder_time_zone text,
   -- 함께 보는 사람의 이메일. 지금은 적어 두기만 하고, 그 사람에게 보여 주지는 않아요.
   collaborators text[] not null default '{}',
   created_at timestamptz not null default now(),
   primary key (user_id, id),
-  check ((reminder_at is null) = (reminder_time_zone is null))
+  check ((cardinality(reminder_ats) = 0) = (reminder_time_zone is null))
 );
 
 -- 메모 화면: 내 메모를 최근 것부터

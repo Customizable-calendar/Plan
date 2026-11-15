@@ -49,14 +49,14 @@ export type Database = {
                   ]
                 },"notes_notes": {
                   Row: {
-                    "collaborators": (string)[],"created_at": string,"id": string,"reminder_at": string | null,"reminder_time_zone": string | null,"text": string,"user_id": string
+                    "collaborators": (string)[],"created_at": string,"id": string,"reminder_ats": (string)[],"reminder_time_zone": string | null,"text": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "collaborators"?: (string)[],"created_at"?: string,"id": string,"reminder_at"?: string | null,"reminder_time_zone"?: string | null,"text": string,"user_id"?: string
+                    "collaborators"?: (string)[],"created_at"?: string,"id": string,"reminder_ats"?: (string)[],"reminder_time_zone"?: string | null,"text": string,"user_id"?: string
                   }
                   Update: {
-                    "collaborators"?: (string)[],"created_at"?: string,"id"?: string,"reminder_at"?: string | null,"reminder_time_zone"?: string | null,"text"?: string,"user_id"?: string
+                    "collaborators"?: (string)[],"created_at"?: string,"id"?: string,"reminder_ats"?: (string)[],"reminder_time_zone"?: string | null,"text"?: string,"user_id"?: string
                   }
                   Relationships: [
                     

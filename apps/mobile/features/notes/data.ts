@@ -103,10 +103,10 @@ export async function updateNote(note: Note): Promise<Note> {
   } else {
     const supabase = await signedIn();
     // 원문(text)과 쓴 시각은 고치지 않아요. 리마인드와 공동 작업자만 바꿔요.
-    const { reminder_at, reminder_time_zone, collaborators } = toNoteInsert(note);
+    const { reminder_ats, reminder_time_zone, collaborators } = toNoteInsert(note);
     const { error } = await supabase
       .from(TABLE)
-      .update({ reminder_at, reminder_time_zone, collaborators })
+      .update({ reminder_ats, reminder_time_zone, collaborators })
       .eq('id', note.id);
     if (error) failed('메모를 고치지', error);
   }
