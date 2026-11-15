@@ -47,16 +47,36 @@ export type Database = {
                   Relationships: [
                     
                   ]
-                },"notes_notes": {
+                },"notes_checklists": {
                   Row: {
-                    "collaborators": (string)[],"created_at": string,"id": string,"reminder_ats": (string)[],"reminder_time_zone": string | null,"text": string,"user_id": string
+                    "created_at": string,"id": string,"items": NonNullable<Json>,"note_id": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "collaborators"?: (string)[],"created_at"?: string,"id": string,"reminder_ats"?: (string)[],"reminder_time_zone"?: string | null,"text": string,"user_id"?: string
+                    "created_at"?: string,"id": string,"items"?: NonNullable<Json>,"note_id": string,"user_id"?: string
                   }
                   Update: {
-                    "collaborators"?: (string)[],"created_at"?: string,"id"?: string,"reminder_ats"?: (string)[],"reminder_time_zone"?: string | null,"text"?: string,"user_id"?: string
+                    "created_at"?: string,"id"?: string,"items"?: NonNullable<Json>,"note_id"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "notes_checklists_user_id_note_id_fkey"
+      columns: ["user_id","note_id"]
+isOneToOne: false
+      referencedRelation: "notes_notes"
+      referencedColumns: ["user_id","id"]
+    }
+                  ]
+                },"notes_notes": {
+                  Row: {
+                    "collaborators": (string)[],"created_at": string,"id": string,"important_at": string | null,"moved_to": Database["public"]['Enums']["notes_moved_to"] | null,"reminder_ats": (string)[],"reminder_time_zone": string | null,"tags": (string)[],"text": string,"trashed_at": string | null,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "collaborators"?: (string)[],"created_at"?: string,"id": string,"important_at"?: string | null,"moved_to"?: Database["public"]['Enums']["notes_moved_to"] | null,"reminder_ats"?: (string)[],"reminder_time_zone"?: string | null,"tags"?: (string)[],"text": string,"trashed_at"?: string | null,"user_id"?: string
+                  }
+                  Update: {
+                    "collaborators"?: (string)[],"created_at"?: string,"id"?: string,"important_at"?: string | null,"moved_to"?: Database["public"]['Enums']["notes_moved_to"] | null,"reminder_ats"?: (string)[],"reminder_time_zone"?: string | null,"tags"?: (string)[],"text"?: string,"trashed_at"?: string | null,"user_id"?: string
                   }
                   Relationships: [
                     
@@ -86,7 +106,7 @@ export type Database = {
                            }
           }
           Enums: {
-            "cards_card_status": "suggested"|"confirmed"|"dismissed","cards_card_type": "event"|"task"|"person"|"idea"
+            "cards_card_status": "suggested"|"confirmed"|"dismissed","cards_card_type": "event"|"task"|"person"|"idea","notes_moved_to": "checklist"|"session"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -202,7 +222,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "cards_card_status": ["suggested", "confirmed", "dismissed"],"cards_card_type": ["event", "task", "person", "idea"]
+            "cards_card_status": ["suggested", "confirmed", "dismissed"],"cards_card_type": ["event", "task", "person", "idea"],"notes_moved_to": ["checklist", "session"]
           }
         }
 } as const
