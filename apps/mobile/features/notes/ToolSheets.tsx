@@ -4,7 +4,7 @@ import { SymbolView } from 'expo-symbols';
 import { useState, type ReactNode } from 'react';
 import { Modal, Pressable, Text, TextInput, View } from 'react-native';
 
-import { formatReminder, isEmail, makeReminder } from './format';
+import { dayKeyOf, formatReminders, isEmail, makeReminders, monthWeeks } from './format';
 
 // 기록의 메모를 꾹 누르면 나오는 메뉴와 팝업들이에요. 아직 실제 알림·공유는 하지 않아요(M1).
 
@@ -82,67 +82,167 @@ function Chip({
 
 // 1. 리마인드 ----------------------------------------------------------------
 
-const DAYS = [
-  { label: '오늘', offset: 0 },
-  { label: '내일', offset: 1 },
-  { label: '모레', offset: 2 },
-];
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const HOURS = [9, 12, 15, 18, 21];
 
-export function ReminderSheet({
-  visible,
-  current,
-  onPick,
-  onClose,
-}: {
-  visible: boolean;
-  current?: NoteReminder;
-  onPick: (reminder: NoteReminder | undefined) => void;
+interface ReminderProps {
+  current: NoteReminder[];
+  onPick: (reminders: NoteReminder[]) => void;
   onClose: () => void;
-}) {
-  const [custom, setCustom] = useState(false);
-  const [day, setDay] = useState(0);
-  const [hour, setHour] = useState(18);
+}
 
-  const pick = (r: NoteReminder | undefined) => {
-    onPick(r);
-    setCustom(false);
+export function ReminderSheet({ visible, ...props }: ReminderProps & { visible: boolean }) {
+  return (
+    <Sheet visible={visible} title="리마인드" onClose={props.onClose}>
+      {/* 열 때마다 새로 그려서, 고르다 만 날짜가 다음에 남지 않게 해요. */}
+      {visible ? <ReminderCalendar {...props} /> : null}
+    </Sheet>
+  );
+}
+
+/** 달력에서 날짜를 여러 개 고르고, 알림 시각 하나를 정해요. */
+function ReminderCalendar({ current, onPick, onClose }: ReminderProps) {
+  const today = new Date();
+  const todayKey = dayKeyOf(today);
+  // 지금 보고 있는 달. month는 0(1월)부터예요.
+  const [view, setView] = useState({ year: today.getFullYear(), month: today.getMonth() });
+  // 고른 날짜들. 이미 정한 리마인드가 있으면 그 날짜에서 시작해요. 지난 날은 빼요.
+  const [days, setDays] = useState(() =>
+    current.map((r) => dayKeyOf(new Date(r.at))).filter((key) => key >= todayKey),
+  );
+  // 알림 시각. 이미 정한 시각이 고를 수 있는 시각이면 그걸로, 아니면 9시로 시작해요.
+  const [hour, setHour] = useState(() => {
+    const saved = current[0] ? new Date(current[0].at).getHours() : 9;
+    return HOURS.includes(saved) ? saved : 9;
+  });
+
+  const toggle = (key: string) =>
+    setDays((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+
+  // 달을 넘겨요. Date가 12월 다음을 다음 해 1월로 알아서 바꿔 줘요.
+  const move = (step: number) => {
+    const next = new Date(view.year, view.month + step, 1);
+    setView({ year: next.getFullYear(), month: next.getMonth() });
+  };
+
+  const done = (reminders: NoteReminder[]) => {
+    onPick(reminders);
     onClose();
   };
 
   return (
-    <Sheet visible={visible} title="리마인드" onClose={onClose}>
-      {current ? (
-        <Text className="text-[13px] text-muted-foreground">지금: {formatReminder(current)}</Text>
-      ) : null}
-      {custom ? (
-        <View className="gap-2">
-          <View className="flex-row flex-wrap gap-2">
-            {DAYS.map((d) => (
-              <Chip
-                key={d.label}
-                label={d.label}
-                selected={day === d.offset}
-                onPress={() => setDay(d.offset)}
-              />
-            ))}
-          </View>
-          <View className="flex-row flex-wrap gap-2">
-            {HOURS.map((h) => (
-              <Chip key={h} label={`${h}시`} selected={hour === h} onPress={() => setHour(h)} />
-            ))}
-          </View>
-          <Option label="이 시간으로 정하기" onPress={() => pick(makeReminder(day, hour))} />
+    <View className="gap-3">
+      <View className="flex-row items-center justify-between">
+        <MonthButton label="이전 달" direction="left" onPress={() => move(-1)} />
+        <Text className="text-base font-bold text-foreground">
+          {view.year}년 {view.month + 1}월
+        </Text>
+        <MonthButton label="다음 달" direction="right" onPress={() => move(1)} />
+      </View>
+
+      <View className="gap-1">
+        <View className="flex-row gap-1">
+          {WEEKDAYS.map((w) => (
+            <Text key={w} className="flex-1 text-center text-[11px] text-muted-foreground">
+              {w}
+            </Text>
+          ))}
         </View>
-      ) : (
-        <>
-          <Option label="오늘 오후" sub="오후 6:00" onPress={() => pick(makeReminder(0, 18))} />
-          <Option label="내일 오전" sub="오전 9:00" onPress={() => pick(makeReminder(1, 9))} />
-          <Option label="직접 선택" sub="날짜와 시간 고르기" onPress={() => setCustom(true)} />
-          {current ? <Option label="리마인드 지우기" onPress={() => pick(undefined)} /> : null}
-        </>
-      )}
-    </Sheet>
+        {monthWeeks(view.year, view.month).map((week, row) => (
+          <View key={row} className="flex-row gap-1">
+            {week.map((date, col) => {
+              if (!date) return <View key={col} className="flex-1" />;
+              const key = dayKeyOf(date);
+              const on = days.includes(key);
+              const past = key < todayKey; // 지난 날은 고를 수 없어요.
+              return (
+                <Pressable
+                  key={col}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${date.getMonth() + 1}월 ${date.getDate()}일`}
+                  accessibilityState={{ selected: on, disabled: past }}
+                  disabled={past}
+                  onPress={() => toggle(key)}
+                  className={`h-10 flex-1 items-center justify-center rounded-lg ${
+                    on ? 'bg-primary' : key === todayKey ? 'border border-primary' : ''
+                  }`}
+                >
+                  <Text
+                    className={`text-[15px] ${
+                      on
+                        ? 'font-bold text-primary-foreground'
+                        : past
+                          ? 'text-muted-foreground'
+                          : 'text-foreground'
+                    }`}
+                  >
+                    {date.getDate()}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
+      </View>
+
+      <View className="gap-1.5">
+        <Text className="text-[13px] text-muted-foreground">알림 시각</Text>
+        <View className="flex-row flex-wrap gap-2">
+          {HOURS.map((h) => (
+            <Chip key={h} label={`${h}시`} selected={hour === h} onPress={() => setHour(h)} />
+          ))}
+        </View>
+      </View>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ disabled: days.length === 0 }}
+        disabled={days.length === 0}
+        onPress={() => done(makeReminders(days, hour))}
+        className={`h-11 items-center justify-center rounded-md ${
+          days.length ? 'bg-primary active:opacity-80' : 'bg-muted'
+        }`}
+      >
+        <Text
+          className={`text-base font-bold ${
+            days.length ? 'text-primary-foreground' : 'text-muted-foreground'
+          }`}
+        >
+          {days.length ? `${days.length}일 정하기` : '날짜를 골라 주세요'}
+        </Text>
+      </Pressable>
+      {current.length ? <Option label="리마인드 지우기" onPress={() => done([])} /> : null}
+    </View>
+  );
+}
+
+function MonthButton({
+  label,
+  direction,
+  onPress,
+}: {
+  label: string;
+  direction: 'left' | 'right';
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={8}
+      onPress={onPress}
+      className="h-9 w-9 items-center justify-center rounded-md active:bg-muted"
+    >
+      <SymbolView
+        name={
+          direction === 'left'
+            ? { ios: 'chevron.left', android: 'chevron_left', web: 'chevron_left' }
+            : { ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }
+        }
+        size={20}
+        tintColor={palette.foreground}
+      />
+    </Pressable>
   );
 }
 
@@ -283,7 +383,7 @@ export function HashtagSheet({
 // 배지 ----------------------------------------------------------------------
 
 /** 종 아이콘 + 알림 시각 배지 (기록 말풍선이 써요) */
-export function ReminderBadge({ reminder }: { reminder: NoteReminder }) {
+export function ReminderBadge({ reminders }: { reminders: NoteReminder[] }) {
   return (
     <View className="flex-row items-center gap-1 self-start rounded-full bg-muted px-2 py-0.5">
       <SymbolView
@@ -292,7 +392,7 @@ export function ReminderBadge({ reminder }: { reminder: NoteReminder }) {
         tintColor={palette.mutedForeground}
       />
       <Text className="text-[11px] text-foreground" numberOfLines={1}>
-        {formatReminder(reminder)}
+        {formatReminders(reminders)}
       </Text>
     </View>
   );

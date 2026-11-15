@@ -48,12 +48,34 @@ export function deviceTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-/** daysFromToday일 뒤 hour시 정각을 리마인드로 만들어요. (기기 시간 기준) */
-export function makeReminder(daysFromToday: number, hour: number): NoteReminder {
-  const d = new Date();
-  d.setDate(d.getDate() + daysFromToday);
-  d.setHours(hour, 0, 0, 0);
-  return { at: d.toISOString(), timeZone: deviceTimeZone() };
+/** 날짜 하나를 가리키는 열쇠. 기기 시간 기준 "2026-11-15" 모양이에요. */
+export function dayKeyOf(date: Date): string {
+  const two = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`;
+}
+
+/** 고른 날짜들의 hour시 정각을 리마인드로 만들어요. 날짜 순서로 돌려줘요. (기기 시간 기준) */
+export function makeReminders(dayKeys: string[], hour: number): NoteReminder[] {
+  const timeZone = deviceTimeZone();
+  return [...dayKeys].sort().map((key) => {
+    const [year, month, day] = key.split('-').map(Number);
+    return { at: new Date(year, month - 1, day, hour).toISOString(), timeZone };
+  });
+}
+
+/**
+ * 달력 한 달을 주 단위로 나눠요. 일요일부터 시작하고, 그 달이 아닌 칸은 null이에요.
+ * month는 0(1월)부터 11(12월)이에요.
+ */
+export function monthWeeks(year: number, month: number): (Date | null)[][] {
+  const first = new Date(year, month, 1).getDay(); // 1일의 요일 (0 = 일요일)
+  const lastDay = new Date(year, month + 1, 0).getDate(); // 다음 달 0일 = 이번 달 마지막 날
+  const cells: (Date | null)[] = Array.from({ length: first }, () => null);
+  for (let day = 1; day <= lastDay; day += 1) cells.push(new Date(year, month, day));
+  while (cells.length % 7 !== 0) cells.push(null);
+  const weeks: (Date | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  return weeks;
 }
 
 /** "10월 27일 오후 2:00"처럼 리마인드에 저장한 시간대로 보여줘요. */
@@ -65,6 +87,13 @@ export function formatReminder({ at, timeZone }: NoteReminder): string {
     minute: '2-digit',
     timeZone,
   });
+}
+
+/** 리마인드 여러 개를 한 줄로. 가장 이른 것 하나와 나머지 개수를 보여줘요. */
+export function formatReminders(reminders: NoteReminder[]): string {
+  const sorted = [...reminders].sort((a, b) => a.at.localeCompare(b.at));
+  const first = formatReminder(sorted[0]);
+  return sorted.length > 1 ? `${first} 외 ${sorted.length - 1}개` : first;
 }
 
 /** "10월 26일 오전 10:00"처럼 기기 시간대로 보여줘요. */
