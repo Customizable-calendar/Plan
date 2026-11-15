@@ -1,13 +1,20 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fixtures, type Note } from '@noteapp/shared';
+import { fixtures, type Note, type NoteRow, toNote, toNoteInsert } from '@noteapp/shared';
 
+import { failed, signedIn } from '@/features/cards';
 import { createDraftSession } from '@/features/sessions';
-import { dataSource, fromFixture } from '@/lib/data-source';
+import { fromFixture, sourceFor } from '@/lib/data-source';
 
 import { textToChecklist, type ChecklistItem } from './format';
 
 // 메모 데이터는 여기서만 가져오고 저장해요. 화면은 이 파일의 함수만 불러요.
-// M2: dataSource === 'supabase'면 notes_ 테이블로 바꿔요. 화면은 그대로예요.
+// fixtures: 예시 JSON. 새로 쓴 메모는 앱이 켜져 있는 동안만 기억해요.
+// supabase: notes_notes 테이블(RLS로 본인 메모만). 행은 mapper(@noteapp/shared)로 바꿔요.
+// 중요한 메모, 휴지통, 체크리스트, 기록에서 뺀 메모 id는 아직 기기 저장소에 있어요.
+// TODO(A, M2): 그것들도 notes_ 테이블로 옮겨요. 그래야 다른 기기에서도 같게 보여요.
+
+const TABLE = 'notes_notes';
+const dataSource = sourceFor('notes');
 
 // ── 기기 저장소 ──
 // AsyncStorage: 앱을 껐다 켜도 남는 기기 안의 작은 저장 공간이에요 (웹에서는 localStorage).
@@ -43,7 +50,7 @@ async function unhide(id: string) {
 }
 
 // ── 기록 ──
-// M1에서 새로 쓰거나 고친 메모. 앱이 켜져 있는 동안만 기억해요(앱을 끄면 사라져요).
+// fixtures에서 새로 쓰거나 고친 메모. 앱이 켜져 있는 동안만 기억해요(앱을 끄면 사라져요).
 const added: Note[] = [];
 const edited = new Map<string, Note>();
 
@@ -54,30 +61,55 @@ export interface NewNote {
 
 /** 기록에 있는 메모를 최신순으로 돌려줘요. 휴지통이나 체크리스트로 옮긴 메모는 빼요. */
 export async function listNotes(): Promise<Note[]> {
-  if (dataSource !== 'fixtures') throw new Error('notes: Supabase 연결은 M2에서 만들어요.');
   const hidden = await read<string[]>(KEYS.hidden, []);
-  const notes = [...added, ...(await fromFixture(fixtures.notes))]
-    .map((n) => edited.get(n.id) ?? n)
-    .filter((n) => !hidden.includes(n.id));
+  const notes = (await loadNotes()).filter((n) => !hidden.includes(n.id));
   // ISO 8601 문자열은 글자 순서가 곧 시간 순서라서 문자열 비교로 정렬할 수 있어요.
   return notes.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+/** 저장된 메모 전부. 기록에서 뺀 메모도 들어 있어요. */
+async function loadNotes(): Promise<Note[]> {
+  if (dataSource === 'fixtures') {
+    return [...added, ...(await fromFixture(fixtures.notes))].map((n) => edited.get(n.id) ?? n);
+  }
+  const supabase = await signedIn();
+  const { data, error } = await supabase.from(TABLE).select('*');
+  if (error) failed('메모를 불러오지', error);
+  return (data as NoteRow[]).map(toNote);
 }
 
 /** 메모 원문을 저장해요. 앞뒤 공백만 지우고 내용은 고치지 않아요. */
 export async function saveNote({ text }: NewNote): Promise<Note> {
   const trimmed = text.trim();
   if (!trimmed) throw new Error('빈 메모는 저장하지 않아요.');
-  if (dataSource !== 'fixtures') throw new Error('notes: Supabase 연결은 M2에서 만들어요.');
 
   const now = new Date();
   const note: Note = { id: `note-${now.getTime()}`, text: trimmed, createdAt: now.toISOString() };
-  added.unshift(note);
+  if (dataSource === 'fixtures') {
+    added.unshift(note);
+    return note;
+  }
+  const supabase = await signedIn();
+  // user_id는 DB가 auth.uid()로 채워요.
+  const { error } = await supabase.from(TABLE).insert(toNoteInsert(note));
+  if (error) failed('메모를 저장하지', error);
   return note;
 }
 
 /** 꾹 눌러 정한 리마인드, 공동 작업자, 해시태그를 저장해요. 중요한 메모에 있으면 거기도 고쳐요. */
 export async function updateNote(note: Note): Promise<Note> {
-  edited.set(note.id, note);
+  if (dataSource === 'fixtures') {
+    edited.set(note.id, note);
+  } else {
+    const supabase = await signedIn();
+    // 원문(text)과 쓴 시각은 고치지 않아요. 리마인드와 공동 작업자만 바꿔요.
+    const { reminder_at, reminder_time_zone, collaborators } = toNoteInsert(note);
+    const { error } = await supabase
+      .from(TABLE)
+      .update({ reminder_at, reminder_time_zone, collaborators })
+      .eq('id', note.id);
+    if (error) failed('메모를 고치지', error);
+  }
   const important = await read<Note[]>(KEYS.important, []);
   if (important.some((n) => n.id === note.id)) {
     await write(
@@ -135,8 +167,13 @@ export async function trashNote(note: Note): Promise<void> {
 export async function restoreNote(id: string): Promise<TrashedNote[]> {
   const trash = await listTrash();
   const item = trash.find((t) => t.note.id === id);
-  // 앱을 껐다 켜서 기록에서 사라진 메모면 다시 붙여요.
-  if (item && !added.some((n) => n.id === id) && !fixtures.notes.some((n) => n.id === id)) {
+  // fixtures: 앱을 껐다 켜서 기록에서 사라진 메모면 다시 붙여요. (supabase는 DB에 그대로 있어요)
+  if (
+    dataSource === 'fixtures' &&
+    item &&
+    !added.some((n) => n.id === id) &&
+    !fixtures.notes.some((n) => n.id === id)
+  ) {
     added.push(item.note);
   }
   await unhide(id);
@@ -148,6 +185,12 @@ export async function restoreNote(id: string): Promise<TrashedNote[]> {
 
 /** 휴지통에서 완전히 지워요. 되돌릴 수 없어요. */
 export async function deleteForever(id: string): Promise<TrashedNote[]> {
+  if (dataSource === 'supabase') {
+    const supabase = await signedIn();
+    const { error } = await supabase.from(TABLE).delete().eq('id', id);
+    if (error) failed('메모를 지우지', error);
+    await unhide(id); // DB에서 없어졌으니 숨김 목록에서도 빼요.
+  }
   return write(
     KEYS.trash,
     (await listTrash()).filter((t) => t.note.id !== id),
