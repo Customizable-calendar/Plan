@@ -120,3 +120,16 @@ export function suggestSlots(
   }
   return slots;
 }
+
+/** 화면 표시를 위해 제목에서 #해시태그를 분리하고 깔끔한 본문만 돌려줘요. 원문은 고치지 않아요. */
+export function splitTitleAndTags(title: string): { cleanTitle: string; tags: string[] } {
+  const tags = new Set<string>();
+  const pattern = /(?:^|[^\p{L}\p{M}\p{N}_/#.-])#([\p{L}\p{N}][\p{L}\p{M}\p{N}_-]*)/gu;
+  for (const match of title.normalize('NFKC').matchAll(pattern))
+    tags.add(`#${match[1].toLowerCase()}`);
+  const cleanTitle = title
+    .replace(/(?:^|\s+)#([\p{L}\p{N}][\p{L}\p{M}\p{N}_-]*)/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return { cleanTitle: cleanTitle || title.trim(), tags: [...tags] };
+}
