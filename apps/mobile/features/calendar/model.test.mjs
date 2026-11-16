@@ -2,6 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  buildHashtagEdges,
+  buildHashtagGraph,
+  computeHopDistances,
+  extractHashtags,
+  layoutHashtagGraph,
+} from './hashtags.ts';
+import {
   dayKey,
   eventsOnDay,
   overlaps,
@@ -103,4 +110,118 @@ test('잘못된 마감과 역전 일정에서는 안전하게 후보를 비워�
     suggestSlots('2026-10-27', [{ startAt: '2026-10-27T02:00Z', endAt: '2026-10-27T01:00Z' }], []),
     [],
   );
+});
+
+test('해시태그 추출은 소문자 정규화를 수행하고 잘못된 패턴을 무시해요', () => {
+  assert.deepEqual(
+    extractHashtags('주간 회의 #기획 #React_Native #인공지능 foo#ignored https://a.com/#frag #'),
+    ['#기획', '#react_native', '#인공지능'],
+  );
+  assert.deepEqual(extractHashtags('태그가 없는 일정 #기획 #기획'), ['#기획']);
+});
+
+test('해시태그 그래프와 간선, 군집이 동시 출현 횟수를 반영해요', () => {
+  const graph = buildHashtagGraph([
+    { id: '1', title: 'A #기획 #개발' },
+    { id: '2', title: 'B #기획 #개발 #디자인' },
+    { id: '3', title: 'C #운동 #건강' },
+  ]);
+  const plan = graph.find((node) => node.tag === '#기획');
+  assert(plan);
+  assert.equal(plan.links.get('#개발'), 2);
+  assert.equal(plan.links.get('#디자인'), 1);
+  assert(graph.every((node) => node.cluster >= 0 && node.cluster < 6));
+
+  const edges = buildHashtagEdges(graph);
+  assert.equal(edges.length, 4);
+  const planDev = edges.find(
+    (edge) =>
+      (edge.source === '#개발' && edge.target === '#기획') ||
+      (edge.source === '#기획' && edge.target === '#개발'),
+  );
+  assert.equal(planDev?.weight, 2);
+});
+
+test('촌수 계산은 최단 거리와 고립 노드를 정확히 구분해요', () => {
+  const graph = buildHashtagGraph([
+    { id: '1', title: '1 #기획 #개발' },
+    { id: '2', title: '2 #개발 #프론트엔드' },
+    { id: '3', title: '3 #프론트엔드 #성능최적화' },
+    { id: '4', title: '4 #운동' },
+  ]);
+  const hops = computeHopDistances(graph, '#기획');
+  assert.equal(hops.get('#기획'), 0);
+  assert.equal(hops.get('#개발'), 1);
+  assert.equal(hops.get('#프론트엔드'), 2);
+  assert.equal(hops.get('#성능최적화'), 3);
+  assert.equal(hops.get('#운동'), Infinity);
+});
+
+test('신경망 힘 기반 배치는 모든 노드를 캔버스 안에 겹치지 않게 배치해요', () => {
+  const graph = buildHashtagGraph([
+    { id: '1', title: '1 #기획 #개발 #디자인' },
+    { id: '2', title: '2 #개발 #프론트엔드 #성능최적화' },
+    { id: '3', title: '3 #기획 #로드맵 #팀회의' },
+    { id: '4', title: '4 #스터디 #알고리즘 #개발' },
+    { id: '5', title: '5 #운동 #러닝 #건강' },
+  ]);
+
+  const width = 480;
+  const height = 380;
+  const full = layoutHashtagGraph(graph, { width, height, focusTag: '#개발' });
+  assert.equal(full.nodes.length, graph.length);
+
+  for (const node of full.nodes) {
+    assert(Number.isFinite(node.x) && Number.isFinite(node.y));
+    assert(node.x >= 0 && node.x <= width);
+    assert(node.y >= 0 && node.y <= height);
+  }
+
+  for (let i = 0; i < full.nodes.length; i++) {
+    for (let j = i + 1; j < full.nodes.length; j++) {
+      const dist = Math.hypot(full.nodes[i].x - full.nodes[j].x, full.nodes[i].y - full.nodes[j].y);
+      assert(dist > 8, `노드 ${full.nodes[i].tag}와 ${full.nodes[j].tag}가 겹쳤어요: ${dist}`);
+    }
+  }
+
+  const oneHop = layoutHashtagGraph(graph, { width, height, focusTag: '#개발', maxHops: 1 });
+  const oneHopTags = new Set(oneHop.nodes.map((node) => node.tag));
+  assert(oneHop.nodes.every((node) => node.hop <= 1));
+  assert(oneHop.edges.some((edge) => edge.active));
+  assert(oneHop.edges.every((edge) => oneHopTags.has(edge.source) && oneHopTags.has(edge.target)));
+  assert(!oneHopTags.has('#운동'));
+});
+
+test('핵심 연결만(backboneOnly) 필터는 고립 노드 없이 불필요한 배경 선을 줄여요', () => {
+  const graph = buildHashtagGraph([
+    { id: '1', title: '1 #a #b #c #d' },
+    { id: '2', title: '2 #a #b' },
+    { id: '3', title: '3 #b #c' },
+    { id: '4', title: '4 #e #f' },
+  ]);
+
+  const full = layoutHashtagGraph(graph, {
+    width: 600,
+    height: 480,
+    focusTag: '#e',
+    backboneOnly: false,
+  });
+  const backbone = layoutHashtagGraph(graph, {
+    width: 600,
+    height: 480,
+    focusTag: '#e',
+    backboneOnly: true,
+  });
+
+  assert(backbone.edges.length < full.edges.length);
+  assert(backbone.edges.every((edge) => edge.backbone));
+  // 모든 연결된 노드(#a, #b, #c, #d, #e, #f)가 적어도 1개의 backbone 간선을 유지해요.
+  for (const node of graph) {
+    if (node.links.size > 0) {
+      assert(
+        backbone.edges.some((edge) => edge.source === node.tag || edge.target === node.tag),
+        `${node.tag} 노드가 고립되었어요.`,
+      );
+    }
+  }
 });
