@@ -1,14 +1,34 @@
-import { fixtures, type Card, type ExecutionRecord } from '@noteapp/shared';
+import {
+  type Card,
+  type ExecutionRecord,
+  type ExecutionRecordRow,
+  fixtures,
+  toExecutionRecord,
+  toExecutionRecordInsert,
+} from '@noteapp/shared';
 
 import { dayKey, listCalendarTasks } from '@/features/calendar';
-import { dataSource, fromFixture } from '@/lib/data-source';
+import { failed, signedIn } from '@/features/cards';
+import { fromFixture, sourceFor } from '@/lib/data-source';
+
+const TABLE = 'exec_records';
+const remote = sourceFor('execution') === 'supabase';
 
 let saved: ExecutionRecord[] | undefined;
-function requireFixtures() {
-  if (dataSource !== 'fixtures') throw new Error('수행 기록 데이터 연결은 M2에서 지원해요.');
-}
+
 export async function listExecutionRecords(): Promise<ExecutionRecord[]> {
-  requireFixtures();
+  if (remote) {
+    const supabase = await signedIn();
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select('*')
+      .order('recorded_at', { ascending: false });
+    if (error) {
+      if (error.code === '42P01') return [];
+      failed('수행 기록을 불러오지', error);
+    }
+    return ((data ?? []) as ExecutionRecordRow[]).map(toExecutionRecord);
+  }
   if (!saved) {
     const tasks = await listCalendarTasks();
     const results = ['done', 'partial', 'not_done', 'unknown'] as const;
@@ -23,6 +43,7 @@ export async function listExecutionRecords(): Promise<ExecutionRecord[]> {
   }
   return fromFixture(saved);
 }
+
 export async function loadExecution(
   day: string,
 ): Promise<{ tasks: Card[]; records: ExecutionRecord[] }> {
@@ -41,10 +62,19 @@ export async function loadExecution(
     records,
   };
 }
+
 export async function saveExecutionRecords(records: ExecutionRecord[]): Promise<void> {
-  requireFixtures();
   if (records.some((record) => !['done', 'partial', 'not_done', 'unknown'].includes(record.result)))
     throw new Error('수행 상태를 확인해 주세요.');
+  if (remote) {
+    if (records.length === 0) return;
+    const supabase = await signedIn();
+    const { error } = await supabase
+      .from(TABLE)
+      .upsert(records.map(toExecutionRecordInsert), { onConflict: 'user_id,id' });
+    if (error) failed('수행 기록을 저장하지', error);
+    return;
+  }
   const previous = await listExecutionRecords();
   // 같은 할 일의 상태를 다시 저장하면 기존 기록을 갱신해요.
   saved = await fromFixture([

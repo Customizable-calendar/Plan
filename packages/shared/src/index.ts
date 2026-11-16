@@ -10,6 +10,11 @@ export {
 } from './db/mappers/calendar';
 export { type CardRow, toCard, toCardInsert } from './db/mappers/cards';
 export {
+  type ExecutionRecordRow,
+  toExecutionRecord,
+  toExecutionRecordInsert,
+} from './db/mappers/execution';
+export {
   type NoteChecklistRow,
   type NoteRow,
   toNote,
