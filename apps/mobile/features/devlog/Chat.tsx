@@ -137,7 +137,7 @@ export function Composer({
           <Text style={styles.sendText}>↑</Text>
         </Pressable>
       </View>
-      <Text style={styles.cost}>Claude · 내 API 키 사용</Text>
+      <Text style={styles.cost}>Claude · 팀 AI</Text>
     </View>
   );
 }
