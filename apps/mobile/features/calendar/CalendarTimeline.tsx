@@ -25,12 +25,14 @@ export function CalendarTimeline({
   events,
   compact = false,
   fullDay = false,
+  onSelectDayHeader,
   onSelectSlot,
 }: {
   days: string[];
   events: CalendarEvent[];
   compact?: boolean;
   fullDay?: boolean;
+  onSelectDayHeader?: (day: string) => void;
   onSelectSlot?: (day: string, hour?: number) => void;
 }) {
   const today = dayKey(new Date());
@@ -116,9 +118,11 @@ export function CalendarTimeline({
               <Pressable
                 key={day}
                 accessibilityRole="button"
-                accessibilityLabel={`${day} 일정 및 할 일 열기`}
-                onPress={() => onSelectSlot?.(day)}
-                className="flex-1 items-center rounded-md py-1 active:bg-muted"
+                accessibilityLabel={
+                  onSelectDayHeader ? `${day} 일간 보기로 전환` : `${day} 일정 및 할 일 열기`
+                }
+                onPress={() => (onSelectDayHeader ?? onSelectSlot)?.(day)}
+                className={`flex-1 items-center rounded-md py-1 active:bg-muted ${day === today ? 'bg-primary-soft/50' : ''}`}
               >
                 <Text
                   className={`text-xs font-semibold ${day === today ? 'font-bold text-primary' : 'text-muted-foreground'}`}
