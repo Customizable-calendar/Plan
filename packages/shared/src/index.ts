@@ -9,6 +9,7 @@ export {
   toCalendarEventInsert,
 } from './db/mappers/calendar';
 export { type CardRow, toCard, toCardInsert } from './db/mappers/cards';
+export { type FileRow, toFileInsert, toFileMeta } from './db/mappers/files';
 export {
   type ExecutionRecordRow,
   toExecutionRecord,

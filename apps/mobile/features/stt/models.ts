@@ -73,7 +73,8 @@ export async function downloadModel(
   }
   const file = modelFile(model);
   if (file.exists) file.delete();
-  part.move(file);
+  // SDK 58부터 move가 Promise예요. 기다리지 않으면 이름이 바뀌기 전에 목록을 다시 봐서 "받기"가 그대로 남아요.
+  await part.move(file);
 }
 
 export function deleteModel(model: SttModel): void {
@@ -107,6 +108,6 @@ export async function ensureVadModel(): Promise<File> {
     throw new SttError('말소리 감지 모델이 덜 받아졌어요.');
   }
   if (file.exists) file.delete();
-  part.move(file);
+  await part.move(file);
   return file;
 }

@@ -6,7 +6,6 @@ import { DefaultTheme, ThemeProvider } from 'expo-router/react-navigation';
 import { StatusBar } from 'expo-status-bar';
 
 import { stackScreens } from '@/features/registry';
-import { loginRequired, useSession } from '@/lib/auth';
 import { useLatestUpdate } from '@/lib/updates';
 import { Lnb } from '@/shell/Lnb';
 import { LnbProvider } from '@/shell/LnbContext';
@@ -35,33 +34,27 @@ const navTheme = {
   },
 };
 
+// 로그인 없이도 앱을 써요. 로그인 전에는 메모·일정·카드가 이 기기에만, 로그인하면 계정에도 저장돼요(lib/local-first.ts).
+// 로그인은 설정의 계정 칸에서 열어요. 개발일지·퀴즈처럼 계정이 꼭 필요한 화면은 그 화면에서 로그인을 안내해요.
 export default function RootLayout() {
   useLatestUpdate(); // 머지된 새 버전을 켤 때 바로 적용해요 (lib/updates.ts)
-  // loginRequired가 아니면 바로 null이라 예시 데이터로 로그인 없이 써요. (lib/auth.ts)
-  const session = useSession();
-  if (session === undefined) return null; // 저장된 로그인을 읽는 동안 (스플래시가 보여요)
-  const signedIn = session !== null || !loginRequired;
 
   return (
     <ThemeProvider value={navTheme}>
       <LnbProvider>
         <StatusBar style="dark" />
         <Stack>
-          <Stack.Protected guard={signedIn}>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            {stackScreens.map((s) => (
-              <Stack.Screen
-                key={s.route}
-                name={s.route}
-                options={{ title: s.title, presentation: s.modal ? 'modal' : undefined }}
-              />
-            ))}
-          </Stack.Protected>
-          <Stack.Protected guard={!signedIn}>
-            <Stack.Screen name="login" options={{ headerShown: false }} />
-          </Stack.Protected>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          {stackScreens.map((s) => (
+            <Stack.Screen
+              key={s.route}
+              name={s.route}
+              options={{ title: s.title, presentation: s.modal ? 'modal' : undefined }}
+            />
+          ))}
+          <Stack.Screen name="login" options={{ title: '로그인', presentation: 'modal' }} />
         </Stack>
-        {signedIn ? <Lnb /> : null}
+        <Lnb />
       </LnbProvider>
     </ThemeProvider>
   );
