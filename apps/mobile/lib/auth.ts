@@ -8,7 +8,10 @@ import { getSupabase } from './supabase';
 // 로그인 관련 호출은 이 파일에만 모아요. 인증 방식을 바꾸게 되면 이 파일만 고쳐요.
 // 방식: 이메일로 받은 숫자 코드 (비밀번호 없음, 길이는 대시보드 Email OTP Length). docs/auth.md
 
-/** Supabase를 쓰는 기능이 하나라도 있으면 로그인해야 앱을 써요. 예시 데이터만 쓰면 로그인 없이 돼요. */
+/**
+ * Supabase를 쓰는 기능이 하나라도 있으면 로그인할 수 있어요(설정의 계정 칸). 로그인하지 않아도 앱은 써요.
+ * 예시 데이터만 쓰면 로그인 칸이 안 보여요.
+ */
 export const loginRequired =
   Boolean(env.supabaseUrl && env.supabaseKey) &&
   (dataSource === 'supabase' || String(env.supabaseFeatures).trim() !== '');
