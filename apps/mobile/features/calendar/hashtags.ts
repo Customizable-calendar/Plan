@@ -36,11 +36,11 @@ export type LayoutHashtagGraphOptions = {
 };
 
 const CLUSTER_COUNT = 6;
+const HASHTAG_RE = /(?:^|[^\p{L}\p{M}\p{N}_/#.-])#([\p{L}\p{N}][\p{L}\p{M}\p{N}_-]*)/gu;
 
 export function extractHashtags(text: string): string[] {
   const tags = new Set<string>();
-  const pattern = /(?:^|[^\p{L}\p{M}\p{N}_/#.-])#([\p{L}\p{N}][\p{L}\p{M}\p{N}_-]*)/gu;
-  for (const match of text.normalize('NFKC').matchAll(pattern))
+  for (const match of text.normalize('NFKC').matchAll(HASHTAG_RE))
     tags.add(`#${match[1].toLowerCase()}`);
   return [...tags];
 }
@@ -190,25 +190,33 @@ export function layoutHashtagGraph(
   );
   const [cx, cy, initAngle] = [width / 2, height / 2, Math.PI * (3 - Math.sqrt(5))];
   const useCluster = ordered.length >= 8 && (maxHops === undefined || !Number.isFinite(maxHops));
-  type SimNode = PositionedTagNode & { vx: number; vy: number; deg: number };
+  const clusterTargets = Array.from({ length: CLUSTER_COUNT }, (_, cluster) => {
+    const angle = (cluster / CLUSTER_COUNT) * 2 * Math.PI - Math.PI / 2;
+    return {
+      cx: cx + Math.cos(angle) * width * 0.22,
+      cy: cy + Math.sin(angle) * height * 0.22,
+      ox: useCluster ? Math.cos(angle) * width * 0.18 : 0,
+      oy: useCluster ? Math.sin(angle) * height * 0.18 : 0,
+    };
+  });
+  type SimNode = PositionedTagNode & { vx: number; vy: number; deg: number; repel: number };
   const simNodes: SimNode[] = ordered.map((node, i) => {
     const radius = Math.min(
       19,
       9 + Math.sqrt(node.items.length) * 2.5 + Math.min(2.5, node.links.size * 0.35),
     );
     const r = node.tag === focusTag ? 0 : 10 * Math.sqrt(0.5 + i);
-    const cAngle = (Math.max(0, node.cluster) / CLUSTER_COUNT) * 2 * Math.PI - Math.PI / 2;
-    const ox = useCluster ? Math.cos(cAngle) * width * 0.18 : 0;
-    const oy = useCluster ? Math.sin(cAngle) * height * 0.18 : 0;
+    const target = clusterTargets[Math.max(0, node.cluster) % CLUSTER_COUNT];
     return {
       ...node,
       radius,
       hop: hops.get(node.tag) ?? Infinity,
-      x: cx + ox + r * Math.cos(i * initAngle) * (width > height * 1.2 ? 1.35 : 1) * 0.65,
-      y: cy + oy + r * Math.sin(i * initAngle) * 0.65,
+      x: cx + target.ox + r * Math.cos(i * initAngle) * (width > height * 1.2 ? 1.35 : 1) * 0.65,
+      y: cy + target.oy + r * Math.sin(i * initAngle) * 0.65,
       vx: 0,
       vy: 0,
       deg: Math.max(1, node.links.size),
+      repel: -240 * (1 + 0.08 * node.links.size),
     };
   });
 
@@ -284,9 +292,9 @@ export function layoutHashtagGraph(
           b = simNodes[j];
         const dx = b.x - a.x || jiggle(),
           dy = b.y - a.y || jiggle(),
-          l2 = Math.max(25, dx * dx + dy * dy);
-        const wA = (-240 * (1 + 0.08 * b.links.size) * alpha) / l2,
-          wB = (-240 * (1 + 0.08 * a.links.size) * alpha) / l2;
+          inv = alpha / Math.max(25, dx * dx + dy * dy);
+        const wA = b.repel * inv,
+          wB = a.repel * inv;
         a.vx += dx * wA;
         a.vy += dy * wA;
         b.vx -= dx * wB;
@@ -304,9 +312,9 @@ export function layoutHashtagGraph(
     }
     for (const node of simNodes) {
       if (useCluster && node.tag !== focusTag && node.cluster >= 0) {
-        const cAngle = (node.cluster / CLUSTER_COUNT) * 2 * Math.PI - Math.PI / 2;
-        node.vx += (cx + Math.cos(cAngle) * width * 0.22 - node.x) * 0.08 * alpha;
-        node.vy += (cy + Math.sin(cAngle) * height * 0.22 - node.y) * 0.08 * alpha;
+        const target = clusterTargets[node.cluster % CLUSTER_COUNT];
+        node.vx += (target.cx - node.x) * 0.08 * alpha;
+        node.vy += (target.cy - node.y) * 0.08 * alpha;
       } else {
         const pull = node.tag === focusTag ? 2.2 : node.hop === Infinity ? 1.5 : 1;
         node.vx += (cx - node.x) * (width > height * 1.2 ? 0.025 : 0.075) * pull * alpha;
@@ -355,7 +363,7 @@ export function layoutHashtagGraph(
   }
 
   const positionedNodes: PositionedTagNode[] = simNodes.map(
-    ({ vx: _vx, vy: _vy, deg: _deg, ...rest }) => rest,
+    ({ vx: _vx, vy: _vy, deg: _deg, repel: _repel, ...rest }) => rest,
   );
   const finalMap = new Map(positionedNodes.map((n) => [n.tag, n]));
   const topEdge = new Map<string, string>(),

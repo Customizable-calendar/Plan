@@ -127,6 +127,10 @@ export function HashtagGraphSheet({
     () => (normalizedQuery ? graph.filter((n) => n.tag.slice(1).includes(normalizedQuery)) : graph),
     [graph, normalizedQuery],
   );
+  const matchedTags = useMemo(
+    () => (normalizedQuery ? new Set(filteredTags.map((n) => n.tag)) : undefined),
+    [filteredTags, normalizedQuery],
+  );
   const selectedStyle = selected
     ? CLUSTER_STYLES[selected.cluster % CLUSTER_STYLES.length]
     : CLUSTER_STYLES[0];
@@ -271,9 +275,7 @@ export function HashtagGraphSheet({
                   scope={scope}
                   backboneOnly={backboneOnly}
                   zoom={ZOOM_STEPS[zoomIndex]}
-                  matchedTags={
-                    normalizedQuery ? new Set(filteredTags.map((n) => n.tag)) : undefined
-                  }
+                  matchedTags={matchedTags}
                   onSelect={setSelectedTag}
                 />
 
