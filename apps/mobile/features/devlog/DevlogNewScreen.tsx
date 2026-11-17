@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { askDevlogAi, hasAiKey, saveAiKey } from './ai';
+import { askDevlogAi, canUseAi } from './ai';
 import {
   AiMessage,
   AiText,
@@ -24,9 +24,10 @@ import { devlogPrompt, devlogRequest, type PickedWork, reviseRequest, TEMPLATE }
 import { saveDevlog } from './store';
 import { shiftWeek, weekKey, weekLabel } from './week';
 import { type Picked, WorkPicker } from './WorkPicker';
+import { useMyTeamRole } from '@/lib/auth';
 
 // 1) 이번 주 PR·이슈를 고르고 배운 점 한두 줄 2) 앱 안 AI가 공통 템플릿으로 채워요
-// 3) 대화로 더 고쳐 달라고 하거나 직접 고치고 4) 저장. 키가 없으면 코딩 AI에 부탁 문장을 보내요.
+// 3) 대화로 더 고쳐 달라고 하거나 직접 고치고 4) 저장. 팀 AI를 못 쓰면 코딩 AI에 부탁 문장을 보내요.
 // 대화 모양은 디자인 시스템 "5. AI 채팅" 기본안을 따라요 (Chat.tsx).
 
 type Range = 1 | 2;
@@ -41,8 +42,10 @@ interface Bubble {
 const SUGGESTIONS = ['스터디 질문을 더 쉽게', '배운 개념을 더 자세히', '전체를 더 짧게'];
 
 export function DevlogNewScreen() {
-  // TODO(B, M2): 로그인한 사람으로 고정해요.
-  const [author, setAuthor] = useState<Role>('B');
+  // 고르기 전에는 로그인한 팀원 본인으로 둬요. (Supabase에서는 내 이름으로만 쓸 수 있어요)
+  const myRole = useMyTeamRole();
+  const [pickedAuthor, setAuthor] = useState<Role | null>(null);
+  const author: Role = pickedAuthor ?? myRole ?? 'B';
   const [range, setRange] = useState<Range>(1);
   const [picked, setPicked] = useState<Record<number, Picked>>({});
   const [note, setNote] = useState('');
@@ -66,7 +69,7 @@ export function DevlogNewScreen() {
   const lastAi = thread.map((b) => b.who).lastIndexOf('ai');
 
   useEffect(() => {
-    hasAiKey().then(setKeyReady, () => setKeyReady(false));
+    canUseAi().then(setKeyReady, () => setKeyReady(false));
   }, []);
 
   const run = async (label: string, job: () => Promise<void>) => {
@@ -179,7 +182,11 @@ export function DevlogNewScreen() {
       </Step>
 
       <Step n={3} title="AI로 채우기">
-        {keyReady === false && <KeyBox onSaved={() => setKeyReady(true)} />}
+        {keyReady === false && (
+          <Text style={styles.muted}>
+            앱 안 AI는 로그인한 팀원만 써요(팀 AI). 설정의 계정 칸에서 로그인해 주세요.
+          </Text>
+        )}
         {keyReady && (
           <Pressable
             onPress={fill}
@@ -203,7 +210,7 @@ export function DevlogNewScreen() {
             <Text style={styles.link}>빈 템플릿으로 직접 쓰기</Text>
           </Pressable>
           <Pressable onPress={() => setManual(!manual)} accessibilityRole="button">
-            <Text style={styles.link}>{manual ? '닫기' : '키 없이 코딩 AI에 부탁하기'}</Text>
+            <Text style={styles.link}>{manual ? '닫기' : '앱 AI 없이 코딩 AI에 부탁하기'}</Text>
           </Pressable>
         </View>
         {manual && <ManualAsk prompt={devlogPrompt(member, week)} />}
@@ -306,48 +313,6 @@ function DraftView({
           {sections.length <= 1 ? ' · ## 제목이 없으면 한 덩어리로 저장돼요' : ''}
         </Text>
       )}
-    </View>
-  );
-}
-
-function KeyBox({ onSaved }: { onSaved: () => void }) {
-  const [key, setKey] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const save = async () => {
-    try {
-      await saveAiKey(key);
-      onSaved();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
-  return (
-    <View style={styles.gap}>
-      <Text style={styles.muted}>
-        Claude API 키를 한 번 넣으면 이 폰의 보안 저장소에만 저장돼요. 서버로는 안 가요.
-      </Text>
-      <View style={styles.askRow}>
-        <TextInput
-          value={key}
-          onChangeText={setKey}
-          placeholder="sk-ant-…"
-          placeholderTextColor={colors.muted}
-          secureTextEntry
-          autoCapitalize="none"
-          autoCorrect={false}
-          accessibilityLabel="Claude API 키"
-          style={[styles.input, styles.inputKey, styles.flex]}
-        />
-        <Pressable
-          onPress={save}
-          disabled={!key.trim()}
-          accessibilityRole="button"
-          style={[styles.send, !key.trim() && styles.disabled]}
-        >
-          <Text style={styles.primaryText}>저장</Text>
-        </Pressable>
-      </View>
-      {error && <Text style={styles.error}>{error}</Text>}
     </View>
   );
 }

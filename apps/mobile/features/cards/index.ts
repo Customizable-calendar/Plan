@@ -10,7 +10,16 @@ export { TodayCardsSection } from './TodayCardsSection';
 export { useCards } from './store';
 export { cardDetail, typeLabel } from './format';
 // 카드 탭 맨 위 막 쓰기(notes)가 저장한 글을 카드로 나눌 때 써요.
-export { findCardsFromMemo } from './lnb';
+export {
+  addAiCardsFromTranscript,
+  findCardsFromMemo,
+  findCardsFromTranscript,
+  type TranscriptItem,
+} from './lnb';
+// 캘린더(C)가 확인한 일정·할 일을 보여 주고 시간을 저장할 때 써요. (기기 먼저 저장, 로그인하면 계정에도)
+export { listCards, saveCard } from './data';
+// 개발일지·퀴즈(같은 B)도 같은 로그인 확인을 써요.
+export { failed, isTestBuild, signedIn } from './session';
 
 const cardsIcon = { ios: 'rectangle.stack', android: 'style', web: 'style' } as const;
 

@@ -1,142 +1,101 @@
 import type { Note } from '@noteapp/shared';
-import { colors, fontSize, space } from '@noteapp/ui';
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { palette } from '@noteapp/ui';
+import { Link } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
+import { Pressable, Text, View } from 'react-native';
 
-import { listNotes, saveNote } from './data';
-
-// 오늘 화면에 보여줄 최근 메모 개수
-const LIMIT = 5;
+import { QuickNoteInput } from './QuickNoteInput';
+import { useChecklists } from './useNotes';
 
 interface Props {
   /** 저장한 뒤 이어서 할 일. 카드 탭에서는 카드 찾기를 넘겨요. 돌려준 글은 입력칸 아래에 보여요. */
   onSaved?: (text: string) => Promise<string | void>;
-  /** 최근 메모 목록을 보여줄지 */
+  /** 더는 쓰지 않아요. 최근 메모는 메모 화면(/notes)에서만 봐요. 카드 탭이 넘기고 있어서 남겨 뒀어요. */
   showRecent?: boolean;
   /** 화면이 열리면 바로 입력할 수 있게 */
   autoFocus?: boolean;
 }
 
-export function QuickNoteSection({ onSaved, showRecent = true, autoFocus }: Props) {
-  const [text, setText] = useState('');
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-
-  // useEffect: 화면이 처음 나타날 때 한 번 실행돼요. 여기서 예시 메모를 불러와요.
-  useEffect(() => {
-    listNotes()
-      .then(setNotes)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const canSave = text.trim().length > 0;
-
-  const submit = async () => {
-    try {
-      const note = await saveNote(text);
-      setNotes((prev) => [note, ...prev]); // 새 메모를 목록 맨 위에 붙여요
-      setText('');
-      setError(null);
-      setMessage((await onSaved?.(note.text)) ?? null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
+/** 막 쓰기 입력 + 메모 화면 입구 + 바로 아래 체크리스트. 카드 탭이 맨 위에 붙여요. */
+export function QuickNoteSection({ onSaved, autoFocus }: Props) {
+  const handleSaved = (note: Note) => onSaved?.(note.text);
 
   return (
-    <View style={styles.section}>
-      <Text style={styles.title}>막 쓰기</Text>
-
-      <View style={styles.box}>
-        <TextInput
-          value={text}
-          onChangeText={setText}
-          multiline
-          placeholder="생각나는 대로 적어 보세요"
-          placeholderTextColor={colors.muted}
-          accessibilityLabel="메모 입력"
-          autoFocus={autoFocus}
-          style={styles.input}
-        />
-        <View style={styles.row}>
-          <Text style={styles.message}>{error ?? message}</Text>
-          <Pressable
-            onPress={submit}
-            disabled={!canSave}
-            accessibilityRole="button"
-            style={[styles.button, !canSave && styles.disabled]}
-          >
-            <Text style={styles.buttonText}>{onSaved ? '저장하고 카드 찾기' : '저장'}</Text>
-          </Pressable>
-        </View>
+    <View className="gap-2">
+      <View className="flex-row items-baseline justify-between">
+        <Text className="text-xl font-bold text-foreground">막 쓰기</Text>
+        {/* 중요한 메모와 기록을 함께 보는 곳. 입력칸 아래에 계속 보이지 않게 따로 열어요. */}
+        <Link href="/notes" className="text-[13px] font-bold text-primary">
+          메모 모두 보기
+        </Link>
       </View>
-
-      {!showRecent ? null : <Text style={styles.subtitle}>최근 메모</Text>}
-      {!showRecent ? null : loading ? (
-        <Text style={styles.caption}>불러오는 중</Text>
-      ) : notes.length === 0 ? (
-        <Text style={styles.caption}>아직 쓴 메모가 없어요.</Text>
-      ) : (
-        notes.slice(0, LIMIT).map((n) => (
-          <View key={n.id} style={styles.note}>
-            <Text style={styles.noteText}>{n.text}</Text>
-            <Text style={styles.caption}>{formatTime(n.createdAt)}</Text>
-          </View>
-        ))
-      )}
+      <QuickNoteInput onSaved={handleSaved} autoFocus={autoFocus} />
+      <ChecklistSection />
     </View>
   );
 }
 
-/** "10월 26일 오전 10:00"처럼 기기 시간대로 보여줘요. */
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleString('ko-KR', {
-    month: 'long',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
+/** 기록에서 "체크리스트로 만들기"를 한 메모. 막 쓰기와 같이 볼 수 있게 바로 아래에 둬요. */
+function ChecklistSection() {
+  const { checklists, toggleItem, remove } = useChecklists();
+  if (checklists.length === 0) return null;
 
-const styles = StyleSheet.create({
-  section: { gap: space.sm },
-  title: { fontSize: fontSize.title, fontWeight: '700', color: colors.ink },
-  subtitle: { fontSize: fontSize.caption, fontWeight: '600', color: colors.muted },
-  box: {
-    gap: space.sm,
-    padding: space.md,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    backgroundColor: colors.surface,
-  },
-  input: {
-    minHeight: 72,
-    fontSize: fontSize.body,
-    lineHeight: 22,
-    color: colors.ink,
-    textAlignVertical: 'top',
-  },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  message: { flex: 1, fontSize: fontSize.caption, color: colors.muted },
-  caption: { fontSize: fontSize.caption, color: colors.muted },
-  button: {
-    minHeight: 36,
-    justifyContent: 'center',
-    paddingHorizontal: space.md,
-    borderRadius: 18,
-    backgroundColor: colors.accent,
-  },
-  disabled: { opacity: 0.4 },
-  buttonText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.surface },
-  note: {
-    gap: space.xs,
-    padding: space.sm,
-    borderRadius: 8,
-    backgroundColor: colors.surface,
-  },
-  noteText: { fontSize: fontSize.body, color: colors.ink },
-});
+  return (
+    <View className="gap-2">
+      <Text className="text-[13px] font-semibold text-muted-foreground">체크리스트</Text>
+      {checklists.map((cl) => (
+        <View
+          key={cl.id}
+          className="flex-row items-start gap-2 rounded-lg border border-border bg-card p-3"
+        >
+          <View className="flex-1 gap-1.5">
+            {cl.items.map((it, i) => (
+              <Pressable
+                key={i}
+                onPress={() => toggleItem(cl, i)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: it.checked }}
+                accessibilityLabel={it.text}
+                className="flex-row items-start gap-2"
+              >
+                <View
+                  className={`mt-0.5 h-5 w-5 items-center justify-center rounded-sm border-2 ${
+                    it.checked ? 'border-primary bg-primary' : 'border-muted-foreground'
+                  }`}
+                >
+                  {it.checked ? (
+                    <SymbolView
+                      name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                      size={12}
+                      tintColor={palette.primaryForeground}
+                    />
+                  ) : null}
+                </View>
+                <Text
+                  className={`flex-1 text-[15px] leading-6 ${
+                    it.checked ? 'text-muted-foreground line-through' : 'text-card-foreground'
+                  }`}
+                >
+                  {it.text}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Pressable
+            onPress={() => remove(cl.id)}
+            accessibilityRole="button"
+            accessibilityLabel="체크리스트 지우기"
+            hitSlop={8}
+            className="h-7 w-7 items-center justify-center rounded-full active:bg-muted"
+          >
+            <SymbolView
+              name={{ ios: 'xmark', android: 'close', web: 'close' }}
+              size={16}
+              tintColor={palette.mutedForeground}
+            />
+          </Pressable>
+        </View>
+      ))}
+    </View>
+  );
+}

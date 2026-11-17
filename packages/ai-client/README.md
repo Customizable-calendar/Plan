@@ -6,7 +6,7 @@ Claude·OpenAI·Gemini를 같은 모양(`AiProvider`)으로 부르는 어댑터�
 - 이 패키지는 키를 저장하지 않아요. 키는 앱의 `@/lib/secrets`에서 꺼내 `createProvider`에 넘겨요.
 - 요청·응답 원문을 로그로 남기지 않아요.
 
-Claude 어댑터가 있어요(`claude-opus-5-5`, 공식 SDK `@anthropic-ai/sdk`). 정책상 거절되면 서버가 다른 모델로 다시 돌리게(`fallbacks: "default"`) 해 뒀어요. OpenAI·Gemini는 아직이에요.
+Claude 어댑터가 있어요(`claude-opus-5-5`, 공식 SDK `@anthropic-ai/sdk`). 정책상 거절되면 서버가 다른 모델로 다시 돌리게(`fallbacks: "default"`) 해 뒀어요. Gemini 어댑터도 있어요(`gemini-3.6-flash`, SDK 없이 REST `generateContent`, 키는 `x-goog-api-key` 헤더로만). `json`을 주면 `responseJsonSchema`로 그 모양의 JSON만 받아요. OpenAI는 아직이에요.
 
 - `history`로 앞 대화를 넘기면 이어서 고쳐 달라고 할 수 있어요.
 - 오류는 화면에 바로 보여줄 수 있는 한국어 `AiError`로 바꿔서 던져요.

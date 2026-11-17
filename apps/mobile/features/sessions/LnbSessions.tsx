@@ -8,10 +8,11 @@ import { listMySessions, type SessionItem } from './data';
 // 왼쪽 메뉴 세션 섹션 내용. 내 세션 목록과 새 세션(＋) 줄이에요.
 // 세션을 누르면 세션 화면과 똑같이 움직여요: 마지막 문서를 열고, 문서가 없으면 그 양식으로 새 문서를 열어요.
 // 내 세션 화면(세션 목록, 양식 고르기)은 「새 세션」에서 들어가요.
+// 미완성 세션(양식 없음)은 양식을 고를 수 있는 세션 화면으로 가요.
 function editorHref(s: SessionItem) {
-  return s.lastDocumentId
-    ? `/editor/${s.lastDocumentId}`
-    : `/editor/new?templateId=${encodeURIComponent(s.templateId)}`;
+  if (s.lastDocumentId) return `/editor/${s.lastDocumentId}`;
+  if (s.templateId === null) return '/sessions';
+  return `/editor/new?templateId=${encodeURIComponent(s.templateId)}`;
 }
 export function LnbSessions({ onNavigate }: { onNavigate: (href: string) => void }) {
   const [items, setItems] = useState<SessionItem[]>([]);

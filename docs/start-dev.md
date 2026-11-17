@@ -34,6 +34,22 @@ pnpm dev
 
 회사·학교 와이파이처럼 폰이 컴퓨터를 못 찾으면 `pnpm --filter mobile start --tunnel`로 띄워요.
 
+### stage 최신 버전을 아이폰으로 보기 (링크, 제일 쉬움)
+
+사파리로 **https://customcal-noteapp.expo.app** 를 열고, 공유 → "홈 화면에 추가" 하면 앱처럼 열려요. stage에 머지할 때마다 자동으로 새로 올라가요(`deploy-stage.yml`).
+
+- 웹이라 **받아쓰기는 안 돼요**(폰 안 음성 인식). AI 키를 쓰는 기능(개발일지 AI, 퀴즈, AI 정리)도 웹에서는 안 될 수 있어요. 이건 Android stage APK로 확인해요.
+- 아이폰에서 앱 그대로(받아쓰기까지) 보려면 Apple 개발자 계정(유료)이 있어야 해요.
+
+### stage 최신 버전을 아이폰 Expo Go로 보기 (딸깍)
+
+레포 맨 위의 **`stage-iphone.cmd`(Windows)** 또는 **`stage-iphone.command`(Mac)** 를 더블클릭하거나, 터미널에서 `pnpm stage` 한 번이면 돼요.
+
+- stage 브랜치 최신으로 받기 → `pnpm install` → GitHub `stage` 환경의 `EXPO_PUBLIC_*` 값으로 개발 서버 켜기까지 해요. 내 `.env`는 안 건드려요.
+- 처음 한 번 `gh auth login`이 필요해요. 고친 파일이 있으면 브랜치를 안 바꾸고 멈춰요.
+- 폰이 컴퓨터를 못 찾으면 `pnpm stage --tunnel`, 지금 브랜치 그대로 stage DB에 붙이려면 `pnpm stage --here`.
+- Android는 stage 빌드(APK)를 깔면 이것 없이 머지될 때마다 자동으로 받아요(`docs/deploy.md`).
+
 ## 3. 내 화면 찾기
 
 앱 **오늘** 탭 왼쪽 위 **「개발」** 버튼 → 개발 메뉴. 등록된 기능의 탭·오늘 섹션·화면이 담당별로 나오고, 탭에서 바로 갈 수 없는 화면(세션·편집기·AI 초안·수행 확인)도 여기서 열려요.

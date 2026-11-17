@@ -2,6 +2,8 @@
 import { defineFeature } from '@/lib/feature';
 
 export { EditorScreen } from './EditorScreen';
+// 세션 목록이 "이번에 쓴 문서"를 함께 보여줄 때 써요.
+export { listEditedDocuments } from './data';
 
 export const feature = defineFeature({
   id: 'editor',

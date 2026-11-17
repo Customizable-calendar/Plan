@@ -4,4 +4,6 @@ export const env = {
   supabaseKey: process.env.EXPO_PUBLIC_SUPABASE_KEY ?? '',
   storageProvider: process.env.EXPO_PUBLIC_STORAGE_PROVIDER ?? 'supabase',
   dataSource: process.env.EXPO_PUBLIC_DATA_SOURCE ?? 'fixtures',
+  /** 쉼표로 나눈 기능 id. 여기 적은 기능만 Supabase를 써요. 예: "cards,devlog" */
+  supabaseFeatures: process.env.EXPO_PUBLIC_SUPABASE_FEATURES ?? '',
 };

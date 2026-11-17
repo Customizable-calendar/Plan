@@ -1,7 +1,9 @@
 import type { Card, CardStatus } from '@noteapp/shared';
 import { useEffect, useSyncExternalStore } from 'react';
 
-import { extractFromText, listCards, saveCard } from './data';
+import { onAccountChange } from '@/lib/local-first';
+
+import { deleteCards, extractFromText, listCards, saveCard, saveCards } from './data';
 
 // 카드 탭과 오늘 화면 섹션이 같은 카드 목록을 보도록 한곳에 둬요.
 // useSyncExternalStore: 컴포넌트 밖의 값이 바뀌면 그 값을 쓰는 화면을 다시 그려요.
@@ -27,6 +29,12 @@ function load() {
   return loading;
 }
 
+// 로그인하면 이 기기에 있던 카드와 계정 카드를 합친 목록으로, 로그아웃하면 기기 카드로 다시 불러요.
+onAccountChange(() => {
+  loading = null;
+  void load();
+});
+
 export function useCards() {
   useEffect(() => {
     void load();
@@ -51,13 +59,51 @@ async function update(id: string, patch: Partial<Pick<Card, 'status' | 'title'>>
   }
 }
 
-/** 새로 찾은 카드를 맨 앞에 붙여요. 몇 장 붙였는지 돌려줘요. */
-export async function addFromText(text: string): Promise<number> {
+/** 새로 찾은 카드를 맨 앞에 붙이고 저장해요. 저장이 실패하면 다시 빼요. 붙인 카드를 돌려줘요. */
+export async function addFromText(text: string, options?: { spoken?: boolean }): Promise<Card[]> {
   await load();
-  const found = await extractFromText(text);
-  cards = [...found, ...(cards ?? [])];
+  return addCards(await extractFromText(text, options));
+}
+
+/**
+ * 확인 기다리는 카드 replaced를 빼고 found로 바꿔요. (받아쓴 글을 AI로 다시 찾았을 때)
+ * 이미 확인했거나 버린 카드는 그대로 둬요.
+ */
+export async function replaceCards(replaced: string[], found: Card[]): Promise<Card[]> {
+  await load();
+  const drop = new Set(
+    (cards ?? [])
+      .filter((c) => replaced.includes(c.id) && c.status === 'suggested')
+      .map((c) => c.id),
+  );
+  if (drop.size) {
+    const before = cards ?? [];
+    cards = before.filter((c) => !drop.has(c.id));
+    emit();
+    try {
+      await deleteCards([...drop]);
+    } catch (error) {
+      cards = before;
+      emit();
+      throw error;
+    }
+  }
+  return addCards(found);
+}
+
+async function addCards(found: Card[]): Promise<Card[]> {
+  if (found.length === 0) return [];
+  const ids = new Set(found.map((c) => c.id));
+  cards = [...found, ...(cards ?? []).filter((c) => !ids.has(c.id))];
   emit();
-  return found.length;
+  try {
+    await saveCards(found);
+  } catch (error) {
+    cards = (cards ?? []).filter((c) => !ids.has(c.id));
+    emit();
+    throw error;
+  }
+  return found;
 }
 
 // ---------- 되돌리기 ----------

@@ -23,6 +23,15 @@ export function longDate(iso: string): string {
   }).format(new Date(iso));
 }
 
+/** "오후 3:05" (임시 저장 시각) */
+export function savedTime(date: Date): string {
+  return new Intl.DateTimeFormat('ko-KR', {
+    timeZone: timezone,
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
+}
+
 /** 슬래시 명령으로 넣는 일정 한 줄. 일정 자체의 시간대로 보여줘요. */
 export function eventLine(event: CalendarEvent): string {
   const when = event.allDay

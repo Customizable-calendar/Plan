@@ -15,7 +15,7 @@ export function TryMemo() {
     const memo = text.trim();
     if (!memo) return;
     try {
-      const count = await addFromText(memo);
+      const count = (await addFromText(memo)).length;
       setMessage(count ? `카드 ${count}장을 찾았어요.` : '찾은 카드가 없어요.');
       if (count) setText('');
     } catch (e) {

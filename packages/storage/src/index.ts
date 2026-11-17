@@ -13,4 +13,17 @@ export interface FileStorage {
   remove(key: string): Promise<void>;
 }
 
-export { createSupabaseStorage } from './adapters/supabase';
+export { createSupabaseStorage, type SupabaseStorageClient } from './adapters/supabase';
+
+/**
+ * 서명된 URL로 파일을 저장소에 직접 올려요. 서버를 거치지 않아요.
+ * body는 올릴 내용이에요 (웹과 앱 모두 Blob으로 넘겨요).
+ */
+export async function uploadFile(target: UploadTarget, body: Blob, mime: string): Promise<void> {
+  const response = await fetch(target.url, {
+    method: 'PUT',
+    headers: { 'Content-Type': mime },
+    body,
+  });
+  if (!response.ok) throw new Error(`파일을 올리지 못했어요. (${response.status})`);
+}

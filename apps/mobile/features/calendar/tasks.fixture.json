@@ -1,6 +1,92 @@
 [
-  { "id": "card-2", "title": "견적서 보내기" },
-  { "id": "calendar-demo-2", "title": "회의 자료 정리", "hour": 10 },
-  { "id": "calendar-demo-3", "title": "기획안 검토", "hour": 13 },
-  { "id": "calendar-demo-4", "title": "개발 내용 정리", "hour": 17 }
+  { "id": "card-2", "title": "견적서 보내기 #기획 #자료검토", "dayOffset": 1 },
+  {
+    "id": "calendar-demo-2",
+    "title": "주간 회의 자료 정리 #기획 #팀회의 #자료검토",
+    "dayOffset": -1,
+    "hour": 10
+  },
+  {
+    "id": "calendar-demo-3",
+    "title": "기획안 최종 검토 #기획 #자료검토 #로드맵",
+    "dayOffset": 0,
+    "hour": 15
+  },
+  {
+    "id": "calendar-demo-4",
+    "title": "캘린더 UI 구현 내용 정리 #개발 #캘린더 #프론트엔드",
+    "dayOffset": 1,
+    "hour": 17
+  },
+  {
+    "id": "calendar-demo-5",
+    "title": "신경망 그래프 레이아웃 최적화 #개발 #프론트엔드 #성능최적화 #캘린더",
+    "dayOffset": -4,
+    "hour": 14
+  },
+  {
+    "id": "calendar-demo-6",
+    "title": "Supabase 스키마 및 동기화 API 설계 #개발 #백엔드 #캘린더",
+    "dayOffset": -3,
+    "hour": 11
+  },
+  {
+    "id": "calendar-demo-7",
+    "title": "AI 일정 추출 프롬프트 개선 #인공지능 #개발 #기획",
+    "dayOffset": -2,
+    "hour": 15
+  },
+  {
+    "id": "calendar-demo-8",
+    "title": "그래프 뷰 PR 코드 리뷰 반영 #코드리뷰 #프론트엔드 #개발",
+    "dayOffset": -1,
+    "hour": 16
+  },
+  {
+    "id": "calendar-demo-9",
+    "title": "온보딩 디자인 시안 피드백 정리 #디자인 #기획 #자료검토",
+    "dayOffset": 0,
+    "hour": 11
+  },
+  {
+    "id": "calendar-demo-10",
+    "title": "그래프 탐색 알고리즘 문제 3개 풀기 #알고리즘 #스터디 #개발",
+    "dayOffset": 1,
+    "hour": 10
+  },
+  {
+    "id": "calendar-demo-11",
+    "title": "지식 그래프 시각화 논문 요약 작성 #논문리뷰 #인공지능 #스터디",
+    "dayOffset": 2,
+    "hour": 13
+  },
+  {
+    "id": "calendar-demo-12",
+    "title": "스테이지 배포 체크리스트 점검 #배포 #백엔드 #성능최적화",
+    "dayOffset": 2,
+    "hour": 16
+  },
+  {
+    "id": "calendar-demo-13",
+    "title": "중간 발표 슬라이드 스토리보드 작성 #발표 #기획 #디자인",
+    "dayOffset": 3,
+    "hour": 14
+  },
+  {
+    "id": "calendar-demo-14",
+    "title": "한강 저녁 5km 러닝 및 스트레칭 #러닝 #운동 #건강",
+    "dayOffset": 3,
+    "hour": 19
+  },
+  {
+    "id": "calendar-demo-15",
+    "title": "이번 주 개발 학습일지 회고 작성 #회고 #스터디 #독서",
+    "dayOffset": 4,
+    "hour": 20
+  },
+  {
+    "id": "calendar-demo-16",
+    "title": "멘토링 질문 리스트 및 데모 시나리오 준비 #멘토링 #발표 #회고",
+    "dayOffset": 5
+  }
 ]

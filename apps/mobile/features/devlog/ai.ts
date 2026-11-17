@@ -1,22 +1,16 @@
-import { type AiMessage, createProvider } from '@noteapp/ai-client';
+import type { AiMessage } from '@noteapp/ai-client';
 
-import { getAiKey, setAiKey } from '@/lib/secrets';
+import { canUseTeamAi, teamAi } from '@/lib/team-ai';
 
 import { DEVLOG_SYSTEM } from './prompt';
 
-// 앱 안 AI 대화. 키는 기기 보안 저장소에만 있어요 (lib/secrets, docs/decisions/0002).
-// TODO(B): 설정(D)에 AI 키 화면이 생기면 여기 키 입력은 그쪽으로 보내요.
+// 앱 안 AI 대화. 서버에 둔 팀 Claude 키로 불러요(lib/team-ai, docs/decisions/0005).
+// 로그인한 팀원만, 사람마다 하루 한도 안에서 써요. 각자 키를 넣지 않아요.
 
-export async function hasAiKey(): Promise<boolean> {
-  return !!(await getAiKey('claude'));
-}
-
-export async function saveAiKey(key: string): Promise<void> {
-  await setAiKey('claude', key.trim());
-}
+/** 지금 계정으로 앱 안 AI를 쓸 수 있는지(로그인한 팀원인지) */
+export const canUseAi = canUseTeamAi;
 
 /** 대화를 이어서 AI 답(일지 전체 마크다운)을 받아요. */
 export async function askDevlogAi(history: AiMessage[], prompt: string): Promise<string> {
-  const key = await getAiKey('claude');
-  return createProvider('claude', key ?? '').complete({ system: DEVLOG_SYSTEM, history, prompt });
+  return teamAi.complete({ system: DEVLOG_SYSTEM, history, prompt });
 }

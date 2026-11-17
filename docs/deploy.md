@@ -15,19 +15,23 @@ main 브랜치: 운영 전까지 배포하지 않아요. 마일스톤이 끝나�
 
 - dev 환경은 따로 두지 않아요. 머지 전 확인은 각자 로컬 화면(Expo Go)으로 해요.
 - stage에서 확인하려면 폰에 **stage 빌드**를 한 번 깔아 둬요. 그 뒤로는 머지될 때마다 앱을 다시 열면 새 코드를 받아요.
-- 네이티브 라이브러리를 추가하거나 `app.json`을 크게 바꾸면 기존 stage 빌드가 업데이트를 못 받아요. 그때는 D가 stage 빌드를 다시 만들어 공유해요.
+- 네이티브 라이브러리를 추가하거나 `app.json` 권한·플러그인, SDK를 바꾸면 fingerprint가 달라져서 기존 stage 빌드가 업데이트를 못 받아요.
+  - PR에서 미리 알려 줘요: `native-check.yml`이 "머지 뒤 새 APK가 필요해요" 댓글을 남겨요.
+  - 머지되면 `deploy-stage.yml`이 같은 fingerprint의 stage APK가 없을 때 **자동으로 새로 빌드**하고 PR에 링크를 남겨요. 팀원은 그 링크로 한 번 다시 깔아요.
+  - 직접 확인: `node scripts/native-check.mjs` (EXPO_TOKEN 또는 `eas login` 필요)
 
 ## 1. 환경과 값
 
-| 이름                       | 종류(GitHub `stage` 환경) | 어디서 얻나                                           |
-| -------------------------- | ------------------------- | ----------------------------------------------------- |
-| `SUPABASE_PROJECT_REF`     | Variable                  | stage 프로젝트 주소 `https://<ref>.supabase.co`의 ref |
-| `SUPABASE_ACCESS_TOKEN`    | Secret                    | Supabase 계정 → Access Tokens                         |
-| `SUPABASE_DB_PASSWORD`     | Secret                    | stage 프로젝트 만들 때 정한 DB 비밀번호               |
-| `EXPO_PUBLIC_SUPABASE_URL` | Variable                  | stage 프로젝트 → Project Settings → API               |
-| `EXPO_PUBLIC_SUPABASE_KEY` | Variable                  | 같은 곳의 publishable(anon) 키. service_role은 금지   |
-| `EXPO_PUBLIC_DATA_SOURCE`  | Variable                  | `fixtures`(기본) 또는 `supabase`. M2부터 `supabase`   |
-| `EXPO_TOKEN`               | Secret                    | expo.dev → Account settings → Access tokens           |
+| 이름                            | 종류(GitHub `stage` 환경) | 어디서 얻나                                                                |
+| ------------------------------- | ------------------------- | -------------------------------------------------------------------------- |
+| `SUPABASE_PROJECT_REF`          | Variable                  | stage 프로젝트 주소 `https://<ref>.supabase.co`의 ref                      |
+| `SUPABASE_ACCESS_TOKEN`         | Secret                    | Supabase 계정 → Access Tokens                                              |
+| `SUPABASE_DB_PASSWORD`          | Secret                    | stage 프로젝트 만들 때 정한 DB 비밀번호                                    |
+| `EXPO_PUBLIC_SUPABASE_URL`      | Variable                  | stage 프로젝트 → Project Settings → API                                    |
+| `EXPO_PUBLIC_SUPABASE_KEY`      | Variable                  | 같은 곳의 publishable(anon) 키. service_role은 금지                        |
+| `EXPO_PUBLIC_DATA_SOURCE`       | Variable                  | `fixtures`(기본) 또는 `supabase`. M2부터 `supabase`                        |
+| `EXPO_PUBLIC_SUPABASE_FEATURES` | Variable                  | 앱 전체는 `fixtures`일 때 supabase로 켤 기능 id (쉼표). 예: `cards,devlog` |
+| `EXPO_TOKEN`                    | Secret                    | expo.dev → Account settings → Access tokens                                |
 
 ```bash
 gh variable set SUPABASE_PROJECT_REF --env stage --body "<ref>"
@@ -45,6 +49,7 @@ gh secret set EXPO_TOKEN --env stage
 1. supabase.com에서 팀 조직 아래 `noteapp-stage` 프로젝트를 만들어요(무료 요금제).
 2. 위 표의 Supabase 값 3개를 넣어요.
 3. Edge Function 비밀값(구글 OAuth 등)은 `npx supabase secrets set KEY=값 --project-ref <ref>`로 넣어요. GitHub에는 넣지 않아요.
+   - 팀 AI 키(`ai` 함수, docs/decisions/0005): `npx supabase secrets set ANTHROPIC_API_KEY=<팀 Claude 키> --project-ref <ref>`. 하루 한도를 바꾸려면 `AI_DAILY_LIMIT=<숫자>`도 같이 넣어요.
 4. 마이그레이션은 사람이 직접 적용하지 않아요. stage에 머지되면 `supabase db push`가 아직 안 된 파일만 적용해요.
 
 ## 3. EAS (앱 업데이트)
@@ -72,6 +77,7 @@ npx eas-cli build --profile stage --platform ios       # Apple 개발자 계정�
 
 - Android는 링크로 바로 설치돼요.
 - iOS는 Apple 개발자 계정(유료)이 있어야 하고, `npx eas-cli device:create`로 팀원 기기를 먼저 등록해요. 계정이 없으면 iOS 팀원은 stage 대신 로컬(Expo Go)로 확인해요.
+- **웹 버전**: stage에 머지할 때마다 `deploy-stage.yml`이 웹으로 export해서 EAS Hosting에 올려요 → https://customcal-noteapp.expo.app (아이폰은 사파리로). 받아쓰기처럼 폰 네이티브가 필요한 기능은 웹에서 안 돼요. 웹에는 업데이트 채널이 없어서 `EXPO_PUBLIC_TEST_BUILD=true`로 stage 메뉴를 켜요. 웹 배포가 실패해도 앱 업데이트·APK 빌드는 그대로 가요(`continue-on-error`).
 
 ## 5. main (운영)
 

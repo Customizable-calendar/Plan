@@ -39,6 +39,7 @@ export const feature = defineFeature({
 - 화면은 자기 기능의 `data.ts` 함수·훅만 불러요. 예시 JSON이나 Supabase를 화면에서 직접 부르지 않아요.
 - `EXPO_PUBLIC_DATA_SOURCE=fixtures`(기본)면 `packages/shared` 예시 데이터를, `supabase`면 `getSupabase()` + mapper를 써요 (`lib/data-source.ts`).
 - M2에서 Supabase로 바꿀 때 `data.ts`만 고치고 화면은 그대로 둬요.
+- 기능 하나만 먼저 켤 때는 `data.ts`에서 `dataSource` 대신 `sourceFor('<기능 id>')`를 쓰고, `EXPO_PUBLIC_SUPABASE_FEATURES`에 id를 쉼표로 더해요. stage는 GitHub `stage` 환경 Variable로 같은 값을 넣어요.
 
 ## 검사
 

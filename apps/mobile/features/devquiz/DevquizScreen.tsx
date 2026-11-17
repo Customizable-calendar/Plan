@@ -7,7 +7,7 @@ import {
   AiMessage,
   AiText,
   ErrorNotice,
-  hasAiKey,
+  canUseAi,
   look,
   memberOf,
   members,
@@ -21,6 +21,7 @@ import {
 import { gradeQuiz, makeQuiz, POINTS, type Question } from './quiz';
 import { type Rank, rankBoard } from './rank';
 import { type QuizResult, resultOf, saveQuizResult, useQuizResults } from './store';
+import { useMyTeamRole } from '@/lib/auth';
 
 // 개발 기간 이벤트: 본인 일지로 AI가 낸 퀴즈를 풀고 빌보드에 순위가 박제돼요.
 // 출시 빌드에는 안 보여요(index.ts). 출시 전에 이 폴더째 지워요(README).
@@ -35,14 +36,17 @@ export function DevquizScreen() {
   const { logs } = useDevlogs();
   const week = weekKey(new Date());
   const [scope, setScope] = useState<'week' | 'all'>('week');
-  const [author, setAuthor] = useState<Role>('B');
+  // 고르기 전에는 로그인한 팀원 본인으로 둬요. (Supabase에서는 내 이름으로만 쓸 수 있어요)
+  const myRole = useMyTeamRole();
+  const [pickedAuthor, setAuthor] = useState<Role | null>(null);
+  const author: Role = pickedAuthor ?? myRole ?? 'B';
   const [phase, setPhase] = useState<Phase>({ kind: 'board' });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [keyReady, setKeyReady] = useState<boolean | null>(null);
 
   useEffect(() => {
-    hasAiKey().then(setKeyReady, () => setKeyReady(false));
+    canUseAi().then(setKeyReady, () => setKeyReady(false));
   }, []);
 
   const log = logs.find((l) => l.week === week && l.author === author);
@@ -188,12 +192,9 @@ export function DevquizScreen() {
             </Link>
           </>
         ) : keyReady === false ? (
-          <>
-            <Text style={styles.muted}>Claude 키가 필요해요. 일지 쓰기 화면에서 저장해요.</Text>
-            <Link href="/devlog-new" style={styles.link}>
-              키 저장하러 가기
-            </Link>
-          </>
+          <Text style={styles.muted}>
+            퀴즈는 팀 AI로 내요. 로그인한 팀원만 써요. 설정의 계정 칸에서 로그인해 주세요.
+          </Text>
         ) : (
           <Button
             label={`${memberOf(author).name} 퀴즈 시작 (${POINTS * 5}점 만점)`}
