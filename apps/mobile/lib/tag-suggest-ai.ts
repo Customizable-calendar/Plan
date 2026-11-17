@@ -4,9 +4,10 @@ import { cleanTagSuggestions, type TagCategory, type TagSuggestion } from '@note
 import { getAiKey } from './secrets';
 import { listTagCategories, withoutDismissed } from './tag-categories';
 
-// 해시태그 자동 분류 추천(방법 2): 사용자 Gemini 키로 뜻이 비슷한 해시태그를 묶어요.
+// 해시태그 자동 분류 추천(방법 2): Claude로 뜻이 비슷한 해시태그를 묶어요.
+// 키는 개발일지·퀴즈와 같은 Claude 키(getAiKey('claude'))를 써요.
 // 같이 쓰인 해시태그로 묶는 규칙 추천(방법 1, C)이 못 잡는 것(예: #러닝, #헬스)을 잡아요.
-// Google로는 해시태그 이름과 카테고리 이름만 가요. 메모·일정 본문은 안 보내요.
+// Anthropic으로는 해시태그 이름과 카테고리 이름만 가요. 메모·일정 본문은 안 보내요.
 // 키는 기기 보안 저장소에만 있어요(docs/decisions/0002).
 // 결과는 추천일 뿐이에요. 화면에서 확인(acceptSuggestion)하거나 거절(dismissSuggestion)해요.
 
@@ -26,6 +27,7 @@ const SCHEMA = {
           categoryId: { type: 'string', description: '받은 카테고리 id 그대로' },
         },
         required: ['tag', 'categoryId'],
+        additionalProperties: false,
       },
     },
     groups: {
@@ -38,10 +40,12 @@ const SCHEMA = {
           tags: { type: 'array', items: { type: 'string' }, description: '2개 이상' },
         },
         required: ['name', 'tags'],
+        additionalProperties: false,
       },
     },
   },
   required: ['assign', 'groups'],
+  additionalProperties: false,
 };
 
 const SYSTEM = [
@@ -54,7 +58,7 @@ const SYSTEM = [
 ].join('\n');
 
 export async function hasTagAiKey(): Promise<boolean> {
-  return !!(await getAiKey('gemini'));
+  return !!(await getAiKey('claude'));
 }
 
 /**
@@ -70,8 +74,8 @@ export async function suggestTagCategoriesWithAi(
   const free = known.filter((t) => !grouped.has(t)).slice(0, MAX_TAGS);
   if (free.length === 0) return [];
 
-  const key = await getAiKey('gemini');
-  const answer = await createProvider('gemini', key ?? '').complete({
+  const key = await getAiKey('claude');
+  const answer = await createProvider('claude', key ?? '').complete({
     system: SYSTEM,
     prompt: promptFor(categories, free),
     json: SCHEMA,
