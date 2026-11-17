@@ -187,9 +187,11 @@ isOneToOne: false
           Functions: {
             "ai_add_tokens":
 { Args: { "p_input": number,"p_output": number,"p_user": string }; Returns: undefined
-                           },"ai_take_request":
+                           },
+"ai_take_request":
 { Args: { "p_limit": number,"p_user": string }; Returns: boolean
-                           },"my_team_role":
+                           },
+"my_team_role":
 { Args: Record<PropertyKey, never>; Returns: string
                            }
           }
