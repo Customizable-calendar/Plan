@@ -1,15 +1,16 @@
 import type { CalendarEvent, Card } from '@noteapp/shared';
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
+import { CalendarDaySheet } from './CalendarDaySheet';
 import { CalendarTimeline } from './CalendarTimeline';
 import { HashtagGraphSheet } from './HashtagGraphSheet';
 import { TimeCandidates } from './TimeCandidates';
-import { confirmTask, loadCalendar, useCalendar } from './data';
+import { loadCalendar, useCalendar } from './data';
 import {
   dayKey,
   eventsOnDay,
+  groupEventsByDay,
   shiftDay,
   shiftMonth,
   splitTitleAndTags,
@@ -17,12 +18,14 @@ import {
   weekDays,
 } from './model';
 
-type CalendarViewMode = 'day' | 'week' | 'month' | 'list';
+type CalendarViewMode = 'month' | 'week' | 'day' | 'list';
 const WEEKDAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'] as const;
+const GRID_HEADERS = ['월', '화', '수', '목', '금', '토', '일'] as const;
+const EMPTY_EVENTS: CalendarEvent[] = [];
 const VIEW_TABS: readonly { key: CalendarViewMode; label: string }[] = [
-  { key: 'day', label: '일' },
-  { key: 'week', label: '주' },
   { key: 'month', label: '월' },
+  { key: 'week', label: '주' },
+  { key: 'day', label: '일' },
   { key: 'list', label: '목록' },
 ];
 
@@ -60,38 +63,54 @@ export function CalendarScreen() {
   const { events, tasks, loading, error } = useCalendar();
   const today = dayKey(new Date());
   const [day, setDay] = useState(() => dayKey(new Date()));
-  const [view, setView] = useState<CalendarViewMode>('day');
+  const [view, setView] = useState<CalendarViewMode>('month');
   const [fullDay, setFullDay] = useState(false);
-  const [showScheduled, setShowScheduled] = useState(false);
+  const [sheetTarget, setSheetTarget] = useState<{ day: string; initialHour?: number }>();
   const [candidateTask, setCandidateTask] = useState<Card>();
-  const [message, setMessage] = useState('');
   const [showHashtags, setShowHashtags] = useState(false);
 
-  const days = weekDays(day);
   const month = day.slice(0, 7);
   const monthStart = `${month}-01`;
-  const nextMonth = shiftMonth(monthStart, 1);
-  const gridStart = weekDays(monthStart)[0];
-  const gridDays =
-    view === 'month'
-      ? Array.from({ length: 6 }, (_, w) => weekDays(shiftDay(gridStart, w * 7))).filter(
-          (w) => w[0] < nextMonth,
-        )
-      : [days];
+  const days = useMemo(() => weekDays(day), [day]);
+  const monthWeeks = useMemo(() => {
+    const nextMonth = shiftMonth(monthStart, 1);
+    const gridStart = weekDays(monthStart)[0];
+    return Array.from({ length: 6 }, (_, w) => weekDays(shiftDay(gridStart, w * 7))).filter(
+      (w) => w[0] < nextMonth,
+    );
+  }, [monthStart]);
 
-  const dayEvents = eventsOnDay(events, day);
-  const dayTasks = tasks.filter(
-    (t) => t.status !== 'dismissed' && t.startAt && dayKey(t.startAt) === day,
+  const scheduledTaskDays = useMemo(
+    () =>
+      new Set(
+        tasks
+          .filter((t) => t.status !== 'dismissed' && Boolean(t.startAt))
+          .map((t) => dayKey(t.startAt!)),
+      ),
+    [tasks],
   );
-  const unscheduled = tasks.filter((t) => t.status !== 'dismissed' && !t.startAt);
-  const scheduled = tasks.filter((t) => t.status !== 'dismissed' && Boolean(t.startAt));
+
+  const monthEventsByDay = useMemo(
+    () =>
+      view === 'month'
+        ? groupEventsByDay(events, monthWeeks.flat())
+        : new Map<string, CalendarEvent[]>(),
+    [events, monthWeeks, view],
+  );
+
+  const weekEventsByDay = useMemo(() => groupEventsByDay(events, days), [days, events]);
+  const sheetDayEvents = useMemo(
+    () => (sheetTarget ? eventsOnDay(events, sheetTarget.day) : EMPTY_EVENTS),
+    [events, sheetTarget],
+  );
+
   const titleText =
-    view === 'day'
-      ? `${Number(day.slice(8, 10))}일 ${WEEKDAY_NAMES[new Date(`${day}T12:00:00+09:00`).getUTCDay()]}요일`
+    view === 'month'
+      ? `${Number(day.slice(5, 7))}월`
       : view === 'week'
-        ? `${Number(day.slice(5, 7))}월 주간 시간표`
-        : view === 'month'
-          ? `${Number(day.slice(0, 4))}년 ${Number(day.slice(5, 7))}월`
+        ? `${Number(day.slice(5, 7))}월 주간`
+        : view === 'day'
+          ? `${Number(day.slice(8, 10))}일 ${WEEKDAY_NAMES[new Date(`${day}T12:00:00+09:00`).getUTCDay()]}요일`
           : '주간 일정 목록';
 
   const movePeriod = (dir: number) =>
@@ -101,6 +120,11 @@ export function CalendarScreen() {
         : shiftDay(day, dir * (view === 'week' || view === 'list' ? 7 : 1)),
     );
 
+  const openDaySheet = useCallback((targetDay: string, initialHour?: number) => {
+    setDay(targetDay);
+    setSheetTarget({ day: targetDay, initialHour });
+  }, []);
+
   return (
     <ScrollView
       className="flex-1 bg-background"
@@ -109,7 +133,9 @@ export function CalendarScreen() {
       <View className="flex-row flex-wrap items-end justify-between gap-2">
         <View>
           <Text className="text-sm text-muted-foreground">
-            {Number(day.slice(0, 4))}년 {Number(day.slice(5, 7))}월
+            {view === 'month'
+              ? `${Number(day.slice(0, 4))}년`
+              : `${Number(day.slice(0, 4))}년 ${Number(day.slice(5, 7))}월`}
           </Text>
           <Text
             accessibilityRole="header"
@@ -121,25 +147,7 @@ export function CalendarScreen() {
         <View className="flex-row flex-wrap gap-2">
           {day !== today && <ActionButton label="오늘" onPress={() => setDay(today)} />}
           <ActionButton label="해시태그 연결망" onPress={() => setShowHashtags(true)} />
-          <ActionButton
-            label="수행 확인"
-            selected
-            onPress={() => router.push({ pathname: '/execution', params: { date: day } })}
-          />
         </View>
-      </View>
-
-      <View className="flex-row flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2">
-        <Text className="text-xs text-muted-foreground">
-          선택한 날 일정 {dayEvents.length + dayTasks.length}개, 미배정 할 일 {unscheduled.length}개
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="일정 새로고침"
-          onPress={() => void loadCalendar()}
-        >
-          <Text className="text-xs font-bold text-primary">새로고침</Text>
-        </Pressable>
       </View>
 
       <View className="flex-row flex-wrap items-center justify-between gap-2">
@@ -163,42 +171,73 @@ export function CalendarScreen() {
             );
           })}
         </View>
-        <View className="flex-row gap-2">
+        <View className="flex-row flex-wrap items-center gap-2">
+          {(view === 'day' || view === 'week') && (
+            <ActionButton
+              label={fullDay ? '07~22시' : '24시간'}
+              selected={fullDay}
+              onPress={() => setFullDay((v) => !v)}
+            />
+          )}
           <ActionButton label="이전" onPress={() => movePeriod(-1)} />
           <ActionButton label="다음" onPress={() => movePeriod(1)} />
         </View>
       </View>
 
-      {view !== 'list' &&
-        gridDays.map((week, row) => (
-          <View key={week[0]} className="flex-row gap-1">
-            {week.map((date, i) => {
-              const hasEvent = eventsOnDay(events, date).length > 0;
-              const hasTask = tasks.some(
-                (t) => t.status !== 'dismissed' && t.startAt && dayKey(t.startAt) === date,
-              );
-              const count =
-                eventsOnDay(events, date).length +
-                tasks.filter(
-                  (t) => t.status !== 'dismissed' && t.startAt && dayKey(t.startAt) === date,
-                ).length;
+      {loading && <ActivityIndicator accessibilityLabel="일정 불러오는 중" />}
+      {!!error && (
+        <View className="gap-3 rounded-xl border border-border bg-card p-4">
+          <Text accessibilityRole="alert" className="text-sm text-foreground">
+            {error}
+          </Text>
+          <ActionButton label="다시 시도" onPress={() => void loadCalendar()} />
+        </View>
+      )}
+
+      {!loading && !error && view === 'month' && (
+        <MonthCalendarGrid
+          month={month}
+          today={today}
+          selectedDay={day}
+          weeks={monthWeeks}
+          eventsByDay={monthEventsByDay}
+          scheduledTaskDays={scheduledTaskDays}
+          onSelectDay={openDaySheet}
+        />
+      )}
+
+      {!loading && !error && view === 'week' && (
+        <CalendarTimeline
+          days={days}
+          events={events}
+          compact
+          fullDay={fullDay}
+          onSelectSlot={openDaySheet}
+        />
+      )}
+
+      {!loading && !error && view === 'day' && (
+        <View className="gap-3">
+          <View className="flex-row gap-1">
+            {days.map((date, i) => {
+              const dayEvents = weekEventsByDay.get(date) ?? EMPTY_EVENTS;
+              const hasEvent = dayEvents.length > 0;
+              const hasTask = scheduledTaskDays.has(date);
               const selected = date === day;
               return (
                 <Pressable
                   key={date}
                   accessibilityRole="button"
-                  accessibilityLabel={`${date} ${count}개 일정`}
+                  accessibilityLabel={`${date} 일정 ${dayEvents.length}개`}
                   accessibilityState={{ selected }}
-                  onPress={() => setDay(date)}
-                  className={`flex-1 items-center justify-center gap-0.5 rounded-lg py-1.5 ${view === 'month' && row > 0 ? 'min-h-11' : 'min-h-[60px]'} ${selected ? 'bg-primary' : date === today ? 'border border-primary bg-muted' : 'bg-muted'} ${view === 'month' && !date.startsWith(month) ? 'opacity-50' : ''}`}
+                  onPress={() => (selected ? openDaySheet(date) : setDay(date))}
+                  className={`min-h-[60px] flex-1 items-center justify-center gap-0.5 rounded-lg py-1.5 ${selected ? 'bg-primary' : date === today ? 'border border-primary bg-muted' : 'bg-muted'}`}
                 >
-                  {(view !== 'month' || row === 0) && (
-                    <Text
-                      className={`text-[11px] ${selected ? 'text-primary-foreground' : 'text-muted-foreground'}`}
-                    >
-                      {['월', '화', '수', '목', '금', '토', '일'][i]}
-                    </Text>
-                  )}
+                  <Text
+                    className={`text-[11px] ${selected ? 'text-primary-foreground' : 'text-muted-foreground'}`}
+                  >
+                    {GRID_HEADERS[i]}
+                  </Text>
                   <Text
                     className={`text-[15px] font-bold ${selected ? 'text-primary-foreground' : 'text-foreground'}`}
                   >
@@ -220,243 +259,208 @@ export function CalendarScreen() {
               );
             })}
           </View>
-        ))}
-
-      {loading && <ActivityIndicator accessibilityLabel="일정 불러오는 중" />}
-      {!!error && (
-        <View className="gap-3 rounded-xl border border-border bg-card p-4">
-          <Text accessibilityRole="alert" className="text-sm text-foreground">
-            {error}
-          </Text>
-          <ActionButton label="다시 시도" onPress={() => void loadCalendar()} />
-        </View>
-      )}
-
-      {!loading && !error && (view === 'day' || view === 'week') && (
-        <View className="gap-2.5">
-          <View className="flex-row flex-wrap items-center justify-between gap-2">
+          <View className="flex-row items-center justify-between gap-2">
             <Text accessibilityRole="header" className="text-base font-bold text-foreground">
-              {view === 'day'
-                ? `${DayLabel(day)} 시간표 (${dayEvents.length + dayTasks.length}개)`
-                : '주간 시간표'}
+              {DayLabel(day)}
             </Text>
-            <ActionButton
-              label={fullDay ? '활동 시간대 (07~22시)' : '24시간 전체'}
-              selected={fullDay}
-              onPress={() => setFullDay((v) => !v)}
-            />
+            <ActionButton label="날짜 상세 / 할 일" onPress={() => openDaySheet(day)} />
           </View>
-          {view === 'day' && dayEvents.length + dayTasks.length === 0 && (
-            <Text className="text-xs text-muted-foreground">선택한 날에 등록된 일정이 없어요.</Text>
-          )}
           <CalendarTimeline
-            days={view === 'week' ? days : [day]}
+            days={[day]}
             events={events}
-            tasks={tasks}
-            compact={view === 'week'}
             fullDay={fullDay}
-            onSelectTask={setCandidateTask}
+            onSelectSlot={openDaySheet}
           />
         </View>
       )}
 
-      {!loading && !error && (view === 'week' || view === 'month') && (
-        <DayScheduleCard
-          day={day}
-          events={dayEvents}
-          tasks={dayTasks}
-          onSelectTask={setCandidateTask}
-        />
-      )}
       {!loading && !error && view === 'list' && (
-        <View className="gap-3">
-          {days
-            .map((d) => ({
-              d,
-              ev: eventsOnDay(events, d),
-              tk: tasks.filter(
-                (t) => t.status !== 'dismissed' && t.startAt && dayKey(t.startAt) === d,
-              ),
-            }))
-            .filter((x) => x.ev.length > 0 || x.tk.length > 0).length === 0 ? (
-            <View className="rounded-xl border border-border bg-card p-4">
-              <Text className="text-xs text-muted-foreground">이번 주에 등록된 일정이 없어요.</Text>
-            </View>
-          ) : (
-            days
-              .map((d) => ({
-                d,
-                ev: eventsOnDay(events, d),
-                tk: tasks.filter(
-                  (t) => t.status !== 'dismissed' && t.startAt && dayKey(t.startAt) === d,
-                ),
-              }))
-              .filter((x) => x.ev.length > 0 || x.tk.length > 0)
-              .map(({ d, ev, tk }) => (
-                <DayScheduleCard
-                  key={d}
-                  day={d}
-                  events={ev}
-                  tasks={tk}
-                  onSelectTask={setCandidateTask}
-                />
-              ))
-          )}
-        </View>
+        <EventListView days={days} eventsByDay={weekEventsByDay} onSelectDay={openDaySheet} />
       )}
 
-      <View className="gap-2.5 pt-1">
-        <View className="flex-row flex-wrap items-center justify-between gap-2">
-          <Text accessibilityRole="header" className="text-base font-bold text-foreground">
-            시간을 잡을 할 일 ({unscheduled.length}개)
-          </Text>
-          {scheduled.length > 0 && (
-            <ActionButton
-              label={
-                showScheduled ? '배정된 할 일 접기' : `배정된 할 일 ${scheduled.length}개 보기`
-              }
-              selected={showScheduled}
-              onPress={() => setShowScheduled((v) => !v)}
-            />
-          )}
-        </View>
-        {!loading && !error && unscheduled.length === 0 && (
-          <View className="rounded-xl border border-border bg-card p-4">
-            <Text className="text-xs text-muted-foreground">
-              시간을 배정할 할 일이 모두 정리되었어요.
-            </Text>
-          </View>
-        )}
-        {[...unscheduled, ...(showScheduled ? scheduled : [])].map((task) => {
-          const { cleanTitle, tags } = splitTitleAndTags(task.title);
-          const meta = task.startAt
-            ? `배정됨 (${dayKey(task.startAt)} ${timeLabel(task.startAt)})`
-            : task.dueAt
-              ? `마감 ${dayKey(task.dueAt)} ${timeLabel(task.dueAt)}`
-              : '마감 없음';
-          return (
-            <View
-              key={task.id}
-              className="flex-row flex-wrap items-start justify-between gap-2 rounded-xl border border-border bg-card p-4"
-            >
-              <View className="flex-1 gap-1">
-                <Text className="text-base font-bold text-foreground">{cleanTitle}</Text>
-                <Text className="text-xs text-muted-foreground">
-                  {meta}, {task.status === 'confirmed' ? '확인됨' : '확인 전 제안'}
-                </Text>
-                <TagChips tags={tags} />
-              </View>
-              {task.status === 'suggested' ? (
-                <ActionButton
-                  label="할 일 확인"
-                  onPress={() =>
-                    void confirmTask(task.id).catch((e: Error) => setMessage(e.message))
-                  }
-                />
-              ) : (
-                <ActionButton
-                  label={task.startAt ? '시간 다시 잡기' : '시간 후보 보기'}
-                  onPress={() => setCandidateTask(task)}
-                />
-              )}
-            </View>
-          );
-        })}
-      </View>
-
-      {!!message && (
-        <Text accessibilityLiveRegion="polite" className="text-sm text-foreground">
-          {message}
-        </Text>
-      )}
-      {candidateTask && (
+      {candidateTask ? (
         <TimeCandidates
           task={candidateTask}
-          day={day}
+          day={sheetTarget?.day ?? day}
           onClose={() => setCandidateTask(undefined)}
         />
-      )}
-      {showHashtags && (
+      ) : sheetTarget ? (
+        <CalendarDaySheet
+          key={`${sheetTarget.day}:${sheetTarget.initialHour ?? 'd'}`}
+          day={sheetTarget.day}
+          initialHour={sheetTarget.initialHour}
+          events={sheetDayEvents}
+          tasks={tasks}
+          onChangeDay={openDaySheet}
+          onSelectTask={setCandidateTask}
+          onClose={() => setSheetTarget(undefined)}
+        />
+      ) : showHashtags ? (
         <HashtagGraphSheet events={events} tasks={tasks} onClose={() => setShowHashtags(false)} />
-      )}
+      ) : null}
     </ScrollView>
   );
 }
 
-function TagChips({ tags }: { tags: string[] }) {
-  if (!tags.length) return null;
+function MonthCalendarGrid({
+  month,
+  today,
+  selectedDay,
+  weeks,
+  eventsByDay,
+  scheduledTaskDays,
+  onSelectDay,
+}: {
+  month: string;
+  today: string;
+  selectedDay: string;
+  weeks: string[][];
+  eventsByDay: Map<string, CalendarEvent[]>;
+  scheduledTaskDays: Set<string>;
+  onSelectDay: (day: string) => void;
+}) {
   return (
-    <View className="flex-row flex-wrap gap-1.5">
-      {tags.map((tag) => (
-        <View key={tag} className="rounded-sm bg-muted px-2 py-0.5">
-          <Text className="text-[11px] font-semibold text-muted-foreground">{tag}</Text>
+    <View
+      accessibilityLabel="월간 캘린더"
+      className="overflow-hidden rounded-xl border border-border bg-card"
+    >
+      <View className="flex-row border-b border-border bg-muted">
+        {GRID_HEADERS.map((label) => (
+          <View key={label} className="flex-1 items-center py-2">
+            <Text className="text-xs font-bold text-muted-foreground">{label}</Text>
+          </View>
+        ))}
+      </View>
+
+      {weeks.map((week) => (
+        <View key={week[0]} className="flex-row border-t border-border">
+          {week.map((date, i) => {
+            const dayEvents = eventsByDay.get(date) ?? EMPTY_EVENTS;
+            const hasTask = scheduledTaskDays.has(date);
+            const inMonth = date.startsWith(month);
+            const isToday = date === today;
+            const isSelected = date === selectedDay;
+            return (
+              <Pressable
+                key={date}
+                accessibilityRole="button"
+                accessibilityLabel={`${date} 일정 ${dayEvents.length}개 열기`}
+                onPress={() => onSelectDay(date)}
+                className={`min-h-[96px] flex-1 gap-1 p-1.5 active:bg-muted/60 ${i > 0 ? 'border-l border-border' : ''} ${!inMonth ? 'bg-muted/30 opacity-50' : isSelected ? 'bg-primary-soft/25' : 'bg-card'}`}
+              >
+                <View className="flex-row items-center justify-between">
+                  <View
+                    className={`h-6 w-6 items-center justify-center rounded-full ${isToday ? 'bg-primary' : ''}`}
+                  >
+                    <Text
+                      className={`text-xs font-bold ${isToday ? 'text-primary-foreground' : 'text-foreground'}`}
+                    >
+                      {Number(date.slice(-2))}
+                    </Text>
+                  </View>
+                  {hasTask && <View className="h-1.5 w-1.5 rounded-full bg-task" />}
+                </View>
+
+                <View className="gap-1">
+                  {dayEvents.slice(0, 2).map((ev) => (
+                    <View
+                      key={ev.id}
+                      className="rounded-sm border-l-2 border-l-cal-1 bg-cal-1-soft px-1.5 py-0.5"
+                    >
+                      <Text numberOfLines={1} className="text-[11px] font-semibold text-foreground">
+                        {splitTitleAndTags(ev.title).cleanTitle}
+                      </Text>
+                    </View>
+                  ))}
+                  {dayEvents.length > 2 && (
+                    <Text className="px-1 text-[10px] font-semibold text-muted-foreground">
+                      +{dayEvents.length - 2}개 더보기
+                    </Text>
+                  )}
+                </View>
+              </Pressable>
+            );
+          })}
         </View>
       ))}
     </View>
   );
 }
 
-function DayScheduleCard({
-  day,
-  events,
-  tasks,
-  onSelectTask,
+function EventListView({
+  days,
+  eventsByDay,
+  onSelectDay,
 }: {
-  day: string;
-  events: CalendarEvent[];
-  tasks: Card[];
-  onSelectTask: (t: Card) => void;
+  days: string[];
+  eventsByDay: Map<string, CalendarEvent[]>;
+  onSelectDay: (day: string) => void;
 }) {
+  const grouped = days
+    .map((d) => ({ d, ev: eventsByDay.get(d) ?? EMPTY_EVENTS }))
+    .filter((item) => item.ev.length > 0);
+
+  if (grouped.length === 0) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => onSelectDay(days[0])}
+        className="rounded-xl border border-border bg-card p-4"
+      >
+        <Text className="text-xs text-muted-foreground">
+          이번 주에 등록된 일정이 없어요. 눌러서 일정을 추가하거나 할 일을 확인하세요.
+        </Text>
+      </Pressable>
+    );
+  }
+
   return (
-    <View className="gap-2.5 rounded-xl border border-border bg-card p-4">
-      <Text accessibilityRole="header" className="text-base font-bold text-foreground">
-        {DayLabel(day)} 일정 ({events.length + tasks.length}개)
-      </Text>
-      {events.length + tasks.length === 0 && (
-        <Text className="text-xs text-muted-foreground">등록된 일정이 없어요.</Text>
-      )}
-      {events.map((ev) => {
-        const { cleanTitle, tags } = splitTitleAndTags(ev.title);
-        return (
-          <View
-            key={ev.id}
-            className="flex-row items-center gap-3 rounded-md border-l-[3px] border-l-cal-1 bg-cal-1-soft px-3 py-2.5"
-          >
-            <Text className="w-24 text-xs font-bold text-muted-foreground">
-              {ev.allDay ? '종일' : `${timeLabel(ev.startAt)} ~ ${timeLabel(ev.endAt)}`}
-            </Text>
-            <View className="flex-1 gap-1">
-              <Text className="text-sm font-bold text-foreground">{cleanTitle}</Text>
-              <TagChips tags={tags} />
-            </View>
-            <View className="rounded-sm bg-card px-2 py-0.5">
-              <Text className="text-[11px] font-bold text-cal-1">캘린더</Text>
-            </View>
-          </View>
-        );
-      })}
-      {tasks.map((task) => {
-        const { cleanTitle, tags } = splitTitleAndTags(task.title);
-        const range = `${timeLabel(task.startAt!)} ~ ${timeLabel(task.endAt!)}`;
-        return (
-          <Pressable
-            key={task.id}
-            accessibilityRole="button"
-            accessibilityLabel={`${cleanTitle}, ${range}, 눌러서 시간 다시 잡기`}
-            onPress={() => onSelectTask(task)}
-            className="flex-row items-center gap-3 rounded-md border-l-[3px] border-l-task bg-task-soft px-3 py-2.5"
-          >
-            <Text className="w-24 text-xs font-bold text-muted-foreground">{range}</Text>
-            <View className="flex-1 gap-1">
-              <Text className="text-sm font-bold text-foreground">{cleanTitle}</Text>
-              <TagChips tags={tags} />
-            </View>
-            <View className="rounded-sm bg-card px-2 py-0.5">
-              <Text className="text-[11px] font-bold text-task">할 일</Text>
-            </View>
-          </Pressable>
-        );
-      })}
+    <View className="gap-3">
+      {grouped.map(({ d, ev }) => (
+        <Pressable
+          key={d}
+          accessibilityRole="button"
+          accessibilityLabel={`${DayLabel(d)} 일정 ${ev.length}개 열기`}
+          onPress={() => onSelectDay(d)}
+          className="gap-2.5 rounded-xl border border-border bg-card p-4"
+        >
+          <Text accessibilityRole="header" className="text-base font-bold text-foreground">
+            {DayLabel(d)} ({ev.length}개)
+          </Text>
+          {ev.map((event) => {
+            const { cleanTitle, tags } = splitTitleAndTags(event.title);
+            return (
+              <View
+                key={event.id}
+                className="flex-row items-center gap-3 rounded-md border-l-[3px] border-l-cal-1 bg-cal-1-soft px-3 py-2.5"
+              >
+                <Text className="w-24 text-xs font-bold text-muted-foreground">
+                  {event.allDay
+                    ? '종일'
+                    : `${timeLabel(event.startAt)} ~ ${timeLabel(event.endAt)}`}
+                </Text>
+                <View className="flex-1 gap-1">
+                  <Text className="text-sm font-bold text-foreground">{cleanTitle}</Text>
+                  {tags.length > 0 && (
+                    <View className="flex-row flex-wrap gap-1.5">
+                      {tags.map((tag) => (
+                        <View key={tag} className="rounded-sm bg-muted px-2 py-0.5">
+                          <Text className="text-[11px] font-semibold text-muted-foreground">
+                            {tag}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+                <View className="rounded-sm bg-card px-2 py-0.5">
+                  <Text className="text-[11px] font-bold text-cal-1">캘린더</Text>
+                </View>
+              </View>
+            );
+          })}
+        </Pressable>
+      ))}
     </View>
   );
 }
