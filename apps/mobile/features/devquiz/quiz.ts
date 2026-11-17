@@ -1,7 +1,5 @@
-import { createProvider } from '@noteapp/ai-client';
-
 import type { Member } from '@/features/devlog';
-import { getAiKey } from '@/lib/secrets';
+import { teamAi } from '@/lib/team-ai';
 
 import type { QuizAnswer } from './store';
 
@@ -69,8 +67,7 @@ const GRADE_SCHEMA = {
 };
 
 async function ask<T>(system: string, prompt: string, json: Record<string, unknown>): Promise<T> {
-  const key = await getAiKey('claude');
-  const text = await createProvider('claude', key ?? '').complete({ system, prompt, json });
+  const text = await teamAi.complete({ system, prompt, json });
   try {
     return JSON.parse(text) as T;
   } catch {
