@@ -1,14 +1,12 @@
-import { AiError, createProvider } from '@noteapp/ai-client';
+import { AiError } from '@noteapp/ai-client';
 import { cleanTagSuggestions, type TagCategory, type TagSuggestion } from '@noteapp/shared';
 
-import { getAiKey } from './secrets';
 import { listTagCategories, withoutDismissed } from './tag-categories';
+import { canUseTeamAi, teamAi } from './team-ai';
 
-// 해시태그 자동 분류 추천(방법 2): Claude로 뜻이 비슷한 해시태그를 묶어요.
-// 키는 개발일지·퀴즈와 같은 Claude 키(getAiKey('claude'))를 써요.
+// 해시태그 자동 분류 추천(방법 2): 팀 AI(서버의 팀 Claude 키, lib/team-ai.ts)로 뜻이 비슷한 해시태그를 묶어요.
 // 같이 쓰인 해시태그로 묶는 규칙 추천(방법 1, C)이 못 잡는 것(예: #러닝, #헬스)을 잡아요.
 // Anthropic으로는 해시태그 이름과 카테고리 이름만 가요. 메모·일정 본문은 안 보내요.
-// 키는 기기 보안 저장소에만 있어요(docs/decisions/0002).
 // 결과는 추천일 뿐이에요. 화면에서 확인(acceptSuggestion)하거나 거절(dismissSuggestion)해요.
 
 /** 한 번에 보내는 해시태그 수 */
@@ -57,9 +55,8 @@ const SYSTEM = [
   '해시태그는 받은 글자 그대로 써. 새 해시태그를 지어내지 마.',
 ].join('\n');
 
-export async function hasTagAiKey(): Promise<boolean> {
-  return !!(await getAiKey('claude'));
-}
+/** 로그인한 팀원이면 true. 화면에서 'AI로 분류' 버튼을 보일지 정할 때 써요. */
+export const canSuggestTagsWithAi = canUseTeamAi;
 
 /**
  * 쓰고 있는 해시태그(메모·일정에서 모은 것)를 받아 AI 분류 추천을 돌려줘요.
@@ -74,8 +71,7 @@ export async function suggestTagCategoriesWithAi(
   const free = known.filter((t) => !grouped.has(t)).slice(0, MAX_TAGS);
   if (free.length === 0) return [];
 
-  const key = await getAiKey('claude');
-  const answer = await createProvider('claude', key ?? '').complete({
+  const answer = await teamAi.complete({
     system: SYSTEM,
     prompt: promptFor(categories, free),
     json: SCHEMA,
