@@ -18,24 +18,26 @@ import {
   weekDays,
 } from './model';
 
-type CalendarViewMode = 'month' | 'week' | 'day' | 'list';
+type CalendarViewMode = 'day' | 'week' | 'month' | 'list';
 const WEEKDAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'] as const;
 const GRID_HEADERS = ['월', '화', '수', '목', '금', '토', '일'] as const;
 const EMPTY_EVENTS: CalendarEvent[] = [];
 const VIEW_TABS: readonly { key: CalendarViewMode; label: string }[] = [
-  { key: 'month', label: '월' },
-  { key: 'week', label: '주' },
   { key: 'day', label: '일' },
+  { key: 'week', label: '주' },
+  { key: 'month', label: '월' },
   { key: 'list', label: '목록' },
 ];
 
 function ActionButton({
   label,
   selected = false,
+  compact = false,
   onPress,
 }: {
   label: string;
   selected?: boolean;
+  compact?: boolean;
   onPress: () => void;
 }) {
   return (
@@ -43,10 +45,10 @@ function ActionButton({
       accessibilityRole="button"
       accessibilityState={{ selected }}
       onPress={onPress}
-      className={`min-h-10 items-center justify-center rounded-lg border px-3.5 py-2 ${selected ? 'border-primary bg-primary' : 'border-border bg-card'}`}
+      className={`items-center justify-center rounded-lg border ${compact ? 'min-h-8 px-2.5 py-1' : 'min-h-10 px-3.5 py-2'} ${selected ? 'border-primary bg-primary' : 'border-border bg-card'}`}
     >
       <Text
-        className={`text-sm font-semibold ${selected ? 'text-primary-foreground' : 'text-foreground'}`}
+        className={`${compact ? 'text-xs' : 'text-sm'} font-semibold ${selected ? 'text-primary-foreground' : 'text-foreground'}`}
       >
         {label}
       </Text>
@@ -59,11 +61,21 @@ function DayLabel(day: string) {
   return `${Number(day.slice(5, 7))}월 ${Number(day.slice(8, 10))}일 (${w})`;
 }
 
+function buildMonthWeeks(monthStart: string): string[][] {
+  const nextMonth = shiftMonth(monthStart, 1);
+  const gridStart = weekDays(monthStart)[0];
+  return Array.from({ length: 6 }, (_, w) => weekDays(shiftDay(gridStart, w * 7))).filter(
+    (w) => w[0] < nextMonth,
+  );
+}
+
 export function CalendarScreen() {
   const { events, tasks, loading, error } = useCalendar();
   const today = dayKey(new Date());
   const [day, setDay] = useState(() => dayKey(new Date()));
-  const [view, setView] = useState<CalendarViewMode>('month');
+  const [view, setView] = useState<CalendarViewMode>('day');
+  const [drawerOpen, setDrawerOpen] = useState(true);
+  const [drawerMonthStart, setDrawerMonthStart] = useState(() => `${today.slice(0, 7)}-01`);
   const [fullDay, setFullDay] = useState(false);
   const [sheetTarget, setSheetTarget] = useState<{ day: string; initialHour?: number }>();
   const [candidateTask, setCandidateTask] = useState<Card>();
@@ -71,14 +83,16 @@ export function CalendarScreen() {
 
   const month = day.slice(0, 7);
   const monthStart = `${month}-01`;
+  const drawerMonth = drawerMonthStart.slice(0, 7);
+
   const days = useMemo(() => weekDays(day), [day]);
-  const monthWeeks = useMemo(() => {
-    const nextMonth = shiftMonth(monthStart, 1);
-    const gridStart = weekDays(monthStart)[0];
-    return Array.from({ length: 6 }, (_, w) => weekDays(shiftDay(gridStart, w * 7))).filter(
-      (w) => w[0] < nextMonth,
-    );
-  }, [monthStart]);
+  const monthWeeks = useMemo(() => buildMonthWeeks(monthStart), [monthStart]);
+  const drawerWeeks = useMemo(() => buildMonthWeeks(drawerMonthStart), [drawerMonthStart]);
+
+  const activeWeekNumber = useMemo(() => {
+    const idx = monthWeeks.findIndex((w) => w.includes(day));
+    return idx >= 0 ? idx + 1 : 1;
+  }, [day, monthWeeks]);
 
   const scheduledTaskDays = useMemo(
     () =>
@@ -98,54 +112,115 @@ export function CalendarScreen() {
     [events, monthWeeks, view],
   );
 
+  const drawerEventsByDay = useMemo(
+    () =>
+      view !== 'month' && drawerOpen
+        ? groupEventsByDay(events, drawerWeeks.flat())
+        : new Map<string, CalendarEvent[]>(),
+    [drawerOpen, drawerWeeks, events, view],
+  );
+
   const weekEventsByDay = useMemo(() => groupEventsByDay(events, days), [days, events]);
   const sheetDayEvents = useMemo(
     () => (sheetTarget ? eventsOnDay(events, sheetTarget.day) : EMPTY_EVENTS),
     [events, sheetTarget],
   );
 
+  const syncDay = useCallback((nextDay: string) => {
+    setDay(nextDay);
+    setDrawerMonthStart(`${nextDay.slice(0, 7)}-01`);
+  }, []);
+
   const titleText =
     view === 'month'
       ? `${Number(day.slice(5, 7))}월`
       : view === 'week'
-        ? `${Number(day.slice(5, 7))}월 주간`
+        ? `${Number(day.slice(5, 7))}월 ${activeWeekNumber}주차`
         : view === 'day'
           ? `${Number(day.slice(8, 10))}일 ${WEEKDAY_NAMES[new Date(`${day}T12:00:00+09:00`).getUTCDay()]}요일`
           : '주간 일정 목록';
 
   const movePeriod = (dir: number) =>
-    setDay(
+    syncDay(
       view === 'month'
         ? shiftMonth(monthStart, dir)
         : shiftDay(day, dir * (view === 'week' || view === 'list' ? 7 : 1)),
     );
 
-  const openDaySheet = useCallback((targetDay: string, initialHour?: number) => {
-    setDay(targetDay);
-    setSheetTarget({ day: targetDay, initialHour });
-  }, []);
+  const openDaySheet = useCallback(
+    (targetDay: string, initialHour?: number) => {
+      syncDay(targetDay);
+      setSheetTarget({ day: targetDay, initialHour });
+    },
+    [syncDay],
+  );
+
+  const toggleDrawer = () => {
+    if (!drawerOpen) setDrawerMonthStart(monthStart);
+    setDrawerOpen((prev) => !prev);
+  };
+
+  const zoomWeek = (week: string[], preferredMonth: string) => {
+    const target = week.includes(day)
+      ? day
+      : week.includes(today)
+        ? today
+        : (week.find((d) => d.startsWith(preferredMonth)) ?? week[0]);
+    syncDay(target);
+    setView('week');
+    setDrawerOpen(false);
+  };
+
+  const zoomDay = (targetDay: string) => {
+    syncDay(targetDay);
+    setView('day');
+    setDrawerOpen(false);
+  };
 
   return (
     <ScrollView
       className="flex-1 bg-background"
       contentContainerClassName="mx-auto w-full max-w-[960px] gap-4 p-5 pb-12"
     >
-      <View className="flex-row flex-wrap items-end justify-between gap-2">
-        <View>
-          <Text className="text-sm text-muted-foreground">
-            {view === 'month'
-              ? `${Number(day.slice(0, 4))}년`
-              : `${Number(day.slice(0, 4))}년 ${Number(day.slice(5, 7))}월`}
-          </Text>
-          <Text
-            accessibilityRole="header"
-            className="text-[26px] font-bold tracking-tight text-foreground"
+      <View className="flex-row flex-wrap items-center justify-between gap-2">
+        {view !== 'month' ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded: drawerOpen }}
+            accessibilityLabel={drawerOpen ? '월간 달력 접기' : '월간 달력 펼치기'}
+            onPress={toggleDrawer}
+            className="flex-row flex-wrap items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-2 active:bg-muted"
           >
-            {titleText}
-          </Text>
-        </View>
+            <View>
+              <Text className="text-xs text-muted-foreground">
+                {Number(day.slice(0, 4))}년 {Number(day.slice(5, 7))}월
+              </Text>
+              <Text
+                accessibilityRole="header"
+                className="text-xl font-bold tracking-tight text-foreground"
+              >
+                {titleText}
+              </Text>
+            </View>
+            <View className="rounded-md bg-primary-soft px-2.5 py-1">
+              <Text className="text-xs font-bold text-primary-soft-foreground">
+                {drawerOpen ? '달력 접기' : '달력 펼치기'}
+              </Text>
+            </View>
+          </Pressable>
+        ) : (
+          <View>
+            <Text className="text-sm text-muted-foreground">{Number(day.slice(0, 4))}년</Text>
+            <Text
+              accessibilityRole="header"
+              className="text-[26px] font-bold tracking-tight text-foreground"
+            >
+              {titleText}
+            </Text>
+          </View>
+        )}
         <View className="flex-row flex-wrap gap-2">
-          {day !== today && <ActionButton label="오늘" onPress={() => setDay(today)} />}
+          {day !== today && <ActionButton label="오늘" onPress={() => syncDay(today)} />}
           <ActionButton label="해시태그 연결망" onPress={() => setShowHashtags(true)} />
         </View>
       </View>
@@ -159,7 +234,10 @@ export function CalendarScreen() {
                 key={tab.key}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: active }}
-                onPress={() => setView(tab.key)}
+                onPress={() => {
+                  setView(tab.key);
+                  if (tab.key === 'month') setDrawerOpen(false);
+                }}
                 className={`rounded-md px-4 py-2 ${active ? 'bg-background' : ''}`}
               >
                 <Text
@@ -184,6 +262,20 @@ export function CalendarScreen() {
         </View>
       </View>
 
+      {!loading && !error && view !== 'month' && drawerOpen && (
+        <CompactMonthDrawer
+          drawerMonthStart={drawerMonthStart}
+          today={today}
+          selectedDay={day}
+          weeks={drawerWeeks}
+          eventsByDay={drawerEventsByDay}
+          scheduledTaskDays={scheduledTaskDays}
+          onShiftMonth={(dir) => setDrawerMonthStart((m) => shiftMonth(m, dir))}
+          onZoomWeek={(w) => zoomWeek(w, drawerMonth)}
+          onZoomDay={zoomDay}
+        />
+      )}
+
       {loading && <ActivityIndicator accessibilityLabel="일정 불러오는 중" />}
       {!!error && (
         <View className="gap-3 rounded-xl border border-border bg-card p-4">
@@ -202,7 +294,9 @@ export function CalendarScreen() {
           weeks={monthWeeks}
           eventsByDay={monthEventsByDay}
           scheduledTaskDays={scheduledTaskDays}
-          onSelectDay={openDaySheet}
+          onZoomWeek={(w) => zoomWeek(w, month)}
+          onZoomDay={zoomDay}
+          onOpenSheet={(date) => openDaySheet(date)}
         />
       )}
 
@@ -212,53 +306,56 @@ export function CalendarScreen() {
           events={events}
           compact
           fullDay={fullDay}
+          onSelectDayHeader={zoomDay}
           onSelectSlot={openDaySheet}
         />
       )}
 
       {!loading && !error && view === 'day' && (
         <View className="gap-3">
-          <View className="flex-row gap-1">
-            {days.map((date, i) => {
-              const dayEvents = weekEventsByDay.get(date) ?? EMPTY_EVENTS;
-              const hasEvent = dayEvents.length > 0;
-              const hasTask = scheduledTaskDays.has(date);
-              const selected = date === day;
-              return (
-                <Pressable
-                  key={date}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${date} 일정 ${dayEvents.length}개`}
-                  accessibilityState={{ selected }}
-                  onPress={() => (selected ? openDaySheet(date) : setDay(date))}
-                  className={`min-h-[60px] flex-1 items-center justify-center gap-0.5 rounded-lg py-1.5 ${selected ? 'bg-primary' : date === today ? 'border border-primary bg-muted' : 'bg-muted'}`}
-                >
-                  <Text
-                    className={`text-[11px] ${selected ? 'text-primary-foreground' : 'text-muted-foreground'}`}
+          {!drawerOpen && (
+            <View className="flex-row gap-1">
+              {days.map((date, i) => {
+                const dayEvents = weekEventsByDay.get(date) ?? EMPTY_EVENTS;
+                const hasEvent = dayEvents.length > 0;
+                const hasTask = scheduledTaskDays.has(date);
+                const selected = date === day;
+                return (
+                  <Pressable
+                    key={date}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${date} 일정 ${dayEvents.length}개`}
+                    accessibilityState={{ selected }}
+                    onPress={() => (selected ? openDaySheet(date) : syncDay(date))}
+                    className={`min-h-[60px] flex-1 items-center justify-center gap-0.5 rounded-lg py-1.5 ${selected ? 'bg-primary' : date === today ? 'border border-primary bg-muted' : 'bg-muted'}`}
                   >
-                    {GRID_HEADERS[i]}
-                  </Text>
-                  <Text
-                    className={`text-[15px] font-bold ${selected ? 'text-primary-foreground' : 'text-foreground'}`}
-                  >
-                    {Number(date.slice(-2))}
-                  </Text>
-                  <View className="h-1.5 flex-row items-center gap-1">
-                    {hasEvent && (
-                      <View
-                        className={`h-1.5 w-1.5 rounded-full ${selected ? 'bg-primary-foreground' : 'bg-cal-1'}`}
-                      />
-                    )}
-                    {hasTask && (
-                      <View
-                        className={`h-1.5 w-1.5 rounded-full ${selected ? 'bg-primary-foreground' : 'bg-task'}`}
-                      />
-                    )}
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
+                    <Text
+                      className={`text-[11px] ${selected ? 'text-primary-foreground' : 'text-muted-foreground'}`}
+                    >
+                      {GRID_HEADERS[i]}
+                    </Text>
+                    <Text
+                      className={`text-[15px] font-bold ${selected ? 'text-primary-foreground' : 'text-foreground'}`}
+                    >
+                      {Number(date.slice(-2))}
+                    </Text>
+                    <View className="h-1.5 flex-row items-center gap-1">
+                      {hasEvent && (
+                        <View
+                          className={`h-1.5 w-1.5 rounded-full ${selected ? 'bg-primary-foreground' : 'bg-cal-1'}`}
+                        />
+                      )}
+                      {hasTask && (
+                        <View
+                          className={`h-1.5 w-1.5 rounded-full ${selected ? 'bg-primary-foreground' : 'bg-task'}`}
+                        />
+                      )}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
           <View className="flex-row items-center justify-between gap-2">
             <Text accessibilityRole="header" className="text-base font-bold text-foreground">
               {DayLabel(day)}
@@ -302,6 +399,113 @@ export function CalendarScreen() {
   );
 }
 
+function CompactMonthDrawer({
+  drawerMonthStart,
+  today,
+  selectedDay,
+  weeks,
+  eventsByDay,
+  scheduledTaskDays,
+  onShiftMonth,
+  onZoomWeek,
+  onZoomDay,
+}: {
+  drawerMonthStart: string;
+  today: string;
+  selectedDay: string;
+  weeks: string[][];
+  eventsByDay: Map<string, CalendarEvent[]>;
+  scheduledTaskDays: Set<string>;
+  onShiftMonth: (dir: number) => void;
+  onZoomWeek: (week: string[]) => void;
+  onZoomDay: (day: string) => void;
+}) {
+  const drawerMonth = drawerMonthStart.slice(0, 7);
+  return (
+    <View
+      accessibilityLabel="빠른 월간 달력"
+      className="overflow-hidden rounded-xl border border-border bg-card"
+    >
+      <View className="flex-row flex-wrap items-center justify-between gap-2 border-b border-border bg-muted px-3 py-2">
+        <View className="gap-0.5">
+          <Text className="text-sm font-bold text-foreground">
+            {Number(drawerMonthStart.slice(0, 4))}년 {Number(drawerMonthStart.slice(5, 7))}월
+          </Text>
+          <Text className="text-xs text-muted-foreground">
+            주차를 누르면 주간, 날짜를 누르면 일간으로 이동해요.
+          </Text>
+        </View>
+        <View className="flex-row gap-1.5">
+          <ActionButton compact label="이전 달" onPress={() => onShiftMonth(-1)} />
+          <ActionButton compact label="다음 달" onPress={() => onShiftMonth(1)} />
+        </View>
+      </View>
+
+      <View className="flex-row border-b border-border bg-muted/50">
+        <View className="w-11 items-center border-r border-border py-1.5">
+          <Text className="text-xs font-bold text-muted-foreground">주</Text>
+        </View>
+        {GRID_HEADERS.map((label) => (
+          <View key={label} className="flex-1 items-center py-1.5">
+            <Text className="text-xs font-bold text-muted-foreground">{label}</Text>
+          </View>
+        ))}
+      </View>
+
+      {weeks.map((week, wIdx) => {
+        const isCurrentWeek = week.includes(selectedDay);
+        return (
+          <View key={week[0]} className="flex-row border-t border-border">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${wIdx + 1}주차 주간 보기로 전환`}
+              onPress={() => onZoomWeek(week)}
+              className={`w-11 items-center justify-center border-r border-border active:bg-muted ${isCurrentWeek ? 'bg-primary-soft' : 'bg-muted/40'}`}
+            >
+              <Text
+                className={`text-xs font-bold ${isCurrentWeek ? 'text-primary-soft-foreground' : 'text-foreground'}`}
+              >
+                {wIdx + 1}주
+              </Text>
+            </Pressable>
+            {week.map((date) => {
+              const hasEvent = (eventsByDay.get(date) ?? EMPTY_EVENTS).length > 0;
+              const hasTask = scheduledTaskDays.has(date);
+              const inMonth = date.startsWith(drawerMonth);
+              const isToday = date === today;
+              const isSelected = date === selectedDay;
+              return (
+                <Pressable
+                  key={date}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${date} 일간 보기로 이동`}
+                  accessibilityState={{ selected: isSelected }}
+                  onPress={() => onZoomDay(date)}
+                  className={`min-h-11 flex-1 items-center justify-center gap-0.5 py-1 active:bg-muted ${!inMonth ? 'opacity-40' : ''}`}
+                >
+                  <View
+                    className={`h-6 w-6 items-center justify-center rounded-full ${isToday ? 'bg-primary' : isSelected ? 'border border-primary bg-primary-soft' : ''}`}
+                  >
+                    <Text
+                      className={`text-xs font-bold ${isToday ? 'text-primary-foreground' : isSelected ? 'text-primary-soft-foreground' : 'text-foreground'}`}
+                    >
+                      {Number(date.slice(-2))}
+                    </Text>
+                  </View>
+                  <View className="h-1.5 flex-row items-center gap-1">
+                    {hasEvent && <View className="h-1.5 w-1.5 rounded-full bg-cal-1" />}
+                    {hasTask && <View className="h-1.5 w-1.5 rounded-full bg-task" />}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 function MonthCalendarGrid({
   month,
   today,
@@ -309,7 +513,9 @@ function MonthCalendarGrid({
   weeks,
   eventsByDay,
   scheduledTaskDays,
-  onSelectDay,
+  onZoomWeek,
+  onZoomDay,
+  onOpenSheet,
 }: {
   month: string;
   today: string;
@@ -317,7 +523,9 @@ function MonthCalendarGrid({
   weeks: string[][];
   eventsByDay: Map<string, CalendarEvent[]>;
   scheduledTaskDays: Set<string>;
-  onSelectDay: (day: string) => void;
+  onZoomWeek: (week: string[]) => void;
+  onZoomDay: (day: string) => void;
+  onOpenSheet: (day: string) => void;
 }) {
   return (
     <View
@@ -325,6 +533,9 @@ function MonthCalendarGrid({
       className="overflow-hidden rounded-xl border border-border bg-card"
     >
       <View className="flex-row border-b border-border bg-muted">
+        <View className="w-11 items-center border-r border-border py-2">
+          <Text className="text-xs font-bold text-muted-foreground">주</Text>
+        </View>
         {GRID_HEADERS.map((label) => (
           <View key={label} className="flex-1 items-center py-2">
             <Text className="text-xs font-bold text-muted-foreground">{label}</Text>
@@ -332,57 +543,82 @@ function MonthCalendarGrid({
         ))}
       </View>
 
-      {weeks.map((week) => (
-        <View key={week[0]} className="flex-row border-t border-border">
-          {week.map((date, i) => {
-            const dayEvents = eventsByDay.get(date) ?? EMPTY_EVENTS;
-            const hasTask = scheduledTaskDays.has(date);
-            const inMonth = date.startsWith(month);
-            const isToday = date === today;
-            const isSelected = date === selectedDay;
-            return (
-              <Pressable
-                key={date}
-                accessibilityRole="button"
-                accessibilityLabel={`${date} 일정 ${dayEvents.length}개 열기`}
-                onPress={() => onSelectDay(date)}
-                className={`min-h-[96px] flex-1 gap-1 p-1.5 active:bg-muted/60 ${i > 0 ? 'border-l border-border' : ''} ${!inMonth ? 'bg-muted/30 opacity-50' : isSelected ? 'bg-primary-soft/25' : 'bg-card'}`}
+      {weeks.map((week, wIdx) => {
+        const isCurrentWeek = week.includes(selectedDay);
+        return (
+          <View key={week[0]} className="flex-row border-t border-border">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${wIdx + 1}주차 주간 보기로 전환`}
+              onPress={() => onZoomWeek(week)}
+              className={`w-11 items-center justify-center border-r border-border active:bg-muted ${isCurrentWeek ? 'bg-primary-soft' : 'bg-muted/40'}`}
+            >
+              <Text
+                className={`text-xs font-bold ${isCurrentWeek ? 'text-primary-soft-foreground' : 'text-foreground'}`}
               >
-                <View className="flex-row items-center justify-between">
-                  <View
-                    className={`h-6 w-6 items-center justify-center rounded-full ${isToday ? 'bg-primary' : ''}`}
+                {wIdx + 1}주
+              </Text>
+            </Pressable>
+            {week.map((date) => {
+              const dayEvents = eventsByDay.get(date) ?? EMPTY_EVENTS;
+              const hasTask = scheduledTaskDays.has(date);
+              const inMonth = date.startsWith(month);
+              const isToday = date === today;
+              const isSelected = date === selectedDay;
+              return (
+                <View
+                  key={date}
+                  className={`min-h-[96px] flex-1 gap-1 border-l border-border p-1.5 ${!inMonth ? 'bg-muted/30 opacity-50' : isSelected ? 'bg-primary-soft/25' : 'bg-card'}`}
+                >
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${date} 일간 보기로 전환`}
+                    onPress={() => onZoomDay(date)}
+                    className="flex-row items-center justify-between rounded-md px-0.5 py-0.5 active:bg-muted"
                   >
-                    <Text
-                      className={`text-xs font-bold ${isToday ? 'text-primary-foreground' : 'text-foreground'}`}
-                    >
-                      {Number(date.slice(-2))}
-                    </Text>
-                  </View>
-                  {hasTask && <View className="h-1.5 w-1.5 rounded-full bg-task" />}
-                </View>
-
-                <View className="gap-1">
-                  {dayEvents.slice(0, 2).map((ev) => (
                     <View
-                      key={ev.id}
-                      className="rounded-sm border-l-2 border-l-cal-1 bg-cal-1-soft px-1.5 py-0.5"
+                      className={`h-6 w-6 items-center justify-center rounded-full ${isToday ? 'bg-primary' : ''}`}
                     >
-                      <Text numberOfLines={1} className="text-[11px] font-semibold text-foreground">
-                        {splitTitleAndTags(ev.title).cleanTitle}
+                      <Text
+                        className={`text-xs font-bold ${isToday ? 'text-primary-foreground' : 'text-foreground'}`}
+                      >
+                        {Number(date.slice(-2))}
                       </Text>
                     </View>
-                  ))}
-                  {dayEvents.length > 2 && (
-                    <Text className="px-1 text-[10px] font-semibold text-muted-foreground">
-                      +{dayEvents.length - 2}개 더보기
-                    </Text>
-                  )}
+                    {hasTask && <View className="h-1.5 w-1.5 rounded-full bg-task" />}
+                  </Pressable>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${date} 일정 ${dayEvents.length}개 상세 열기`}
+                    onPress={() => onOpenSheet(date)}
+                    className="min-h-[60px] flex-1 gap-1 pt-0.5 active:bg-muted/60"
+                  >
+                    {dayEvents.slice(0, 2).map((ev) => (
+                      <View
+                        key={ev.id}
+                        className="rounded-sm border-l-2 border-l-cal-1 bg-cal-1-soft px-1.5 py-0.5"
+                      >
+                        <Text
+                          numberOfLines={1}
+                          className="text-[11px] font-semibold text-foreground"
+                        >
+                          {splitTitleAndTags(ev.title).cleanTitle}
+                        </Text>
+                      </View>
+                    ))}
+                    {dayEvents.length > 2 && (
+                      <Text className="px-1 text-[10px] font-semibold text-muted-foreground">
+                        +{dayEvents.length - 2}개 더보기
+                      </Text>
+                    )}
+                  </Pressable>
                 </View>
-              </Pressable>
-            );
-          })}
-        </View>
-      ))}
+              );
+            })}
+          </View>
+        );
+      })}
     </View>
   );
 }
