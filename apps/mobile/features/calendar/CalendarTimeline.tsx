@@ -1,25 +1,20 @@
-import type { CalendarEvent, Card } from '@noteapp/shared';
+import type { CalendarEvent } from '@noteapp/shared';
+import { useMemo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import {
-  dayKey,
-  eventsOnDay,
-  overlaps,
-  shiftDay,
-  splitTitleAndTags,
-  timeLabel,
-  TIMEZONE,
-} from './model';
+import { dayKey, shiftDay, splitTitleAndTags, timeLabel, TIMEZONE } from './model';
 
 const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'] as const;
 
+const HOUR_MINUTE_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: TIMEZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
 function currentSeoulHour(): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: TIMEZONE,
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(new Date());
+  const parts = HOUR_MINUTE_FORMATTER.formatToParts(new Date());
   const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
   const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? '0');
   return hour + minute / 60;
@@ -28,56 +23,81 @@ function currentSeoulHour(): number {
 export function CalendarTimeline({
   days,
   events,
-  tasks,
   compact = false,
   fullDay = false,
-  onSelectTask,
+  onSelectSlot,
 }: {
   days: string[];
   events: CalendarEvent[];
-  tasks: Card[];
   compact?: boolean;
   fullDay?: boolean;
-  onSelectTask?: (task: Card) => void;
+  onSelectSlot?: (day: string, hour?: number) => void;
 }) {
   const today = dayKey(new Date());
   const nowHour = currentSeoulHour();
-  const timedItems = [
-    ...events
+
+  const { allDayColumns, hasAllDay, columns, earliest, latest } = useMemo(() => {
+    const dayBounds = days.map((day) => ({
+      day,
+      startMs: Date.parse(`${day}T00:00:00+09:00`),
+      endMs: Date.parse(`${shiftDay(day, 1)}T00:00:00+09:00`),
+    }));
+
+    const parsedAllDay = events
+      .filter((e) => e.allDay)
+      .map((e) => ({
+        id: e.id,
+        cleanTitle: splitTitleAndTags(e.title).cleanTitle,
+        startMs: Date.parse(e.startAt),
+        endMs: Date.parse(e.endAt),
+      }));
+
+    const nextAllDayColumns = dayBounds.map(({ day, startMs, endMs }) => ({
+      day,
+      items: parsedAllDay.filter((e) => e.startMs < endMs && e.endMs > startMs),
+    }));
+
+    const parsedTimed = events
       .filter((e) => !e.allDay)
       .map((e) => ({
         id: e.id,
-        title: e.title,
-        startAt: e.startAt,
-        endAt: e.endAt,
-        taskCard: undefined as Card | undefined,
-      })),
-    ...tasks.flatMap((t) =>
-      t.startAt && t.endAt && t.status !== 'dismissed'
-        ? [{ id: t.id, title: t.title, startAt: t.startAt, endAt: t.endAt, taskCard: t }]
-        : [],
-    ),
-  ];
+        cleanTitle: splitTitleAndTags(e.title).cleanTitle,
+        range: `${timeLabel(e.startAt)} ~ ${timeLabel(e.endAt)}`,
+        startMs: Date.parse(e.startAt),
+        endMs: Date.parse(e.endAt),
+      }));
 
-  const allDayColumns = days.map((day) => eventsOnDay(events, day).filter((e) => e.allDay));
-  const hasAllDay = allDayColumns.some((col) => col.length > 0);
-  let earliest = 7;
-  let latest = 22;
+    const nextColumns = dayBounds.map(({ day, startMs, endMs }) => {
+      const items = parsedTimed
+        .filter((e) => e.startMs < endMs && e.endMs > startMs)
+        .map((e) => ({
+          ...e,
+          from: Math.max(0, (e.startMs - startMs) / 3600000),
+          to: Math.min(24, (e.endMs - startMs) / 3600000),
+        }))
+        .sort((a, b) => a.from - b.from);
 
-  const columns = days.map((day) => {
-    const start = `${day}T00:00:00+09:00`;
-    const end = `${shiftDay(day, 1)}T00:00:00+09:00`;
-    return timedItems
-      .filter((item) => overlaps(item.startAt, item.endAt, start, end))
-      .map((item) => {
-        const from = Math.max(0, (Date.parse(item.startAt) - Date.parse(start)) / 3600000);
-        const to = Math.min(24, (Date.parse(item.endAt) - Date.parse(start)) / 3600000);
-        if (from < earliest) earliest = from;
-        if (to > latest) latest = to;
-        return { ...item, from, to };
-      })
-      .sort((a, b) => a.from - b.from);
-  });
+      const ends: number[] = [];
+      const positioned = items.map((item) => {
+        let lane = ends.findIndex((e) => e <= item.from);
+        if (lane < 0) lane = ends.length;
+        ends[lane] = item.to;
+        return { ...item, lane };
+      });
+      return { day, positioned, laneCount: Math.max(1, ends.length) };
+    });
+
+    const allStarts = nextColumns.flatMap((c) => c.positioned.map((item) => item.from));
+    const allEnds = nextColumns.flatMap((c) => c.positioned.map((item) => item.to));
+
+    return {
+      allDayColumns: nextAllDayColumns,
+      hasAllDay: nextAllDayColumns.some((col) => col.items.length > 0),
+      columns: nextColumns,
+      earliest: allStarts.length ? Math.min(7, ...allStarts) : 7,
+      latest: allEnds.length ? Math.max(22, ...allEnds) : 22,
+    };
+  }, [days, events]);
 
   const from = fullDay ? 0 : Math.max(0, Math.min(7, Math.floor(earliest)));
   const to = fullDay ? 24 : Math.min(24, Math.max(22, Math.ceil(latest)));
@@ -93,13 +113,19 @@ export function CalendarTimeline({
           {days.map((day) => {
             const weekday = WEEKDAY_KO[new Date(`${day}T12:00:00+09:00`).getUTCDay()];
             return (
-              <View key={day} className="flex-1 items-center py-1">
+              <Pressable
+                key={day}
+                accessibilityRole="button"
+                accessibilityLabel={`${day} 일정 및 할 일 열기`}
+                onPress={() => onSelectSlot?.(day)}
+                className="flex-1 items-center rounded-md py-1 active:bg-muted"
+              >
                 <Text
                   className={`text-xs font-semibold ${day === today ? 'font-bold text-primary' : 'text-muted-foreground'}`}
                 >
                   {Number(day.slice(-2))} {weekday}
                 </Text>
-              </View>
+              </Pressable>
             );
           })}
         </View>
@@ -108,17 +134,20 @@ export function CalendarTimeline({
       {hasAllDay && (
         <View className="flex-row items-center border-b border-border pb-1.5">
           <Text className={`text-[11px] text-muted-foreground ${timeColClass}`}>종일</Text>
-          {allDayColumns.map((col, idx) => (
-            <View key={days[idx]} className="flex-1 gap-1 px-0.5">
-              {col.map((ev) => (
-                <View
+          {allDayColumns.map(({ day, items }) => (
+            <View key={day} className="flex-1 gap-1 px-0.5">
+              {items.map((ev) => (
+                <Pressable
                   key={ev.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${ev.cleanTitle}, 종일 일정 열기`}
+                  onPress={() => onSelectSlot?.(day)}
                   className="rounded-md border-l-[3px] border-l-cal-1 bg-cal-1-soft px-2 py-1"
                 >
                   <Text numberOfLines={1} className="text-xs font-semibold text-foreground">
-                    {splitTitleAndTags(ev.title).cleanTitle}
+                    {ev.cleanTitle}
                   </Text>
-                </View>
+                </Pressable>
               ))}
             </View>
           ))}
@@ -135,90 +164,65 @@ export function CalendarTimeline({
             </Text>
           ))}
         </View>
-        {columns.map((column, idx) => {
-          const day = days[idx];
-          const ends: number[] = [];
-          const positioned = column.map((item) => {
-            let lane = ends.findIndex((e) => e <= item.from);
-            if (lane < 0) lane = ends.length;
-            ends[lane] = item.to;
-            return { ...item, lane };
-          });
-          const laneCount = Math.max(1, ends.length);
+        {columns.map(({ day, positioned, laneCount }) => {
           const showNow = day === today && nowHour >= from && nowHour <= to;
 
           return (
             <View
               key={day}
-              className={`relative flex-1 border-l border-border ${day === today && showHeaders ? 'bg-primary-soft/30' : ''}`}
+              className={`relative flex-1 border-b border-l border-border ${day === today && showHeaders ? 'bg-primary-soft/30' : ''}`}
               style={{ height: (to - from) * height }}
             >
-              {Array.from({ length: to - from + 1 }, (_, hr) => (
-                <View
-                  key={hr}
-                  className="absolute left-0 right-0 border-t border-border"
-                  style={{ top: hr * height }}
-                />
-              ))}
-              {positioned.map((item) => {
-                const isTask = Boolean(item.taskCard);
-                const { cleanTitle } = splitTitleAndTags(item.title);
-                const blockHeight = Math.max(compact ? 22 : 28, (item.to - item.from) * height - 4);
-                const range = `${timeLabel(item.startAt)} ~ ${timeLabel(item.endAt)}`;
+              {Array.from({ length: to - from }, (_, hr) => {
+                const hour = from + hr;
+                const hourText = String(hour).padStart(2, '0');
+                return (
+                  <Pressable
+                    key={hr}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${day} ${hourText}시 일정 및 할 일 열기`}
+                    onPress={() => onSelectSlot?.(day, hour)}
+                    className="absolute left-0 right-0 border-t border-border active:bg-primary-soft/40"
+                    style={{ top: hr * height, height }}
+                  />
+                );
+              })}
+
+              {positioned.map((event) => {
+                const blockHeight = Math.max(
+                  compact ? 22 : 28,
+                  (event.to - event.from) * height - 4,
+                );
                 const posStyle = {
-                  top: (item.from - from) * height + 2,
+                  top: (event.from - from) * height + 2,
                   height: blockHeight,
-                  left: `${(item.lane / laneCount) * 100}%` as const,
+                  left: `${(event.lane / laneCount) * 100}%` as const,
                   width: `${100 / laneCount}%` as const,
                 };
-                const cls = `absolute overflow-hidden rounded-md border-l-[3px] ${compact ? 'px-1 py-0.5' : 'px-2.5 py-1'} ${isTask ? 'border-l-task bg-task-soft' : 'border-l-cal-1 bg-cal-1-soft'}`;
-
-                if (item.taskCard && onSelectTask) {
-                  const taskCard = item.taskCard;
-                  return (
-                    <Pressable
-                      key={`task:${item.id}`}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${cleanTitle}, ${range}, 눌러서 시간 바꾸기`}
-                      onPress={() => onSelectTask(taskCard)}
-                      className={cls}
-                      style={posStyle}
-                    >
-                      <Text
-                        numberOfLines={compact ? 2 : 1}
-                        className={`${compact ? 'text-[11px]' : 'text-[13px]'} font-bold text-foreground`}
-                      >
-                        {cleanTitle}
-                      </Text>
-                      {!compact && blockHeight >= 38 && (
-                        <Text numberOfLines={1} className="text-[11px] font-semibold text-task">
-                          {range} (할 일)
-                        </Text>
-                      )}
-                    </Pressable>
-                  );
-                }
                 return (
-                  <View
-                    key={(isTask ? 'task:' : 'event:') + item.id}
-                    accessibilityLabel={`${cleanTitle}, ${range}`}
-                    className={cls}
+                  <Pressable
+                    key={event.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${event.cleanTitle}, ${event.range}, 눌러서 상세 보기`}
+                    onPress={() => onSelectSlot?.(day)}
+                    className={`absolute overflow-hidden rounded-md border-l-[3px] border-l-cal-1 bg-cal-1-soft ${compact ? 'px-1 py-0.5' : 'px-2.5 py-1'}`}
                     style={posStyle}
                   >
                     <Text
                       numberOfLines={compact ? 2 : 1}
                       className={`${compact ? 'text-[11px]' : 'text-[13px]'} font-bold text-foreground`}
                     >
-                      {cleanTitle}
+                      {event.cleanTitle}
                     </Text>
                     {!compact && blockHeight >= 38 && (
-                      <Text numberOfLines={1} className="text-[11px] text-muted-foreground">
-                        {range} (캘린더)
+                      <Text numberOfLines={1} className="text-[11px] text-cal-1">
+                        {event.range} (캘린더)
                       </Text>
                     )}
-                  </View>
+                  </Pressable>
                 );
               })}
+
               {showNow && (
                 <View
                   pointerEvents="none"
