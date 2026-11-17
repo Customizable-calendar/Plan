@@ -9,14 +9,15 @@ import { getSupabase } from '@/lib/supabase';
 export const isTestBuild =
   __DEV__ || Updates.channel === 'stage' || process.env.EXPO_PUBLIC_TEST_BUILD === 'true';
 
-// 카드·일지·퀴즈 테이블은 로그인한 사람만 읽고 써요(RLS). 로그인 화면은 lib/auth.ts와 app/login.tsx예요.
+// 일지·퀴즈 테이블은 로그인한 사람만 읽고 써요(RLS). 카드는 기기 먼저 저장해요(lib/local-first.ts).
+// 로그인 화면은 lib/auth.ts와 app/login.tsx예요.
 
-/** 로그인된 Supabase 클라이언트. 로그인 전이면 안내를 던져요. (보통은 루트 레이아웃이 로그인 화면으로 먼저 보내요) */
+/** 로그인된 Supabase 클라이언트. 로그인 전이면 안내를 던져요. 개발일지·퀴즈처럼 계정이 꼭 필요한 곳에서 써요. */
 export async function signedIn() {
   const supabase = getSupabase();
   const { data } = await supabase.auth.getSession();
   if (data.session) return supabase;
-  throw new Error('로그인이 필요해요. 로그인한 뒤 다시 해 주세요.');
+  throw new Error('로그인이 필요해요. 설정의 계정 칸에서 로그인한 뒤 다시 해 주세요.');
 }
 
 /** 안내를 붙여 던져요. RLS에 막힌 경우(42501)는 권한 안내로 바꿔요. */

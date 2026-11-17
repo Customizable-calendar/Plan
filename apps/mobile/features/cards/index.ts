@@ -16,6 +16,8 @@ export {
   findCardsFromTranscript,
   type TranscriptItem,
 } from './lnb';
+// 캘린더(C)가 확인한 일정·할 일을 보여 주고 시간을 저장할 때 써요. (기기 먼저 저장, 로그인하면 계정에도)
+export { listCards, saveCard } from './data';
 // 개발일지·퀴즈(같은 B)도 같은 로그인 확인을 써요.
 export { failed, isTestBuild, signedIn } from './session';
 

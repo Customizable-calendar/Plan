@@ -6,7 +6,13 @@
 
 - 앱: `apps/mobile/lib/auth.ts` (`sendLoginCode`, `verifyLoginCode`, `useSession`, `signOut`, `useMyTeamRole`)
 - 화면: `app/login.tsx` → `features/settings/LoginScreen.tsx`, 설정 맨 위 계정 칸(`AccountSection`)
-- Supabase를 쓰는 기능이 하나라도 있으면(`EXPO_PUBLIC_DATA_SOURCE=supabase` 또는 `EXPO_PUBLIC_SUPABASE_FEATURES`에 값) 로그인 전에는 로그인 화면만 보여요. 예시 데이터만 쓰면 로그인 없이 돼요.
+- 로그인하지 않아도 앱을 써요. Supabase를 쓰는 기능이 하나라도 있으면 설정의 계정 칸에 로그인 버튼이 생겨요. 예시 데이터만 쓰면 안 보여요.
+- 메모·일정·카드는 **로그인 전에는 이 기기에만**, **로그인하면 기기와 계정 둘 다에** 저장해요 (`apps/mobile/lib/local-first.ts`).
+  - 처음 로그인하면 로그인 전에 이 기기에 쓴 것을 그 계정으로 옮겨요.
+  - 인터넷이 끊겨 못 올린 것은 기기에 표시해 두고 다음에 목록을 볼 때 다시 올려요.
+  - 기기 저장은 계정마다 따로라 로그아웃하거나 다른 계정으로 들어와도 섞이지 않아요.
+  - 계정에 올리는 건 그 기능 id가 `EXPO_PUBLIC_SUPABASE_FEATURES`에 있을 때만이에요(예: `notes,calendar,cards`).
+- 개발일지·퀴즈처럼 계정이 꼭 필요한 화면은 로그인 전이면 "설정에서 로그인해 주세요"를 보여요.
 - 카드처럼 본인 데이터는 RLS `user_id = auth.uid()`로 막아요.
 
 ## 팀원만 보는 데이터
