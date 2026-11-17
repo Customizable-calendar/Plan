@@ -29,3 +29,21 @@ create policy "본인 해시태그 카테고리만" on public.tags_categories
   for all
   using (user_id = (select auth.uid()))
   with check (user_id = (select auth.uid()));
+
+-- 사용자가 "아니요"를 누른 자동 분류 추천. 같은 추천을 다시 띄우지 않으려고 기억해요.
+-- id는 추천 키예요(packages/shared의 tagSuggestionKey):
+--   assign:<해시태그>:<카테고리 id>   이 해시태그를 이 카테고리에 넣자는 추천
+--   group:<해시태그,해시태그,...>     이 해시태그들로 새 카테고리를 만들자는 추천(정렬해서 이어요)
+create table public.tags_dismissed_suggestions (
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  id text not null check (id ~ '^(assign|group):'),
+  created_at timestamptz not null default now(),
+  primary key (user_id, id)
+);
+
+alter table public.tags_dismissed_suggestions enable row level security;
+
+create policy "본인 거절 기록만" on public.tags_dismissed_suggestions
+  for all
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));

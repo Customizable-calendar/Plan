@@ -1,7 +1,13 @@
 import {
   assignTagToCategory,
+  type DismissedTagSuggestion,
+  type DismissedTagSuggestionRow,
   type TagCategory,
   type TagCategoryRow,
+  type TagSuggestion,
+  tagSuggestionKey,
+  toDismissedTagSuggestion,
+  toDismissedTagSuggestionInsert,
   toTagCategory,
   toTagCategoryInsert,
 } from '@noteapp/shared';
@@ -17,6 +23,13 @@ const table = localFirstTable<TagCategory>({
   table: 'tags_categories',
   toRow: toTagCategoryInsert,
   fromRow: (row) => toTagCategory(row as TagCategoryRow),
+});
+
+const dismissedTable = localFirstTable<DismissedTagSuggestion>({
+  feature: 'calendar',
+  table: 'tags_dismissed_suggestions',
+  toRow: toDismissedTagSuggestionInsert,
+  fromRow: (row) => toDismissedTagSuggestion(row as DismissedTagSuggestionRow),
 });
 
 /** 내 카테고리 전부, 순서대로. */
@@ -69,4 +82,29 @@ export async function assignTag(tag: string, categoryId: string | null): Promise
 /** 카테고리를 지워요. 안에 있던 해시태그는 그대로 남고 묶음만 없어져요. */
 export async function removeTagCategory(id: string): Promise<void> {
   await table.remove([id]);
+}
+
+// 자동 분류 추천: 앱이 계산해서 보여 주고, 확인하면 저장하고, 거절하면 기억해요.
+
+/** 아직 거절하지 않은 추천만 남겨요. */
+export async function withoutDismissed<S extends TagSuggestion>(suggestions: S[]): Promise<S[]> {
+  const dismissed = new Set((await dismissedTable.list()).map((d) => d.id));
+  return suggestions.filter((s) => !dismissed.has(tagSuggestionKey(s)));
+}
+
+/** 추천을 받아들여요. assign은 해시태그를 넣고, group은 새 카테고리를 만들어요. */
+export async function acceptSuggestion(suggestion: TagSuggestion, name?: string): Promise<void> {
+  if (suggestion.kind === 'assign') {
+    await assignTag(suggestion.tag, suggestion.categoryId);
+    return;
+  }
+  const fallback = suggestion.tags[0]?.replace(/^#/, '') ?? '새 카테고리';
+  await createTagCategory({ name: name ?? suggestion.name ?? fallback, tags: suggestion.tags });
+}
+
+/** 추천을 거절해요. 같은 추천은 다시 나오지 않아요. */
+export async function dismissSuggestion(suggestion: TagSuggestion): Promise<void> {
+  await dismissedTable.put([
+    { id: tagSuggestionKey(suggestion), createdAt: new Date().toISOString() },
+  ]);
 }

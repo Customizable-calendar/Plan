@@ -16,3 +16,18 @@ export interface TagCategory {
   createdAt: string;
   updatedAt: string;
 }
+
+/**
+ * 자동 분류 추천. 앱이 계산해서 보여 주고, 사용자가 확인하면 저장해요.
+ * - assign: 이 해시태그를 이미 있는 카테고리에 넣자
+ * - group: 이 해시태그들로 새 카테고리를 만들자(이름은 AI가 지어 줄 수 있어요)
+ */
+export type TagSuggestion =
+  | { kind: 'assign'; tag: string; categoryId: string }
+  | { kind: 'group'; tags: string[]; name?: string };
+
+/** 사용자가 거절한 추천. id는 tagSuggestionKey 값이에요. */
+export interface DismissedTagSuggestion {
+  id: string;
+  createdAt: string;
+}

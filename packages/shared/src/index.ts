@@ -25,8 +25,12 @@ export {
 } from './db/mappers/notes';
 export {
   assignTagToCategory,
+  type DismissedTagSuggestionRow,
   type TagCategoryRow,
   tagCategoryIndex,
+  tagSuggestionKey,
+  toDismissedTagSuggestion,
+  toDismissedTagSuggestionInsert,
   toTagCategory,
   toTagCategoryInsert,
 } from './db/mappers/tags';

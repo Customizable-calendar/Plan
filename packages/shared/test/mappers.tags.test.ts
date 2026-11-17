@@ -4,6 +4,9 @@ import {
   assignTagToCategory,
   type TagCategoryRow,
   tagCategoryIndex,
+  tagSuggestionKey,
+  toDismissedTagSuggestion,
+  toDismissedTagSuggestionInsert,
   toTagCategory,
   toTagCategoryInsert,
 } from '../src/db/mappers/tags';
@@ -80,5 +83,27 @@ describe('tagCategoryIndex', () => {
     expect(index.get('#개발')).toBe(dev.id);
     expect(index.get('#러닝')).toBe(health.id);
     expect(index.get('#없음')).toBeUndefined();
+  });
+});
+
+describe('tagSuggestionKey', () => {
+  it('넣기 추천은 해시태그와 카테고리로 정해진다', () => {
+    expect(tagSuggestionKey({ kind: 'assign', tag: '#Expo', categoryId: dev.id })).toBe(
+      `assign:#Expo:${dev.id}`,
+    );
+  });
+
+  it('묶기 추천은 해시태그 순서·중복과 상관없이 같은 키다', () => {
+    const a = tagSuggestionKey({ kind: 'group', tags: ['#헬스', '#러닝'] });
+    const b = tagSuggestionKey({ kind: 'group', tags: ['#러닝', '#헬스', '#러닝'], name: '운동' });
+    expect(a).toBe('group:#러닝,#헬스');
+    expect(b).toBe(a);
+  });
+
+  it('거절 기록이 DB를 다녀와도 같다', () => {
+    const dismissed = { id: 'group:#러닝,#헬스', createdAt: T };
+    const insert = toDismissedTagSuggestionInsert(dismissed);
+    const row = { user_id: USER, ...insert, created_at: insert.created_at!.replace('Z', '+00:00') };
+    expect(toDismissedTagSuggestion(row as never)).toEqual(dismissed);
   });
 });

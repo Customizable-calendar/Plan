@@ -1,9 +1,11 @@
 // tags_categories 행(snake_case) ↔ 앱 TagCategory(camelCase). (담당: B)
-import type { TagCategory } from '../../types';
+import type { DismissedTagSuggestion, TagCategory, TagSuggestion } from '../../types';
 import type { Tables, TablesInsert } from '../database.types';
 
 export type TagCategoryRow = Tables<'tags_categories'>;
 export type TagCategoryInsert = TablesInsert<'tags_categories'>;
+export type DismissedTagSuggestionRow = Tables<'tags_dismissed_suggestions'>;
+export type DismissedTagSuggestionInsert = TablesInsert<'tags_dismissed_suggestions'>;
 
 /** DB는 +00:00으로 돌려줘요. 앱 약속(ISO 8601, UTC, Z)에 맞춰요. */
 const iso = (value: string) => new Date(value).toISOString();
@@ -67,4 +69,21 @@ export function tagCategoryIndex(categories: readonly TagCategory[]): Map<string
     for (const tag of category.tags) if (!index.has(tag)) index.set(tag, category.id);
   }
   return index;
+}
+
+/** 추천 하나를 가리키는 키. 거절 기록(tags_dismissed_suggestions.id)에 써요. */
+export function tagSuggestionKey(suggestion: TagSuggestion): string {
+  return suggestion.kind === 'assign'
+    ? `assign:${suggestion.tag}:${suggestion.categoryId}`
+    : `group:${[...new Set(suggestion.tags)].sort().join(',')}`;
+}
+
+export function toDismissedTagSuggestion(row: DismissedTagSuggestionRow): DismissedTagSuggestion {
+  return { id: row.id, createdAt: iso(row.created_at) };
+}
+
+export function toDismissedTagSuggestionInsert(
+  dismissed: DismissedTagSuggestion,
+): DismissedTagSuggestionInsert {
+  return { id: dismissed.id, created_at: dismissed.createdAt };
 }
