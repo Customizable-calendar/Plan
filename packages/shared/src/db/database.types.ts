@@ -5,7 +5,21 @@ export type Database = {
   
   "public": {
           Tables: {
-            "cards_cards": {
+            "calendar_events": {
+                  Row: {
+                    "all_day": boolean,"calendar_id": string,"end_at": string,"id": string,"source": Database["public"]['Enums']["calendar_event_source"],"start_at": string,"timezone": string,"title": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "all_day"?: boolean,"calendar_id": string,"end_at": string,"id": string,"source"?: Database["public"]['Enums']["calendar_event_source"],"start_at": string,"timezone": string,"title": string,"user_id"?: string
+                  }
+                  Update: {
+                    "all_day"?: boolean,"calendar_id"?: string,"end_at"?: string,"id"?: string,"source"?: Database["public"]['Enums']["calendar_event_source"],"start_at"?: string,"timezone"?: string,"title"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"cards_cards": {
                   Row: {
                     "created_at": string,"due_at": string | null,"end_at": string | null,"id": string,"person_name": string | null,"source_end": number,"source_note_id": string,"source_start": number,"start_at": string | null,"status": Database["public"]['Enums']["cards_card_status"],"title": string,"type": Database["public"]['Enums']["cards_card_type"],"user_id": string
                   }
@@ -43,6 +57,20 @@ export type Database = {
                   }
                   Update: {
                     "answers"?: NonNullable<Json>,"author"?: string,"comment"?: string,"created_at"?: string,"score"?: number,"user_id"?: string,"week"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"exec_records": {
+                  Row: {
+                    "actual_minutes": number | null,"card_id": string,"id": string,"memo": string | null,"recorded_at": string,"result": Database["public"]['Enums']["exec_result"],"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "actual_minutes"?: number | null,"card_id": string,"id": string,"memo"?: string | null,"recorded_at"?: string,"result": Database["public"]['Enums']["exec_result"],"user_id"?: string
+                  }
+                  Update: {
+                    "actual_minutes"?: number | null,"card_id"?: string,"id"?: string,"memo"?: string | null,"recorded_at"?: string,"result"?: Database["public"]['Enums']["exec_result"],"user_id"?: string
                   }
                   Relationships: [
                     
@@ -120,7 +148,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "cards_card_status": "suggested"|"confirmed"|"dismissed","cards_card_type": "event"|"task"|"person"|"idea","files_status": "pending"|"ready","notes_moved_to": "checklist"|"session"
+            "calendar_event_source": "google","cards_card_status": "suggested"|"confirmed"|"dismissed","cards_card_type": "event"|"task"|"person"|"idea","exec_result": "done"|"partial"|"not_done"|"unknown","files_status": "pending"|"ready","notes_moved_to": "checklist"|"session"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -236,7 +264,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "cards_card_status": ["suggested", "confirmed", "dismissed"],"cards_card_type": ["event", "task", "person", "idea"],"files_status": ["pending", "ready"],"notes_moved_to": ["checklist", "session"]
+            "calendar_event_source": ["google"],"cards_card_status": ["suggested", "confirmed", "dismissed"],"cards_card_type": ["event", "task", "person", "idea"],"exec_result": ["done", "partial", "not_done", "unknown"],"files_status": ["pending", "ready"],"notes_moved_to": ["checklist", "session"]
           }
         }
 } as const
