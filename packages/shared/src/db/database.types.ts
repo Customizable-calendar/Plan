@@ -123,6 +123,20 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"tags_categories": {
+                  Row: {
+                    "color": string | null,"created_at": string,"id": string,"name": string,"sort_order": number,"tags": (string)[],"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "color"?: string | null,"created_at"?: string,"id": string,"name": string,"sort_order"?: number,"tags"?: (string)[],"updated_at"?: string,"user_id"?: string
+                  }
+                  Update: {
+                    "color"?: string | null,"created_at"?: string,"id"?: string,"name"?: string,"sort_order"?: number,"tags"?: (string)[],"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"team_members": {
                   Row: {
                     "email": string,"role": string

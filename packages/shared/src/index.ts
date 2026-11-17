@@ -23,3 +23,10 @@ export {
   toNoteChecklistInsert,
   toNoteInsert,
 } from './db/mappers/notes';
+export {
+  assignTagToCategory,
+  type TagCategoryRow,
+  tagCategoryIndex,
+  toTagCategory,
+  toTagCategoryInsert,
+} from './db/mappers/tags';

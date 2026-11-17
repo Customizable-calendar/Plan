@@ -6,3 +6,4 @@ export * from './file';
 export * from './note';
 export * from './session';
 export * from './template';
+export * from './tag';
