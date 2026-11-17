@@ -1,6 +1,8 @@
 import type { Card, CardStatus } from '@noteapp/shared';
 import { useEffect, useSyncExternalStore } from 'react';
 
+import { onAccountChange } from '@/lib/local-first';
+
 import { deleteCards, extractFromText, listCards, saveCard, saveCards } from './data';
 
 // 카드 탭과 오늘 화면 섹션이 같은 카드 목록을 보도록 한곳에 둬요.
@@ -26,6 +28,12 @@ function load() {
   });
   return loading;
 }
+
+// 로그인하면 이 기기에 있던 카드와 계정 카드를 합친 목록으로, 로그아웃하면 기기 카드로 다시 불러요.
+onAccountChange(() => {
+  loading = null;
+  void load();
+});
 
 export function useCards() {
   useEffect(() => {
