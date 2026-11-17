@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import { stackScreens } from '@/features/registry';
 import { loginRequired, useSession } from '@/lib/auth';
+import { useLatestUpdate } from '@/lib/updates';
 import { Lnb } from '@/shell/Lnb';
 import { LnbProvider } from '@/shell/LnbContext';
 
@@ -35,6 +36,7 @@ const navTheme = {
 };
 
 export default function RootLayout() {
+  useLatestUpdate(); // 머지된 새 버전을 켤 때 바로 적용해요 (lib/updates.ts)
   // loginRequired가 아니면 바로 null이라 예시 데이터로 로그인 없이 써요. (lib/auth.ts)
   const session = useSession();
   if (session === undefined) return null; // 저장된 로그인을 읽는 동안 (스플래시가 보여요)
