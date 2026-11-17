@@ -49,6 +49,7 @@ gh secret set EXPO_TOKEN --env stage
 1. supabase.com에서 팀 조직 아래 `noteapp-stage` 프로젝트를 만들어요(무료 요금제).
 2. 위 표의 Supabase 값 3개를 넣어요.
 3. Edge Function 비밀값(구글 OAuth 등)은 `npx supabase secrets set KEY=값 --project-ref <ref>`로 넣어요. GitHub에는 넣지 않아요.
+   - 팀 AI 키(`ai` 함수, docs/decisions/0005): `npx supabase secrets set ANTHROPIC_API_KEY=<팀 Claude 키> --project-ref <ref>`. 하루 한도를 바꾸려면 `AI_DAILY_LIMIT=<숫자>`도 같이 넣어요.
 4. 마이그레이션은 사람이 직접 적용하지 않아요. stage에 머지되면 `supabase db push`가 아직 안 된 파일만 적용해요.
 
 ## 3. EAS (앱 업데이트)

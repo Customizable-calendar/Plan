@@ -5,7 +5,21 @@ export type Database = {
   
   "public": {
           Tables: {
-            "calendar_events": {
+            "ai_usage": {
+                  Row: {
+                    "day": string,"input_tokens": number,"output_tokens": number,"requests": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "day"?: string,"input_tokens"?: number,"output_tokens"?: number,"requests"?: number,"user_id": string
+                  }
+                  Update: {
+                    "day"?: string,"input_tokens"?: number,"output_tokens"?: number,"requests"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"calendar_events": {
                   Row: {
                     "all_day": boolean,"calendar_id": string,"end_at": string,"id": string,"source": Database["public"]['Enums']["calendar_event_source"],"start_at": string,"timezone": string,"title": string,"user_id": string
                   }
@@ -171,7 +185,13 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "my_team_role":
+            "ai_add_tokens":
+{ Args: { "p_input": number,"p_output": number,"p_user": string }; Returns: undefined
+                           },
+"ai_take_request":
+{ Args: { "p_limit": number,"p_user": string }; Returns: boolean
+                           },
+"my_team_role":
 { Args: Record<PropertyKey, never>; Returns: string
                            }
           }
