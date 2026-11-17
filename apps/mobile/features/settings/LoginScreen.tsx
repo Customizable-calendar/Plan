@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,7 +16,7 @@ type Step = { kind: 'email' } | { kind: 'code'; email: string };
 
 const looksLikeEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 
-/** 이메일로 받은 코드(6~10자리, 대시보드 OTP 길이 설정)로 로그인해요. 로그인하면 루트 레이아웃이 앱 화면으로 보내요. */
+/** 이메일로 받은 코드(6~10자리, 대시보드 OTP 길이 설정)로 로그인해요. 로그인하면 이 화면을 닫아요. */
 export function LoginScreen() {
   const [step, setStep] = useState<Step>({ kind: 'email' });
   const [email, setEmail] = useState('');
@@ -44,7 +45,10 @@ export function LoginScreen() {
 
   const verify = () =>
     run(async () => {
-      if (step.kind === 'code') await verifyLoginCode(step.email, code);
+      if (step.kind !== 'code') return;
+      await verifyLoginCode(step.email, code);
+      if (router.canGoBack()) router.back();
+      else router.replace('/');
     });
 
   const canSend = looksLikeEmail(email) && !busy;

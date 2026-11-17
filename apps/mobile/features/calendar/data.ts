@@ -2,23 +2,30 @@ import {
   type CalendarEvent,
   type CalendarEventRow,
   type Card,
-  type CardRow,
   fixtures,
   toCalendarEvent,
   toCalendarEventInsert,
-  toCard,
 } from '@noteapp/shared';
 import { useEffect, useSyncExternalStore } from 'react';
 
-import { failed, signedIn } from '@/features/cards';
+import { listCards, saveCard } from '@/features/cards';
 import { fromFixture, sourceFor } from '@/lib/data-source';
+import { localFirstTable, onAccountChange } from '@/lib/local-first';
 
 import { dayKey, overlaps, shiftDay, TIMEZONE, type TimeSlot } from './model';
 import taskExamples from './tasks.fixture.json';
 
-const EVENTS_TABLE = 'calendar_events';
-const CARDS_TABLE = 'cards_cards';
+// 일정은 로그인 전에는 이 기기에만, 로그인 후에는 기기와 계정(calendar_events) 둘 다에 저장해요.
+// 노트에서 확인한 일정·할 일은 카드(cards)에서 가져와요. 카드도 같은 방식으로 저장돼요.
+// 저장 방식은 lib/local-first.ts예요.
 export const isCalendarRemote = sourceFor('calendar') === 'supabase';
+
+const eventTable = localFirstTable<CalendarEvent>({
+  feature: 'calendar',
+  table: 'calendar_events',
+  toRow: toCalendarEventInsert,
+  fromRow: (row) => toCalendarEvent(row as CalendarEventRow),
+});
 
 type State = {
   events: CalendarEvent[];
@@ -41,24 +48,10 @@ export async function loadCalendar(): Promise<void> {
   pending = (async () => {
     try {
       if (isCalendarRemote) {
-        const supabase = await signedIn();
-        const [eventsRes, cardsRes] = await Promise.all([
-          supabase.from(EVENTS_TABLE).select('*').order('start_at', { ascending: true }),
-          supabase
-            .from(CARDS_TABLE)
-            .select('*')
-            .in('type', ['event', 'task'])
-            .neq('status', 'dismissed')
-            .order('created_at', { ascending: false }),
-        ]);
-        if (eventsRes.error && eventsRes.error.code !== '42P01') {
-          failed('일정을 불러오지', eventsRes.error);
-        }
-        if (cardsRes.error) {
-          failed('카드를 불러오지', cardsRes.error);
-        }
-        const storedEvents = ((eventsRes.data ?? []) as CalendarEventRow[]).map(toCalendarEvent);
-        const cards = ((cardsRes.data ?? []) as CardRow[]).map(toCard);
+        const [storedEvents, allCards] = await Promise.all([eventTable.list(), listCards()]);
+        const cards = allCards.filter(
+          (card) => (card.type === 'event' || card.type === 'task') && card.status !== 'dismissed',
+        );
         const cardEvents: CalendarEvent[] = cards
           .filter(
             (card): card is Card & { startAt: string } =>
@@ -312,6 +305,9 @@ export async function loadCalendar(): Promise<void> {
   await pending;
   pending = undefined;
 }
+// 로그인·로그아웃하면 그 계정(또는 이 기기)의 일정으로 다시 불러요.
+onAccountChange(() => void loadCalendar());
+
 export function useCalendar() {
   const snapshot = useSyncExternalStore(
     (notify) => {
@@ -348,11 +344,8 @@ export async function listCalendarTasks(): Promise<Card[]> {
   return fromFixture(state.tasks);
 }
 export async function confirmTask(id: string): Promise<void> {
-  if (isCalendarRemote) {
-    const supabase = await signedIn();
-    const { error } = await supabase.from(CARDS_TABLE).update({ status: 'confirmed' }).eq('id', id);
-    if (error) failed('할 일을 확인하지', error);
-  }
+  const task = state.tasks.find((item) => item.id === id);
+  if (isCalendarRemote && task) await saveCard({ ...task, status: 'confirmed' });
   publish({
     ...state,
     tasks: state.tasks.map((task) => (task.id === id ? { ...task, status: 'confirmed' } : task)),
@@ -382,14 +375,7 @@ export async function saveTimeSlot(id: string, slot: TimeSlot): Promise<void> {
     )
   )
     throw new Error('다른 일정과 겹쳐요. 후보를 다시 골라 주세요.');
-  if (isCalendarRemote) {
-    const supabase = await signedIn();
-    const { error } = await supabase
-      .from(CARDS_TABLE)
-      .update({ start_at: slot.startAt, end_at: slot.endAt })
-      .eq('id', id);
-    if (error) failed('시간을 저장하지', error);
-  }
+  if (isCalendarRemote) await saveCard({ ...task, startAt: slot.startAt, endAt: slot.endAt });
   publish({
     ...state,
     tasks: state.tasks.map((item) =>
@@ -398,13 +384,7 @@ export async function saveTimeSlot(id: string, slot: TimeSlot): Promise<void> {
   });
 }
 export async function saveCalendarEvent(event: CalendarEvent): Promise<void> {
-  if (isCalendarRemote) {
-    const supabase = await signedIn();
-    const { error } = await supabase
-      .from(EVENTS_TABLE)
-      .upsert(toCalendarEventInsert(event), { onConflict: 'user_id,id' });
-    if (error) failed('일정을 저장하지', error);
-  }
+  if (isCalendarRemote) await eventTable.put([event]);
   const exists = state.events.some((item) => item.id === event.id);
   const events = exists
     ? state.events.map((item) => (item.id === event.id ? event : item))
@@ -415,11 +395,7 @@ export async function saveCalendarEvent(event: CalendarEvent): Promise<void> {
   });
 }
 export async function deleteCalendarEvent(id: string): Promise<void> {
-  if (isCalendarRemote) {
-    const supabase = await signedIn();
-    const { error } = await supabase.from(EVENTS_TABLE).delete().eq('id', id);
-    if (error) failed('일정을 지우지', error);
-  }
+  if (isCalendarRemote) await eventTable.remove([id]);
   publish({
     ...state,
     events: state.events.filter((item) => item.id !== id),
