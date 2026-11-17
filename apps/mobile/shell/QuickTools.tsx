@@ -1,11 +1,12 @@
 import { palette } from '@noteapp/ui';
+import { router } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useState } from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
 
 // 홈 오른쪽 아래 빠른 도구. 평소엔 버튼 하나만 떠 있고, 누르면 녹음과 AI 버튼이 위로 펼쳐져요.
 // 홈 화면에서만 그려서 다른 탭으로 가면 안 보여요.
-// TODO(P1): 녹음 화면, AI 채팅 화면이 생기면 router.push로 바꿔요.
+// 녹음은 받아쓰기 화면(stt, B)으로 가요. TODO(P1): AI 채팅 화면이 생기면 router.push로 바꿔요.
 function soon(name: string) {
   Alert.alert(name, '아직 준비 중이에요.');
 }
@@ -61,7 +62,10 @@ export function QuickTools() {
             <Tool
               icon={{ ios: 'mic', android: 'mic', web: 'mic' }}
               label="녹음"
-              onPress={() => pick('녹음')}
+              onPress={() => {
+                setOpen(false);
+                router.push('/stt');
+              }}
             />
             <Tool
               icon={{ ios: 'sparkles', android: 'auto_awesome', web: 'auto_awesome' }}
