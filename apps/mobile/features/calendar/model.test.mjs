@@ -11,8 +11,10 @@ import {
 import {
   dayKey,
   eventsOnDay,
+  groupEventsByDay,
   overlaps,
   shiftDay,
+  splitTitleAndTags,
   suggestSlots as calculateSlots,
   weekDays,
 } from './model.ts';
@@ -223,5 +225,29 @@ test('핵심 연결만(backboneOnly) 필터는 고립 노드 없이 불필요한
         `${node.tag} 노드가 고립되었어요.`,
       );
     }
+  }
+});
+
+test('splitTitleAndTags는 해시태그를 소문자 정규화해 분리하고 깔끔한 제목을 돌려줘요', () => {
+  const parsed = splitTitleAndTags('주간 회의 #기획 #React_Native #기획');
+  assert.equal(parsed.cleanTitle, '주간 회의');
+  assert.deepEqual(parsed.tags, ['#기획', '#react_native']);
+  const tagOnly = splitTitleAndTags('#회고');
+  assert.equal(tagOnly.cleanTitle, '#회고');
+  assert.deepEqual(tagOnly.tags, ['#회고']);
+});
+
+test('groupEventsByDay는 여러 날에 걸친 일정과 경계 배타성을 eventsOnDay와 동일하게 분류해요', () => {
+  const events = [
+    { id: 'late', startAt: '2026-10-27T05:00:00Z', endAt: '2026-10-27T06:00:00Z' },
+    { id: 'multi', startAt: '2026-10-26T14:00:00Z', endAt: '2026-10-27T15:00:00Z' },
+  ];
+  const days = ['2026-10-26', '2026-10-27', '2026-10-28'];
+  const grouped = groupEventsByDay(events, days);
+  assert.deepEqual(grouped.get('2026-10-26')?.map((e) => e.id), ['multi']);
+  assert.deepEqual(grouped.get('2026-10-27')?.map((e) => e.id), ['multi', 'late']);
+  assert.deepEqual(grouped.get('2026-10-28'), []);
+  for (const day of days) {
+    assert.deepEqual(grouped.get(day), eventsOnDay(events, day));
   }
 });

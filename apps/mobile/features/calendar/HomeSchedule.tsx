@@ -1,8 +1,9 @@
 import { router } from 'expo-router';
+import { useMemo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { loadCalendar, useCalendar } from './data';
-import { dayKey, eventsOnDay, timeLabel } from './model';
+import { dayKey, eventsOnDay, splitTitleAndTags, timeLabel } from './model';
 
 // 홈 오늘 일정 자리(schedule). 디자인 시스템 홈의 ScheduleRow 모양을 따라요.
 // 줄을 누르면 수행 확인 시트, 「전체 보기」는 캘린더 화면으로 가요.
@@ -36,26 +37,31 @@ function ScheduleRow({ row }: { row: Row }) {
 export function HomeSchedule() {
   const { events, tasks, loading, error } = useCalendar();
   const today = dayKey(new Date());
-  const rows: Row[] = [
-    ...eventsOnDay(events, today).map((e) => ({
-      id: e.id,
-      time: e.allDay ? '종일' : timeLabel(e.startAt),
-      title: e.title,
-      source: 'Google 캘린더',
-      external: true,
-    })),
-    ...tasks
-      .filter((t) => t.startAt && dayKey(t.startAt) === today)
-      .map((t) => ({
-        id: t.id,
-        time: timeLabel(t.startAt!),
-        title: t.title,
-        source: '노트에서 찾은 일정',
-        external: false,
-      })),
-  ].sort((a, b) =>
-    (a.time === '종일' ? '' : a.time).localeCompare(b.time === '종일' ? '' : b.time),
-  ); // 종일 일정이 맨 위, 나머지는 시간순
+
+  const rows = useMemo<Row[]>(
+    () =>
+      [
+        ...eventsOnDay(events, today).map((e) => ({
+          id: e.id,
+          time: e.allDay ? '종일' : timeLabel(e.startAt),
+          title: splitTitleAndTags(e.title).cleanTitle,
+          source: 'Google 캘린더',
+          external: true,
+        })),
+        ...tasks
+          .filter((t) => t.status !== 'dismissed' && t.startAt && dayKey(t.startAt) === today)
+          .map((t) => ({
+            id: t.id,
+            time: timeLabel(t.startAt!),
+            title: splitTitleAndTags(t.title).cleanTitle,
+            source: '노트에서 찾은 일정',
+            external: false,
+          })),
+      ].sort((a, b) =>
+        (a.time === '종일' ? '' : a.time).localeCompare(b.time === '종일' ? '' : b.time),
+      ),
+    [events, tasks, today],
+  );
 
   return (
     <View className="gap-2.5">
