@@ -1,5 +1,5 @@
 import { speakerLabel, timedLines, toSpeakerText, toSrt, toTimedText } from '@noteapp/extractor';
-import type { Card } from '@noteapp/shared';
+import type { Card, SttMark } from '@noteapp/shared';
 import { ActionRow, CountTabs, Icon, PlayerBar, Text, TranscriptBlock } from '@noteapp/ui';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import {
@@ -23,11 +23,8 @@ import { type Found, SummaryTab } from './TranscriptAi';
 // 탭 3개: 받아쓴 글(구간마다 시각, 단어를 누르면 그 자리부터 재생), 요약(팀 AI), 메모(녹음 중 북마크와 메모).
 // 녹음 원본이 있으면 아래에 재생 막대가 있어요(expo-audio).
 
-/** 녹음 중에 남긴 표시. text가 없으면 북마크예요. ms는 녹음 시작부터 */
-export interface Mark {
-  ms: number;
-  text?: string;
-}
+/** 녹음 중에 남긴 표시. text가 없으면 북마크예요. ms는 녹음 시작부터(받아쓰기 기록에도 그대로 저장) */
+export type Mark = SttMark;
 
 const clock = (ms: number) => {
   const s = Math.max(0, Math.floor(ms / 1000));

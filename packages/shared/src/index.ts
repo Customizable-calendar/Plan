@@ -35,4 +35,11 @@ export {
   toTagCategory,
   toTagCategoryInsert,
 } from './db/mappers/tags';
-export { type SttTransformRow, toSttTransform, toSttTransformInsert } from './db/mappers/stt';
+export {
+  type SttNoteRow,
+  type SttTransformRow,
+  toSttNote,
+  toSttNoteInsert,
+  toSttTransform,
+  toSttTransformInsert,
+} from './db/mappers/stt';
