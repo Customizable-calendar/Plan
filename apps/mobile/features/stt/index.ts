@@ -10,6 +10,7 @@ export {
   discardLeftover,
   isSttAvailable,
   leftoverSeconds,
+  prewarmStt,
   startDictation,
   type SttResult,
   type SttSegment,
