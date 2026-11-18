@@ -1,4 +1,4 @@
-import type { Card } from '@noteapp/shared';
+import type { Card, SttNote } from '@noteapp/shared';
 import {
   BottomSheet,
   Button,
@@ -11,8 +11,8 @@ import {
   Scrim,
   Text,
 } from '@noteapp/ui';
-import { CheckIcon, MicIcon } from 'lucide-react-native';
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { CheckIcon, MicIcon, Trash2Icon } from 'lucide-react-native';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, View } from 'react-native';
 
 import { findCardsFromTranscript } from '@/features/cards';
@@ -30,6 +30,7 @@ import {
 } from './engine';
 import type { SttModel, SttModelId } from './models';
 import { type Mark, NoteView } from './NoteView';
+import { listSttNotes, noteFromResult, removeSttNote, resultOfNote, saveSttNote } from './notes';
 import { keepAudioEnabled, setKeepAudio } from './recordings';
 import { SmallButton } from './SmallButton';
 import type { Found } from './TranscriptAi';
@@ -225,12 +226,65 @@ function Recorder({ model, models }: { model: SttModel; models: ReactNode }) {
     state.phase === 'done' ? `${state.result.durationMs}:${state.result.text.length}` : '';
   const [labeled, setLabeled] = useState<{ key: string; segments: SttSegment[] } | null>(null);
 
+  const segmentsNow =
+    state.phase === 'done'
+      ? labeled?.key === resultKey
+        ? labeled.segments
+        : state.result.segments
+      : null;
+  // 받아쓰기가 끝나면 기록(stt_notes)으로 남겨요. 같은 결과면 같은 기록을 고쳐 써요.
+  const noteRef = useRef<{ key: string; id: string; createdAt: string } | null>(null);
+  const doneResult = state.phase === 'done' ? state.result : null;
+  useEffect(() => {
+    if (!doneResult || !segmentsNow || !doneResult.text.trim()) return;
+    if (noteRef.current?.key !== resultKey) {
+      const now = new Date();
+      noteRef.current = {
+        key: resultKey,
+        id: `stt-note-${now.getTime()}`,
+        createdAt: now.toISOString(),
+      };
+    }
+    const { id, createdAt } = noteRef.current;
+    void saveSttNote(
+      noteFromResult({
+        id,
+        createdAt,
+        result: doneResult,
+        segments: segmentsNow,
+        marks,
+        modelId: model.id,
+      }),
+    ).catch(() => {});
+  }, [doneResult, segmentsNow, marks, resultKey, model.id]);
+
+  // 지난 받아쓰기를 다시 열었을 때
+  const [opened, setOpened] = useState<SttNote | null>(null);
+
   const begin = (run: () => void) => {
     setFound(null);
     setLeft(null); // 새로 받아쓰면 남은 녹음은 지워져요.
     setMarks([]);
     run();
   };
+
+  if (opened)
+    return (
+      <NoteView
+        key={opened.id}
+        result={resultOfNote(opened)}
+        segments={opened.segments}
+        marks={opened.marks}
+        found={null}
+        onCards={() => {}}
+        onSegments={(next) => {
+          const updated = { ...opened, segments: next };
+          setOpened(updated);
+          void saveSttNote(updated).catch(() => {});
+        }}
+        onNew={() => setOpened(null)}
+      />
+    );
 
   if (state.phase === 'done')
     return (
@@ -307,6 +361,7 @@ function Recorder({ model, models }: { model: SttModel; models: ReactNode }) {
                 onAgain={(recording) => begin(() => void again(recording))}
               />
             </View>
+            <NoteList refreshKey={state.phase} onOpen={setOpened} />
             {models}
           </>
         )}
@@ -462,5 +517,59 @@ function RecordSheet({
         </Pressable>
       </View>
     </>
+  );
+}
+
+const minutes = (ms: number) => {
+  const s = Math.round(ms / 1000);
+  return s >= 60 ? `${Math.floor(s / 60)}분 ${s % 60}초` : `${s}초`;
+};
+
+/** 지난 받아쓰기(stt_notes). 누르면 녹음 노트로 다시 열어요. */
+function NoteList({ refreshKey, onOpen }: { refreshKey: string; onOpen: (note: SttNote) => void }) {
+  const [notes, setNotes] = useState<SttNote[]>([]);
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    listSttNotes()
+      .then((list) => {
+        if (alive) setNotes(list);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [refreshKey, version]);
+
+  if (notes.length === 0) return null;
+  return (
+    <View>
+      <Text className="pb-2 text-[13px] font-bold text-muted-foreground">지난 받아쓰기</Text>
+      {notes.map((n) => (
+        <Pressable
+          key={n.id}
+          onPress={() => onOpen(n)}
+          accessibilityRole="button"
+          className="min-h-16 flex-row items-center gap-2 border-t border-border py-2.5"
+        >
+          <View className="flex-1 gap-0.5">
+            <Text className="text-[15px] text-foreground">{n.title}</Text>
+            <Text numberOfLines={1} className="text-[13px] text-muted-foreground">
+              {minutes(n.durationMs)}, {n.text.split('\n')[0]}
+            </Text>
+          </View>
+          <Button
+            variant="ghost"
+            size="icon"
+            accessibilityLabel="기록 지우기"
+            onPress={() => {
+              void removeSttNote(n.id).then(() => setVersion((v) => v + 1));
+            }}
+          >
+            <Icon as={Trash2Icon} size={18} className="text-foreground" />
+          </Button>
+        </Pressable>
+      ))}
+    </View>
   );
 }

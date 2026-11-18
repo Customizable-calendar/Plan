@@ -3,7 +3,7 @@
 - **담당**: B
 - **하는 일**: 말한 내용을 기기 안에서 한국어 글로 바꿔요. [whisper.rn](https://github.com/mybigday/whisper.rn)(whisper.cpp, MIT)을 써서 서버, API 키, 요금이 없어요. 소리는 기기 밖으로 안 나가요.
 - **화면**: `/stt` (모델 받기, 말하기, 받아쓴 글로 카드 찾기)
-- **데이터**: 내 지시문만 `stt_transforms` 테이블(로그인하면 계정에도). 받아쓴 글과 소리는 서버에 없어요. 모델 파일은 기기 `Documents/stt/`, 받아쓰는 중인 녹음은 `Documents/stt/session/`에 있어요.
+- **데이터**: 받아쓰기 기록 `stt_notes`(받아쓴 글, 줄 시각, 화자, 북마크·메모, `notes.ts`)와 내 지시문 `stt_transforms`. 둘 다 기기에 먼저 저장하고 로그인하면 계정에도 올려요(`stt` 기능). 소리(녹음 원본)는 기기에만 있어요. 모델 파일은 기기 `Documents/stt/`, 받아쓰는 중인 녹음은 `Documents/stt/session/`에 있어요.
 - **다른 기능에 주는 것**: `useDictation`, `startDictation`, `prewarmStt`, `isSttAvailable`, `leftoverSeconds`, `discardLeftover`, `MODELS`, `isDownloaded`
 - **받는 것**: 카드(cards)의 `findCardsFromTranscript` (받아쓰기가 끝나면 회의록에서 일정, 약속, 할 일을 찾아 확인 기다리는 카드로 넣어요)
 
@@ -15,6 +15,7 @@
 - **녹음 시트**: `RecordPanel`(시각, 파형, 받아쓰는 글, 북마크, 잠시 멈춤, 메모)을 `BottomSheet`에 넣어요. 시트를 누르면 `RecordMiniBar`로 줄고, 막대를 누르면 다시 열려요. 위쪽에는 받아쓴 글이 계속 보여요.
   - 잠시 멈춤: 멈춘 동안 들어온 소리는 버리고 녹음 시간에도 안 세요(`Dictation.pause`).
   - 북마크, 메모: 녹음 시각과 같이 남겨서 녹음 노트에 보여 줘요(이 화면에만 있고 저장은 안 해요).
+- **지난 받아쓰기**: 받아쓰기가 끝나면 기록을 자동으로 남겨요(`stt_notes`). 화자를 나누거나 북마크가 바뀌면 같은 기록을 고쳐 써요. 첫 화면 "지난 받아쓰기"에서 다시 열면 녹음 노트로 보여요. 다른 기기에서 열면 글은 보이지만 녹음 원본이 없어서 재생은 안 돼요.
 - **녹음 노트**(`NoteView.tsx`): `CountTabs` 3개
   - 받아쓴 글: 문장 줄마다 `TranscriptBlock`(시각, 화자, 북마크, 메모). 녹음 원본이 있으면 단어를 누르면 그 자리부터 재생하고, 재생 중인 단어가 표시돼요(줄 안 단어 시각은 글자 비율로 짐작해요). 아래에 글로 공유, .txt, .srt 내보내기, 화자 나누기.
   - 요약(`TranscriptAi.tsx`의 `SummaryTab`): `SummaryHeader`, `SummarySection`(요약, 다음 할 일, 양식으로 정리), `NextActionRow`로 카드 후보를 바로 확인, `AiNotice`.

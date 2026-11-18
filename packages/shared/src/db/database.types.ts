@@ -165,6 +165,20 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"stt_notes": {
+                  Row: {
+                    "created_at": string,"duration_ms": number,"id": string,"marks": NonNullable<Json>,"model_id": string | null,"recording_id": string | null,"segments": NonNullable<Json>,"text": string,"title": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"duration_ms"?: number,"id": string,"marks"?: NonNullable<Json>,"model_id"?: string | null,"recording_id"?: string | null,"segments"?: NonNullable<Json>,"text"?: string,"title": string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"duration_ms"?: number,"id"?: string,"marks"?: NonNullable<Json>,"model_id"?: string | null,"recording_id"?: string | null,"segments"?: NonNullable<Json>,"text"?: string,"title"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"stt_transforms": {
                   Row: {
                     "created_at": string,"id": string,"instructions": string,"sort_order": number,"title": string,"updated_at": string,"user_id": string
