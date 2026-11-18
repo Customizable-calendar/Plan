@@ -15,7 +15,8 @@ import {
   type SttResult,
 } from './engine';
 import type { SttModel, SttModelId } from './models';
-import { KeepAudioToggle, LevelBar, MicCheck, RecordingList } from './AudioTools';
+import { ImportAudio, KeepAudioToggle, LevelBar, MicCheck, RecordingList } from './AudioTools';
+import { shareTextFile, stamp } from './share';
 import { keepAudioEnabled, setKeepAudio } from './recordings';
 import { SmallButton } from './SmallButton';
 import { TranscriptAi } from './TranscriptAi';
@@ -259,6 +260,13 @@ function Recorder({ model }: { model: SttModel }) {
       {idle ? (
         <View className="gap-3">
           <MicCheck />
+          <ImportAudio
+            onImported={(recording) => {
+              setFound(null);
+              setLeft(null); // 가져와서 받아쓰면 남은 녹음은 지워져요.
+              void again(recording);
+            }}
+          />
           <KeepAudioToggle on={keepAudio} onChange={toggleKeepAudio} />
           <RecordingList
             refreshKey={`${state.phase}:${keepAudio}`}
@@ -295,12 +303,22 @@ function Recorder({ model }: { model: SttModel }) {
               <SmallButton
                 label="시각 붙여 공유"
                 onPress={() =>
-                  Share.share({ message: toTimedText(timedLines(state.result.segments)) })
+                  void shareTextFile(
+                    `받아쓰기 ${stamp()}.txt`,
+                    toTimedText(timedLines(state.result.segments)),
+                    'text/plain',
+                  ).catch(() => {})
                 }
               />
               <SmallButton
                 label="자막(SRT) 공유"
-                onPress={() => Share.share({ message: toSrt(timedLines(state.result.segments)) })}
+                onPress={() =>
+                  void shareTextFile(
+                    `받아쓰기 ${stamp()}.srt`,
+                    toSrt(timedLines(state.result.segments)),
+                    'application/x-subrip',
+                  ).catch(() => {})
+                }
               />
             </View>
           ) : null}
