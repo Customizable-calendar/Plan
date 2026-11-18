@@ -22,6 +22,7 @@ import {
 import { clearSession, leftover, type SavedChunk, saveChunk, saveSegments } from './session';
 import { cutAtGap, keepSpeech } from './speech';
 import { cleanSegment, type PreviewSegment, promptFor, settledCount } from './text';
+import { openSenseVoice } from './sensevoice';
 import { prepareVad, releaseVad, speechIn } from './vad';
 import { startKeepAlive, stopKeepAlive, updateKeepAlive } from '@/modules/stt-native';
 
@@ -88,6 +89,8 @@ export interface SttSegment {
   /** 녹음 시작부터 ms */
   startMs: number;
   endMs: number;
+  /** 화자 구분을 했으면 말한 사람(0부터, speakers.ts) */
+  speaker?: number;
 }
 
 export interface SttResult {
@@ -168,6 +171,15 @@ function hold(): () => void {
 }
 
 async function openContext(model: SttModel): Promise<WhisperContext> {
+  // SenseVoice는 whisper.rn 컨텍스트와 같은 모양으로 감싸서 나머지는 똑같이 써요(sensevoice.ts).
+  if (model.engine === 'sensevoice') {
+    try {
+      return await openSenseVoice(model);
+    } catch (e) {
+      if (e instanceof SttError) throw e;
+      throw new SttError('SenseVoice 모델을 열지 못했어요. 모델을 지우고 다시 받아 주세요.', e);
+    }
+  }
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { initWhisper } = require('whisper.rn/index') as WhisperModule;
   const filePath = modelFile(model).uri;

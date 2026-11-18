@@ -1,4 +1,4 @@
-import { timedLines, toSrt, toTimedText } from '@noteapp/extractor';
+import { timedLines, toSpeakerText, toSrt, toTimedText } from '@noteapp/extractor';
 import type { Card } from '@noteapp/shared';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -6,6 +6,7 @@ import { Platform, Pressable, ScrollView, Share, Text, View } from 'react-native
 
 import { cardDetail, findCardsFromTranscript, typeLabel } from '@/features/cards';
 import { listTagCategories } from '@/lib/tag-categories';
+import { hasKeepAlive } from '@/modules/stt-native';
 
 import {
   discardLeftover,
@@ -13,10 +14,12 @@ import {
   MAX_SECONDS,
   prewarmStt,
   type SttResult,
+  type SttSegment,
 } from './engine';
 import type { SttModel, SttModelId } from './models';
 import { ImportAudio, KeepAudioToggle, LevelBar, MicCheck, RecordingList } from './AudioTools';
 import { shareTextFile, stamp } from './share';
+import { SpeakerSplit } from './SpeakerSplit';
 import { keepAudioEnabled, setKeepAudio } from './recordings';
 import { SmallButton } from './SmallButton';
 import { TranscriptAi } from './TranscriptAi';
@@ -189,6 +192,25 @@ function Recorder({ model }: { model: SttModel }) {
   });
   const idle = state.phase === 'idle' || state.phase === 'error' || state.phase === 'done';
 
+  // 화자를 나누면 받아쓴 덩어리에 화자가 붙어요. 결과가 바뀌면(key) 처음 받아쓴 걸로 돌아가요.
+  const resultKey =
+    state.phase === 'done' ? `${state.result.durationMs}:${state.result.text.length}` : '';
+  const [labeled, setLabeled] = useState<{ key: string; segments: SttSegment[] } | null>(null);
+  const segments =
+    state.phase === 'done'
+      ? labeled?.key === resultKey
+        ? labeled.segments
+        : state.result.segments
+      : [];
+  const bySpeaker = segments.some((seg) => seg.speaker !== undefined);
+  // 화자를 나눴으면 "화자 1: …" 줄로 보여 주고 공유해요. AI 정리에도 이 글을 줘요.
+  const shownText =
+    state.phase !== 'done'
+      ? ''
+      : bySpeaker
+        ? toSpeakerText(timedLines(segments))
+        : state.result.text;
+
   return (
     <View className="gap-4">
       {left !== null && (state.phase === 'idle' || state.phase === 'error') ? (
@@ -222,7 +244,10 @@ function Recorder({ model }: { model: SttModel }) {
           <BigButton label={`끝내기  ${clock(state.seconds)}`} onPress={finish} danger />
           <LevelBar level={state.level} />
           <Text className="text-center text-[13px] leading-5 text-muted-foreground">
-            최대 {MAX_SECONDS / 3600}시간까지 받아써요. 화면을 켜 두고 앱을 나가지 마세요.
+            최대 {MAX_SECONDS / 3600}시간까지 받아써요.
+            {hasKeepAlive()
+              ? ' 화면이 꺼지거나 앱을 나가도 녹음을 이어 가요(알림이 떠 있어요).'
+              : ' 화면을 켜 두고 앱을 나가지 마세요.'}
             {keepAudio ? ' 녹음 원본도 이 기기에 남기는 중이에요.' : ''}
           </Text>
           <View className="gap-2 rounded-xl border border-border bg-card p-4">
@@ -292,20 +317,17 @@ function Recorder({ model }: { model: SttModel }) {
             받아쓴 글 ({clock(Math.round(state.result.durationMs / 1000))})
           </Text>
           <Text selectable className="text-[16px] leading-6 text-foreground">
-            {state.result.text || '알아들은 말이 없어요.'}
+            {shownText || '알아들은 말이 없어요.'}
           </Text>
           {state.result.text ? (
             <View className="flex-row flex-wrap gap-2">
-              <SmallButton
-                label="공유"
-                onPress={() => Share.share({ message: state.result.text })}
-              />
+              <SmallButton label="공유" onPress={() => Share.share({ message: shownText })} />
               <SmallButton
                 label="시각 붙여 공유"
                 onPress={() =>
                   void shareTextFile(
                     `받아쓰기 ${stamp()}.txt`,
-                    toTimedText(timedLines(state.result.segments)),
+                    toTimedText(timedLines(segments)),
                     'text/plain',
                   ).catch(() => {})
                 }
@@ -315,13 +337,19 @@ function Recorder({ model }: { model: SttModel }) {
                 onPress={() =>
                   void shareTextFile(
                     `받아쓰기 ${stamp()}.srt`,
-                    toSrt(timedLines(state.result.segments)),
+                    toSrt(timedLines(segments)),
                     'application/x-subrip',
                   ).catch(() => {})
                 }
               />
             </View>
           ) : null}
+          <SpeakerSplit
+            key={resultKey}
+            recordingId={state.result.recordingId}
+            segments={state.result.segments}
+            onSegments={(next) => setLabeled({ key: resultKey, segments: next })}
+          />
         </View>
       ) : null}
 
@@ -329,8 +357,8 @@ function Recorder({ model }: { model: SttModel }) {
 
       {state.phase === 'done' && state.result.text && found?.kind !== 'finding' ? (
         <TranscriptAi
-          key={`${state.result.durationMs}:${state.result.text.length}`}
-          text={state.result.text}
+          key={resultKey}
+          text={shownText}
           replaced={found?.kind === 'found' ? found.cards.map((c) => c.id) : []}
           onCards={(cards) => setFound({ kind: 'found', cards, byAi: true })}
         />

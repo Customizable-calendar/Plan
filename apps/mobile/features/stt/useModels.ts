@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { isSttAvailable, releaseStt } from './engine';
+import { hasSherpa } from './sherpa';
 import { SttError } from './errors';
 import {
   deleteModel,
@@ -22,8 +23,11 @@ export interface ModelRow {
 }
 
 // Expo Go에서도 파일은 볼 수 있지만, 받아도 못 쓰니 목록만 보여 줘요.
+// SenseVoice는 sherpa-onnx가 든 새 APK에서만 보여요.
+const usable = () => MODELS.filter((m) => m.engine !== 'sensevoice' || hasSherpa());
+
 const scan = (): ModelRow[] =>
-  MODELS.map((model) => ({
+  usable().map((model) => ({
     model,
     downloaded: isDownloaded(model),
     partial: partialRatio(model),

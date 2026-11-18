@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { clockOf, timedLines, toSrt, toTimedText } from '../src';
+import { assignSpeakers, clockOf, timedLines, toSpeakerText, toSrt, toTimedText } from '../src';
 
 describe('받아쓴 글을 시각 붙은 줄로', () => {
   it('덩어리 안 문장을 나누고 시간을 글자 수로 나눈다', () => {
@@ -61,5 +61,53 @@ describe('내보내기', () => {
       '1\n00:00:05,200 --> 00:00:07,000\n회의를 시작할게요.\n\n' +
         '2\n01:02:03,456 --> 01:02:03,956\n질문 있나요?\n',
     );
+  });
+});
+
+describe('화자 구분', () => {
+  const segments = [
+    { text: '회의 시작할게요', startMs: 0, endMs: 2000 },
+    { text: '네 좋아요', startMs: 2200, endMs: 3000 },
+    { text: '그럼 첫 안건부터 봐요', startMs: 3200, endMs: 5000 },
+  ];
+  const turns = [
+    { startMs: 0, endMs: 2100, speaker: 3 },
+    { startMs: 2100, endMs: 3100, speaker: 1 },
+    { startMs: 3100, endMs: 5000, speaker: 3 },
+  ];
+
+  it('가장 오래 겹치는 사람을 붙이고 처음 말한 순서로 번호를 매긴다', () => {
+    expect(assignSpeakers(segments, turns).map((s) => s.speaker)).toEqual([0, 1, 0]);
+  });
+
+  it('겹치는 사람이 없으면 제일 가까운 사람', () => {
+    const far = [{ text: '음', startMs: 6000, endMs: 6500 }];
+    expect(assignSpeakers(far, turns)[0]!.speaker).toBe(0);
+  });
+
+  it('구간이 없으면 그대로', () => {
+    expect(assignSpeakers(segments, [])).toEqual(segments);
+  });
+
+  it('사람이 바뀌면 줄을 나누고 이름을 붙인다', () => {
+    const lines = timedLines([
+      { text: '다음 주 화요일에', startMs: 0, endMs: 1000, speaker: 0 },
+      { text: '네 알겠어요', startMs: 1100, endMs: 2000, speaker: 1 },
+    ]);
+    expect(lines.map((l) => [l.text, l.speaker])).toEqual([
+      ['다음 주 화요일에', 0],
+      ['네 알겠어요.', 1],
+    ]);
+    expect(toTimedText(lines)).toBe('[0:00] 화자 1: 다음 주 화요일에\n[0:01] 화자 2: 네 알겠어요.');
+    expect(toSrt(lines)).toContain('화자 2: 네 알겠어요.');
+  });
+
+  it('같은 사람이 이어 말하면 한 줄로', () => {
+    const lines = [
+      { text: '첫 문장이에요.', startMs: 0, endMs: 1000, speaker: 0 },
+      { text: '둘째 문장이에요.', startMs: 1000, endMs: 2000, speaker: 0 },
+      { text: '네.', startMs: 2000, endMs: 2500, speaker: 1 },
+    ];
+    expect(toSpeakerText(lines)).toBe('화자 1: 첫 문장이에요. 둘째 문장이에요.\n화자 2: 네.');
   });
 });
