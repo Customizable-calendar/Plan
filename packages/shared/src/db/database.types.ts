@@ -75,6 +75,34 @@ export type Database = {
                   Relationships: [
                     
                   ]
+                },"docs_documents": {
+                  Row: {
+                    "body": string,"card_ids": (string)[],"created_at": string,"id": string,"template_id": string,"title": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "body"?: string,"card_ids"?: (string)[],"created_at"?: string,"id": string,"template_id": string,"title": string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Update: {
+                    "body"?: string,"card_ids"?: (string)[],"created_at"?: string,"id"?: string,"template_id"?: string,"title"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+
+                  ]
+                },"docs_sessions": {
+                  Row: {
+                    "created_at": string,"id": string,"last_document_id": string | null,"source_note_id": string | null,"source_text": string | null,"template_id": string | null,"title": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"id": string,"last_document_id"?: string | null,"source_note_id"?: string | null,"source_text"?: string | null,"template_id"?: string | null,"title": string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"last_document_id"?: string | null,"source_note_id"?: string | null,"source_text"?: string | null,"template_id"?: string | null,"title"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+
+                  ]
                 },"exec_records": {
                   Row: {
                     "actual_minutes": number | null,"card_id": string,"id": string,"memo": string | null,"recorded_at": string,"result": Database["public"]['Enums']["exec_result"],"user_id": string

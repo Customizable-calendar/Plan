@@ -7,19 +7,17 @@ import {
 } from '@noteapp/shared';
 
 import { dataSource, fromFixture } from '@/lib/data-source';
+import { findDocument, listAllDocuments, putDocument } from '@/lib/documents';
 
 import { monthDay } from './format';
 
 // 편집기 데이터는 여기서만 가져오고 저장해요. 화면은 이 파일 함수만 불러요.
-// M2: dataSource === 'supabase'면 docs_ 테이블 + mapper로 바꿔요. 화면은 그대로예요.
+// 문서는 lib/documents.ts(docs_documents)에 저장해요: 기기에 먼저, 로그인하면 계정에도.
 
 export interface EditorData {
   document: Document;
   template: Template | undefined;
 }
-
-// M1은 앱이 켜져 있는 동안만 기억해요. (Map = 키로 값을 찾는 상자)
-const saved = new Map<string, Document>();
 
 /**
  * 문서를 열어요. id가 'new'면 templateId 양식으로 빈 문서를 새로 만들어요.
@@ -31,29 +29,25 @@ export async function openDocument(
   templateId?: string,
   seed?: string,
 ): Promise<EditorData | null> {
-  if (dataSource !== 'fixtures') throw new Error('editor: Supabase 연결은 M2에서 만들어요.');
-
   if (id === 'new') {
     const template = templates.find((t) => t.id === templateId);
     if (!template) return null;
     return { document: newDraft(template, seed), template };
   }
 
-  const document = saved.get(id) ?? fixtures.documents.find((d) => d.id === id);
+  const document = await findDocument(id);
   if (!document) return null;
-  return fromFixture({ document, template: templates.find((t) => t.id === document.templateId) });
+  return { document, template: templates.find((t) => t.id === document.templateId) };
 }
 
-/** 고친 문서를 저장해요. */
+/** 고친 문서를 저장해요. 앱을 다시 켜도 남아요. */
 export async function saveDocument(document: Document): Promise<void> {
-  if (dataSource !== 'fixtures') throw new Error('editor: Supabase 연결은 M2에서 만들어요.');
-  saved.set(document.id, document);
+  await putDocument(document);
 }
 
-/** 이번에 앱에서 고치거나 새로 쓴 문서. 세션 목록이 예시 문서와 합쳐 보여줘요. */
+/** 저장된 문서 전부(예전 이름 그대로). 세션 목록이 써요. */
 export async function listEditedDocuments(): Promise<Document[]> {
-  if (dataSource !== 'fixtures') return [];
-  return fromFixture([...saved.values()]);
+  return listAllDocuments();
 }
 
 /** `/캘` 슬래시 명령에서 고를 일정. M2에는 캘린더(C)의 index.ts에서 내보낸 함수로 바꿔요. */

@@ -43,3 +43,11 @@ export {
   toSttTransform,
   toSttTransformInsert,
 } from './db/mappers/stt';
+export {
+  type DocumentRow,
+  type SessionRow,
+  toDocument,
+  toDocumentInsert,
+  toSession,
+  toSessionInsert,
+} from './db/mappers/docs';
