@@ -6,7 +6,7 @@ import { SttError } from './errors';
 import { isDownloaded, modelFile, type SttModel } from './models';
 import { clearSession, leftover, type SavedChunk, saveChunk, saveSegments } from './session';
 import { cutAtGap, keepSpeech } from './speech';
-import { cleanSegment, promptFor } from './text';
+import { cleanSegment, type PreviewSegment, promptFor, settledCount } from './text';
 import { prepareVad, releaseVad, speechIn } from './vad';
 
 // 기기 안에서 받아써요(whisper.rn = whisper.cpp). 소리는 기기 밖으로 나가지 않아요.
@@ -60,7 +60,11 @@ interface WhisperContext {
   release(): Promise<void>;
 }
 interface WhisperModule {
-  initWhisper(options: { filePath: string }): Promise<WhisperContext>;
+  initWhisper(options: {
+    filePath: string;
+    useGpu?: boolean;
+    useFlashAttn?: boolean;
+  }): Promise<WhisperContext>;
 }
 
 export interface SttSegment {
@@ -101,23 +105,87 @@ function ensureAvailable() {
     throw new SttError('받아쓰기는 개발 빌드에서만 돼요. Expo Go에는 음성 인식 모듈이 없어요.');
 }
 
-let loaded: { id: string; context: WhisperContext } | null = null;
+// 모델은 한 번 열면 계속 띄워 둬요(여는 데 몇 초 걸려요). 받아쓰기 화면을 열 때 미리 열고
+// (prewarmStt), 아무도 안 쓴 채로 IDLE_RELEASE_MS가 지나면 닫아서 메모리를 돌려줘요.
+const IDLE_RELEASE_MS = 3 * 60_000;
 
-async function contextFor(model: SttModel): Promise<WhisperContext> {
-  if (loaded?.id === model.id) return loaded.context;
-  if (loaded) {
-    await loaded.context.release();
-    loaded = null;
-  }
+let loaded: { id: string; context: Promise<WhisperContext> } | null = null;
+let users = 0;
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+function cancelIdleRelease() {
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = null;
+}
+
+function scheduleIdleRelease() {
+  cancelIdleRelease();
+  if (users > 0 || !loaded) return;
+  idleTimer = setTimeout(() => {
+    idleTimer = null;
+    if (users === 0) void releaseStt();
+  }, IDLE_RELEASE_MS);
+}
+
+/** 받아쓰는 동안 모델을 잡아 둬요. 돌려준 함수를 부르면 놓아요(여러 번 불러도 한 번만). */
+function hold(): () => void {
+  users++;
+  cancelIdleRelease();
+  let held = true;
+  return () => {
+    if (!held) return;
+    held = false;
+    users--;
+    scheduleIdleRelease();
+  };
+}
+
+async function openContext(model: SttModel): Promise<WhisperContext> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { initWhisper } = require('whisper.rn/index') as WhisperModule;
+  const filePath = modelFile(model).uri;
+  // iOS는 GPU(Metal)로 돌아서 flash attention을 켜면 더 빨라요. Android는 whisper.rn이 CPU로만
+  // 돌리고, 라이브러리도 GPU가 있을 때만 권해서 꺼 둬요.
+  const fast = Platform.OS === 'ios';
   try {
-    const context = await initWhisper({ filePath: modelFile(model).uri });
-    loaded = { id: model.id, context };
-    return context;
+    return await initWhisper({ filePath, useGpu: true, useFlashAttn: fast });
+  } catch (e) {
+    if (!fast)
+      throw new SttError('음성 인식 모델을 열지 못했어요. 모델을 지우고 다시 받아 주세요.', e);
+  }
+  // 빠른 설정으로 못 여는 기기면 기본 설정으로 다시 열어요.
+  try {
+    return await initWhisper({ filePath });
   } catch (e) {
     throw new SttError('음성 인식 모델을 열지 못했어요. 모델을 지우고 다시 받아 주세요.', e);
   }
+}
+
+/** 모델을 열어요. 이미 열었거나 여는 중이면 그걸 같이 써요(두 번 열지 않아요). */
+function contextFor(model: SttModel): Promise<WhisperContext> {
+  if (loaded?.id === model.id) return loaded.context;
+  const previous = loaded?.context;
+  const context = (async () => {
+    await previous?.then((c) => c.release()).catch(() => {});
+    return openContext(model);
+  })();
+  const entry = { id: model.id, context };
+  loaded = entry;
+  context.catch(() => {
+    if (loaded === entry) loaded = null; // 다음에 다시 열어 보게 해요
+  });
+  return context;
+}
+
+/**
+ * 받아쓰기 화면을 열 때 모델과 말소리 감지를 미리 띄워 둬요. 녹음 버튼을 누르면 바로 받아써요.
+ * 안 쓰면 몇 분 뒤 알아서 닫아요. 못 열면 조용히 넘어가고, 녹음할 때 다시 열면서 알려 줘요.
+ */
+export function prewarmStt(model: SttModel): void {
+  if (!isSttAvailable() || !isDownloaded(model)) return;
+  contextFor(model).catch(() => {});
+  prepareVad();
+  scheduleIdleRelease();
 }
 
 async function askMicrophone() {
@@ -137,14 +205,19 @@ function decodeBase64(base64: string): Uint8Array {
 const toArrayBuffer = (bytes: Uint8Array) =>
   bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 
-/** whisper 조각들을 다듬어서 붙여요. 앞 글(previous)과 같은 문장은 빼요. */
-function cleanTexts(result: WhisperResult, previous?: string): string[] {
-  const texts: string[] = [];
+/** whisper 조각들을 다듬어요. 앞 글(previous)과 같은 문장은 빼요. 끝 시각은 받은 소리 안으로 맞춰요. */
+function previewSegments(
+  result: WhisperResult,
+  windowMs: number,
+  previous?: string,
+): PreviewSegment[] {
+  const out: PreviewSegment[] = [];
   for (const s of result.segments) {
-    const text = cleanSegment(s.text, texts[texts.length - 1] ?? previous);
-    if (text) texts.push(text);
+    const text = cleanSegment(s.text, out[out.length - 1]?.text ?? previous);
+    // whisper.cpp 시간 단위는 10ms예요.
+    if (text) out.push({ text, endMs: Math.min(s.t1 * 10, windowMs) });
   }
-  return texts;
+  return out;
 }
 
 /**
@@ -246,22 +319,25 @@ function createTranscriber(context: Promise<WhisperContext>, segments: SttSegmen
     backlog: () => queued - done,
     /**
      * 아직 조각이 안 된 소리를 빠르게(후보 하나로) 받아써 봐요. 기기에 적지 않아요.
+     * before: 이 소리 바로 앞에서 미리 받아써서 고정한 글. 받아쓴 글 끝과 같이 예시로 줘요.
      * 받아쓸 조각이 있거나 이미 돌고 있으면 null이에요.
      */
-    async preview(pcm: Uint8Array): Promise<string | null> {
+    async preview(pcm: Uint8Array, before: string[]): Promise<PreviewSegment[] | null> {
       if (queued > done || cancelled || previewJob) return null;
       const ctx = await context;
       if (queued > done || cancelled || previewJob) return null;
       try {
+        const previous = [...segments.map((s) => s.text), ...before];
         const job = ctx.transcribeData(toArrayBuffer(pcm), {
           language: 'ko',
-          prompt: promptFor(segments.map((s) => s.text)),
+          prompt: promptFor(previous),
         });
         previewJob = job;
         previewDone = job.promise.catch(() => {});
         const result = await job.promise;
         if (result.isAborted || cancelled) return null;
-        return cleanTexts(result, segments[segments.length - 1]?.text).join(' ');
+        const windowMs = (pcm.length / BYTES_PER_SECOND) * 1000;
+        return previewSegments(result, windowMs, previous[previous.length - 1]);
       } catch {
         return null;
       } finally {
@@ -298,9 +374,15 @@ function createTranscriber(context: Promise<WhisperContext>, segments: SttSegmen
 export async function startDictation(model: SttModel): Promise<Dictation> {
   ensureAvailable();
   if (!isDownloaded(model)) throw new SttError('먼저 음성 인식 모델을 받아 주세요.');
-  await askMicrophone();
+  const release = hold();
+  try {
+    await askMicrophone();
+  } catch (e) {
+    release();
+    throw e;
+  }
   clearSession(); // 이어서 받아쓸 녹음이 있으면 화면에서 먼저 물어봐요.
-  // 모델은 녹음하는 동안 미리 열어 둬요.
+  // 화면에서 미리 열어 뒀으면 그걸 써요. 아니면 녹음하는 동안 열어요.
   const contextReady = contextFor(model);
   contextReady.catch(() => {});
   prepareVad();
@@ -348,15 +430,21 @@ export async function startDictation(model: SttModel): Promise<Dictation> {
 
   // 말하는 동안 아직 조각이 안 된 말을 계속 미리 받아써요(회색 글).
   // 조각을 받아쓰는 동안에는 쉬어요. 조각이 먼저예요.
-  let preview = { text: '', from: 0 };
+  // 두 번 연속 똑같이 나온 앞 문장은 고정하고(settledCount), 다음부터는 그 뒤 소리만 받아써요.
+  // 그래서 글이 덜 바뀌고, 받아쓸 소리가 짧아져서 폰이 덜 일해요.
+  let preview = emptyPreview(0);
   void (async () => {
     while (!stopped) {
       await new Promise((r) => setTimeout(r, PREVIEW_EVERY_MS));
-      const pending = chunker.pendingPcm();
-      if (stopped || pending.length < BYTES_PER_SECOND) continue;
-      const from = chunker.emittedBytes();
-      const text = await transcriber.preview(pending);
-      if (text !== null && !stopped) preview = { text, from };
+      const base = chunker.emittedBytes();
+      // 새 조각이 나갔으면 그 조각이 받아써서 partial에 들어가요. 미리 받아쓰기는 처음부터 다시예요.
+      if (base !== preview.base) preview = emptyPreview(base);
+      const window = chunker.pendingPcm().subarray(preview.frozenBytes);
+      if (stopped || window.length < BYTES_PER_SECOND) continue;
+      const at = preview;
+      const found = await transcriber.preview(window, at.frozen);
+      if (found === null || stopped) continue;
+      preview = advancePreview(at, found, (window.length / BYTES_PER_SECOND) * 1000);
     }
   })();
 
@@ -364,25 +452,64 @@ export async function startDictation(model: SttModel): Promise<Dictation> {
     seconds: () => Math.floor(total / BYTES_PER_SECOND),
     partial: () => resultOf(segments, 0).text,
     // 이 말이 든 조각을 받아쓰고 나면 partial에 들어가서 여기서는 빼요.
-    preview: () => (preview.from >= confirmed ? preview.text : ''),
+    preview: () => (preview.base >= confirmed ? previewText(preview) : ''),
     backlog: () => transcriber.backlog(),
     async cancel() {
       await stop();
       await transcriber.cancel();
       clearSession();
+      release();
     },
     async finish(onProgress) {
       await stop();
-      if (total < BYTES_PER_SECOND / 2) {
-        await transcriber.cancel();
+      try {
+        if (total < BYTES_PER_SECOND / 2) {
+          await transcriber.cancel();
+          clearSession();
+          throw new SttError('녹음이 너무 짧아요. 다시 말해 주세요.');
+        }
+        chunker.flush();
+        await transcriber.idle(onProgress);
         clearSession();
-        throw new SttError('녹음이 너무 짧아요. 다시 말해 주세요.');
+        return resultOf(segments, Math.round((total / BYTES_PER_SECOND) * 1000));
+      } finally {
+        release();
       }
-      chunker.flush();
-      await transcriber.idle(onProgress);
-      clearSession();
-      return resultOf(segments, Math.round((total / BYTES_PER_SECOND) * 1000));
     },
+  };
+}
+
+/** 미리 받아쓰기 상태. base: 이 소리가 시작하는 곳(지금까지 조각으로 넘긴 바이트) */
+interface PreviewState {
+  base: number;
+  /** 고정한 문장들. 다시 받아쓰지 않아요. */
+  frozen: string[];
+  /** 고정한 문장이 끝나는 곳(base부터 바이트). 다음엔 여기부터 받아써요. */
+  frozenBytes: number;
+  /** 지난번에 고정 안 된 문장들(frozenBytes부터 ms). 다음 결과와 비교해요. */
+  last: PreviewSegment[];
+}
+
+const emptyPreview = (base: number): PreviewState => ({
+  base,
+  frozen: [],
+  frozenBytes: 0,
+  last: [],
+});
+
+const previewText = (p: PreviewState) => [...p.frozen, ...p.last.map((s) => s.text)].join(' ');
+
+function advancePreview(at: PreviewState, found: PreviewSegment[], windowMs: number): PreviewState {
+  const n = settledCount(at.last, found, windowMs);
+  if (n === 0) return { ...at, last: found };
+  const endMs = found[n - 1]!.endMs;
+  // 16비트라 2바이트 단위로 잘라요.
+  const bytes = Math.floor(((endMs / 1000) * BYTES_PER_SECOND) / 2) * 2;
+  return {
+    base: at.base,
+    frozen: [...at.frozen, ...found.slice(0, n).map((s) => s.text)],
+    frozenBytes: at.frozenBytes + bytes,
+    last: found.slice(n).map((s) => ({ text: s.text, endMs: Math.max(0, s.endMs - endMs) })),
   };
 }
 
@@ -407,11 +534,16 @@ export async function resumeLeftover(
   const left = leftover();
   if (!left) throw new SttError('이어서 받아쓸 녹음이 없어요.');
   const durationMs = (leftoverSeconds() ?? 0) * 1000;
-  const transcriber = createTranscriber(contextFor(model), left.segments);
-  for (const chunk of left.chunks) transcriber.add(Promise.resolve(chunk));
-  await transcriber.idle(onProgress);
-  clearSession();
-  return resultOf(left.segments, durationMs);
+  const release = hold();
+  try {
+    const transcriber = createTranscriber(contextFor(model), left.segments);
+    for (const chunk of left.chunks) transcriber.add(Promise.resolve(chunk));
+    await transcriber.idle(onProgress);
+    clearSession();
+    return resultOf(left.segments, durationMs);
+  } finally {
+    release();
+  }
 }
 
 /** 다 못 받아쓴 녹음을 버려요. */
@@ -419,8 +551,9 @@ export const discardLeftover = clearSession;
 
 /** 열어 둔 모델을 닫아요(메모리 정리). 모델을 지우기 전에 불러요. */
 export async function releaseStt(): Promise<void> {
+  cancelIdleRelease();
   await releaseVad();
-  if (!loaded) return;
-  await loaded.context.release();
+  const context = loaded?.context;
   loaded = null;
+  await context?.then((c) => c.release()).catch(() => {});
 }

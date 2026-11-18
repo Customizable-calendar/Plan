@@ -15,7 +15,13 @@ import {
 import { cardDetail, findCardsFromTranscript, typeLabel } from '@/features/cards';
 
 import { hasGeminiKey, organizeTranscript, saveGeminiKey } from './ai';
-import { discardLeftover, leftoverSeconds, MAX_SECONDS, type SttResult } from './engine';
+import {
+  discardLeftover,
+  leftoverSeconds,
+  MAX_SECONDS,
+  prewarmStt,
+  type SttResult,
+} from './engine';
 import type { SttModel, SttModelId } from './models';
 import { useDictation } from './useDictation';
 import { type ModelRow, useModels } from './useModels';
@@ -46,6 +52,11 @@ function SttMain() {
     const ready = rows.filter((r) => r.downloaded);
     return (ready.find((r) => r.model.id === picked) ?? ready[0])?.model;
   }, [rows, picked]);
+
+  // 고른 모델을 미리 띄워 둬요. 녹음 버튼을 누르면 바로 받아써요(안 쓰면 몇 분 뒤 닫아요).
+  useEffect(() => {
+    if (model) prewarmStt(model);
+  }, [model]);
 
   return (
     <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-6 p-5 pb-12">

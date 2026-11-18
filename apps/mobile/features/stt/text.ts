@@ -48,6 +48,36 @@ export function squashRepeats(text: string): string {
   return text.replace(/(.{2,40}?)(?:[\s,.!?]*\1){2,}/gu, '$1').trim();
 }
 
+/** 미리 받아쓴 문장 하나. endMs: 받아쓴 소리 시작부터 이 문장이 끝나는 곳 */
+export interface PreviewSegment {
+  text: string;
+  endMs: number;
+}
+
+/** 소리 끝에서 이만큼 안쪽에서 끝난 문장만 고정해요. 끝에 붙은 문장은 말이 더 이어질 수 있어요. */
+const SETTLE_MARGIN_MS = 1500;
+
+/**
+ * 미리 받아쓰기에서 고정해도 되는 앞 문장 수예요(LocalAgreement 방식, SimulStreaming 참고).
+ * 같은 소리를 두 번 받아써서(previous, current) 앞에서부터 똑같이 나오고,
+ * 소리 끝에서 조금 떨어져서 끝난 문장만 세요. 고정한 문장은 다시 받아쓰지 않아요.
+ */
+export function settledCount(
+  previous: PreviewSegment[],
+  current: PreviewSegment[],
+  windowMs: number,
+): number {
+  let n = 0;
+  while (
+    n < current.length &&
+    n < previous.length &&
+    current[n]!.text === previous[n]!.text &&
+    current[n]!.endMs <= windowMs - SETTLE_MARGIN_MS
+  )
+    n++;
+  return n;
+}
+
 /** 받아쓴 조각 하나를 다듬어요. 쓸 말이 없으면 빈 글이에요. */
 export function cleanSegment(text: string, previous?: string): string {
   const squashed = squashRepeats(text.trim());

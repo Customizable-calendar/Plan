@@ -4,7 +4,7 @@
 - **하는 일**: 말한 내용을 기기 안에서 한국어 글로 바꿔요. [whisper.rn](https://github.com/mybigday/whisper.rn)(whisper.cpp, MIT)을 써서 서버, API 키, 요금이 없어요. 소리는 기기 밖으로 안 나가요.
 - **화면**: `/stt` (모델 받기, 말하기, 받아쓴 글로 카드 찾기)
 - **데이터**: 서버 데이터 없음. 모델 파일은 기기 `Documents/stt/`, 받아쓰는 중인 녹음은 `Documents/stt/session/`에 있어요.
-- **다른 기능에 주는 것**: `useDictation`, `startDictation`, `isSttAvailable`, `leftoverSeconds`, `discardLeftover`, `MODELS`, `isDownloaded`
+- **다른 기능에 주는 것**: `useDictation`, `startDictation`, `prewarmStt`, `isSttAvailable`, `leftoverSeconds`, `discardLeftover`, `MODELS`, `isDownloaded`
 - **받는 것**: 카드(cards)의 `findCardsFromTranscript` (받아쓰기가 끝나면 회의록에서 일정, 약속, 할 일을 찾아 확인 기다리는 카드로 넣어요)
 
 ## 꼭 알아 둘 것
@@ -22,6 +22,9 @@
 - **말소리 감지(VAD)**: whisper.rn 안의 Silero VAD(`ggml-silero-v6.2.0.bin`, 약 0.9MB, MIT)를 처음 받아쓸 때 알아서 받아요(`vad.ts`). 조각마다 사람 말이 있는 곳만 남기고(앞뒤는 잘라 내고 1초 넘게 조용한 곳은 소리를 지워요, `speech.ts`) 말이 없으면 건너뛰어요. 30초가 되도록 쉬는 곳을 못 찾으면 VAD로 제일 길게 쉰 곳에서 잘라요. VAD를 못 받으면 소리 크기만 봐요.
 - **정확도**: 밀린 조각이 적으면 후보 5개를 비교해서(beam search) 받아쓰고, 많이 밀리면 빠르게 받아써요. 앞 조각 끝 문장을 다음 조각의 예시로 넘겨서 말이 이어지게 해요. 같은 말 되풀이("감사합니다. 감사합니다…")와 방송 자막 말은 빼요(`text.ts`).
 - **미리 받아쓰기**: 조각이 되기 전 말도 1.5초마다 미리 받아써서 회색 글(`state.preview`)로 보여 줘요. 받아쓸 조각이 없을 때만 돌아서 폰이 더 따뜻해지고 배터리를 더 써요. 조각을 받아쓰면 검은 글(`state.partial`)로 바뀌어요.
+  - 두 번 연속 똑같이 나온 앞 문장은 고정하고, 다음부터는 그 뒤 소리만 받아써요(`settledCount`, SimulStreaming의 LocalAgreement 방식). 글이 덜 바뀌고 폰이 덜 일해요. 소리 끝에서 1.5초 안에 끝난 문장은 말이 더 이어질 수 있어서 고정하지 않아요.
+- **모델 미리 띄우기**: 받아쓰기 화면에서 모델을 고르면 모델과 말소리 감지를 미리 열어 둬요(`prewarmStt`). 녹음 버튼을 누르면 모델을 여는 몇 초를 안 기다려요. 아무도 안 쓴 채로 3분이 지나면 닫아서 메모리를 돌려줘요. 다른 화면에 붙일 때도 녹음 버튼이 보일 때 `prewarmStt(model)`을 불러 주면 좋아요.
+- **속도 설정**: iOS는 GPU(Metal)에 flash attention을 켜요. 그 설정으로 못 열면 기본 설정으로 다시 열어요. Android는 whisper.rn이 CPU로만 돌려서(코어가 4개보다 많으면 스레드 4개) 그대로 둬요.
 - 녹음하는 동안 화면이 꺼지지 않게 해요(`expo-keep-awake`). 앱을 나가면 녹음이 멈출 수 있어요. 백그라운드 녹음은 네이티브 설정(포그라운드 서비스)이 필요해서 아직 안 해요.
 - 누가 말했는지 나누는 화자 구분은 아직 안 해요.
 - **AI로 정리하기 (선택)**: 받아쓴 뒤 사용자 Gemini 키(`gemini-3.6-flash`)로 요약하고 일정·할 일 카드를 다시 찾아요(`ai.ts`). **받아쓴 글만** Google로 가고 소리는 안 보내요. 규칙으로 찾은 카드 중 확인 안 한 건 AI가 찾은 카드로 바뀌어요. 키는 기기 보안 저장소(`lib/secrets`)에만 있어요. 설정(D)에 AI 키 화면이 생기면 키 입력은 그쪽으로 옮겨요.
