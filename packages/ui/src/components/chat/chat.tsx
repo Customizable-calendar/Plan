@@ -1,6 +1,6 @@
-import { ExtractedCard, TypeChip } from '../app/cards';
-import { Icon } from '../ui/icon';
-import { Text } from '../ui/text';
+import { CardListRow } from '../../components/app/cards';
+import { Icon } from '../../components/ui/icon';
+import { Text } from '../../components/ui/text';
 import {
   BUBBLE_RADIUS,
   DEFAULT_STATE,
@@ -113,40 +113,16 @@ export function CardExtractBlock({
   cards: { type: CardType; title: string; meta?: string }[];
 }) {
   const { cardView } = useChat();
-  if (cardView === 'compact') {
-    return (
-      <View className="overflow-hidden rounded-lg border border-border bg-card">
-        {cards.map((c, i) => (
-          <View
-            key={c.title}
-            className={cn(
-              'flex-row items-center gap-2.5 px-3 py-2.5',
-              i > 0 && 'border-t border-border',
-            )}
-          >
-            <TypeChip type={c.type} />
-            <Text className="flex-1 text-sm font-semibold text-card-foreground" numberOfLines={1}>
-              {c.title}
-            </Text>
-            <View className="h-6 w-6 items-center justify-center rounded-full bg-primary">
-              <Icon as={CheckIcon} size={14} className="text-primary-foreground" />
-            </View>
-          </View>
-        ))}
-      </View>
-    );
-  }
   return (
-    <View className="gap-2">
-      {cards.map((c) => (
-        <ExtractedCard
-          key={c.title}
-          type={c.type}
-          title={c.title}
-          meta={c.meta}
-          source="대화"
-          className="bg-card"
-        />
+    <View>
+      {cards.map((c, i) => (
+        <View key={c.title} className={cn(i > 0 && 'border-t border-border')}>
+          <CardListRow
+            type={c.type}
+            title={c.title}
+            meta={cardView === 'compact' ? undefined : c.meta}
+          />
+        </View>
       ))}
     </View>
   );
@@ -250,7 +226,7 @@ export function Composer({ placeholder = '메모하거나 물어보세요' }: { 
       </View>
       {showCost ? (
         <Text className="text-center text-[11px] text-muted-foreground">
-          예상 2,100 토큰 · Claude · 내 API 키 사용
+          예상 2,100 토큰, 내 Claude 키 사용
         </Text>
       ) : null}
     </View>

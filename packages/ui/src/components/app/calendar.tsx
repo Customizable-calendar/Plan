@@ -1,11 +1,13 @@
-import { Icon } from '../ui/icon';
-import { Text } from '../ui/text';
+import { Icon } from '../../components/ui/icon';
+import { Text } from '../../components/ui/text';
 import { DEFAULT_STATE, type CalendarDesign } from '../../lib/design/tokens';
 import { cn } from '../../lib/utils';
 import {
   AlertTriangleIcon,
   CheckIcon,
   CloudUploadIcon,
+  GripHorizontalIcon,
+  PartyPopperIcon,
   RefreshCwIcon,
   SparklesIcon,
   type LucideIcon,
@@ -83,7 +85,7 @@ const SYNC: Record<
   SyncState,
   { icon: LucideIcon; text: string; action?: string; tone: 'muted' | 'warn' | 'info' }
 > = {
-  ok: { icon: CheckIcon, text: '모두 동기화됨 · 2분 전', tone: 'muted' },
+  ok: { icon: CheckIcon, text: '모두 동기화됨, 2분 전', tone: 'muted' },
   syncing: { icon: RefreshCwIcon, text: '일정을 가져오는 중이에요', tone: 'muted' },
   partial: {
     icon: AlertTriangleIcon,
@@ -437,12 +439,11 @@ export function StatusPicker({
   );
 }
 
-const FOLLOW_UP: Partial<Record<Status, { label: string; options: string[] }>> = {
+export const FOLLOW_UP: Partial<Record<Status, { label: string; options: string[] }>> = {
   partial: { label: '얼마나?', options: ['절반쯤', '거의 다', '1시간 더 필요'] },
   missed: { label: '이유', options: ['회의가 길어짐', '급한 일', '컨디션'] },
 };
 
-/** 수행 확인 한 줄: 제목 + 4가지 + (부분·못 함일 때) 한 번 더 묻기 */
 export function CheckItem({
   title,
   meta,
@@ -492,7 +493,6 @@ export function CheckItem({
   );
 }
 
-/** 완료 · 부분 · 못 함 비율 막대 */
 export function CompletionBar({
   done,
   partial,
@@ -525,23 +525,422 @@ export function CompletionBar({
   );
 }
 
-export function StatTile({
-  label,
-  value,
-  accent = false,
+// ---- 아래는 벤치마크 반영분이에요 (docs/benchmark/README.md 의 "캘린더", "오늘 목록") ----
+
+export type MonthEvent = { account?: Account; title: string };
+export type MonthDay = { date: number; out?: boolean; events?: MonthEvent[] };
+
+/** 월 달력. compact 면 일정을 점으로, 아니면 막대로 보여 줘요 (반반 보기에서는 compact) */
+export function MonthGrid({
+  weeks,
+  selected,
+  today,
+  compact = false,
+  onSelect,
+  onLongPress,
 }: {
-  label: string;
-  value: string;
-  accent?: boolean;
+  weeks: MonthDay[][];
+  selected?: number;
+  today?: number;
+  compact?: boolean;
+  onSelect?: (date: number) => void;
+  onLongPress?: (date: number) => void;
 }) {
   return (
-    <View className="flex-1 gap-0.5 rounded-lg border border-border bg-card px-3.5 py-3">
-      <Text className="text-xs text-muted-foreground">{label}</Text>
-      <Text
-        className={cn('text-[22px] font-bold', accent ? 'text-primary' : 'text-card-foreground')}
+    <View>
+      <View className="flex-row pb-1">
+        {['일', '월', '화', '수', '목', '금', '토'].map((d) => (
+          <Text key={d} className="flex-1 text-center text-[11px] text-muted-foreground">
+            {d}
+          </Text>
+        ))}
+      </View>
+      {weeks.map((week, wi) => (
+        <View key={wi} className="flex-row border-t border-border">
+          {week.map((d, di) => {
+            const on = !d.out && d.date === selected;
+            const isToday = !d.out && d.date === today;
+            const events = d.events ?? [];
+            return (
+              <Pressable
+                key={di}
+                disabled={d.out}
+                onPress={() => onSelect?.(d.date)}
+                onLongPress={() => onLongPress?.(d.date)}
+                className={cn(
+                  'flex-1 items-center gap-0.5 px-0.5 pt-1',
+                  compact ? 'h-11' : 'h-[68px]',
+                  on && 'bg-primary-soft',
+                )}
+              >
+                <View
+                  className={cn(
+                    'h-6 w-6 items-center justify-center rounded-full',
+                    isToday && 'bg-primary',
+                  )}
+                >
+                  <Text
+                    className={cn(
+                      'text-[13px]',
+                      d.out ? 'text-muted-foreground/50' : 'text-foreground',
+                      on && 'font-bold text-primary-soft-foreground',
+                      isToday && 'font-bold text-primary-foreground',
+                    )}
+                  >
+                    {d.date}
+                  </Text>
+                </View>
+                {compact ? (
+                  <View className="h-1.5 flex-row gap-0.5">
+                    {events.slice(0, 3).map((e, i) => (
+                      <View
+                        key={i}
+                        className={cn(
+                          'h-1 w-1 rounded-full',
+                          e.account ? ACC[e.account].dot : 'bg-ai',
+                        )}
+                      />
+                    ))}
+                  </View>
+                ) : (
+                  <View className="w-full gap-0.5">
+                    {events.slice(0, 2).map((e, i) => (
+                      <View
+                        key={i}
+                        className={cn(
+                          'h-3.5 justify-center rounded-sm px-1',
+                          e.account
+                            ? ACC[e.account].soft
+                            : 'border border-dashed border-ai bg-ai-soft/40',
+                        )}
+                      >
+                        <Text
+                          numberOfLines={1}
+                          className={cn('text-[9px]', e.account ? 'text-foreground' : 'text-ai')}
+                        >
+                          {e.title}
+                        </Text>
+                      </View>
+                    ))}
+                    {events.length > 2 ? (
+                      <Text className="text-center text-[9px] text-muted-foreground">
+                        +{events.length - 2}
+                      </Text>
+                    ) : null}
+                  </View>
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** 달력과 하루 목록 사이의 손잡이. 끌거나 눌러서 달력만, 반반, 하루만으로 바꿔요 */
+export function DualHandle({ onPress }: { onPress?: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityLabel="보기 바꾸기"
+      className="h-6 items-center justify-center border-y border-border bg-muted/50"
+    >
+      <Icon as={GripHorizontalIcon} size={18} className="text-muted-foreground" />
+    </Pressable>
+  );
+}
+
+export type QuickAction = { icon: LucideIcon; label: string; ai?: boolean };
+
+/** 날짜를 길게 눌렀을 때 그 자리에 뜨는 빠른 메뉴. 손을 떼지 않고 끌어서 고를 수 있어요 */
+export function QuickActionMenu({ date, actions }: { date: string; actions: QuickAction[] }) {
+  return (
+    <View className="items-center gap-2">
+      <View className="flex-row items-end gap-2.5">
+        {actions.map((a, i) => {
+          // 가운데가 가장 높은 부채꼴 모양
+          const mid = (actions.length - 1) / 2;
+          const lift = (mid - Math.abs(i - mid)) * 14;
+          return (
+            <View key={a.label} className="items-center gap-1" style={{ marginBottom: lift }}>
+              <View
+                className={cn(
+                  'h-12 w-12 items-center justify-center rounded-full shadow-lg shadow-black/20',
+                  a.ai ? 'bg-ai' : 'border border-border bg-popover',
+                )}
+              >
+                <Icon
+                  as={a.icon}
+                  size={20}
+                  className={a.ai ? 'text-ai-foreground' : 'text-popover-foreground'}
+                />
+              </View>
+              <View className="rounded-full bg-foreground px-2 py-0.5">
+                <Text className="text-[11px] font-bold text-background">{a.label}</Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+      <View className="h-9 w-9 items-center justify-center rounded-full border-2 border-primary bg-primary-soft">
+        <Text className="text-[13px] font-bold text-primary-soft-foreground">{date}</Text>
+      </View>
+    </View>
+  );
+}
+
+/** 하루 목록의 구역 제목. 일정, 할 일, 기록을 한 목록에 이어서 보여 줄 때 써요 */
+export function DaySectionTitle({
+  label,
+  count,
+  action,
+  onAction,
+}: {
+  label: string;
+  count?: number;
+  action?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <View className="flex-row items-center gap-1.5 pt-1">
+      <Text className="text-[13px] font-bold text-muted-foreground">{label}</Text>
+      {count !== undefined ? (
+        <Text className="text-[13px] text-muted-foreground">{count}</Text>
+      ) : null}
+      <View className="flex-1" />
+      {action ? (
+        <Pressable onPress={onAction} hitSlop={10}>
+          <Text className="text-[13px] font-bold text-primary">{action}</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+/** 목록에서 바로 체크하는 할 일 한 줄. 둥근 칸을 누르면 완료, 줄을 누르면 4가지 선택이 열려요 */
+export function TaskCheckRow({
+  title,
+  meta,
+  status,
+  flat = false,
+  onToggle,
+  onPress,
+}: {
+  title: string;
+  meta?: string;
+  status?: Status;
+  /** 상자 없이 줄만. 목록 안에서 구분선과 같이 써요 */
+  flat?: boolean;
+  onToggle?: () => void;
+  onPress?: () => void;
+}) {
+  const done = status === 'done';
+  return (
+    <Pressable
+      onPress={onPress}
+      className={cn(
+        'flex-row items-center gap-3',
+        flat ? 'min-h-[52px] py-2' : 'rounded-lg border border-border bg-card px-3.5 py-3',
+      )}
+    >
+      <Pressable
+        onPress={onToggle}
+        accessibilityLabel={done ? '완료 취소' : '완료'}
+        className={cn(
+          'h-6 w-6 items-center justify-center rounded-full border-2',
+          done ? 'border-primary bg-primary' : 'border-input bg-background',
+        )}
       >
-        {value}
+        {done ? <Icon as={CheckIcon} size={14} className="text-primary-foreground" /> : null}
+      </Pressable>
+      <View className="flex-1 gap-0.5">
+        <Text
+          className={cn(
+            'text-[15px] font-semibold text-card-foreground',
+            done && 'text-muted-foreground line-through',
+          )}
+        >
+          {title}
+        </Text>
+        {meta ? <Text className="text-xs text-muted-foreground">{meta}</Text> : null}
+      </View>
+      {status && status !== 'done' ? (
+        flat ? (
+          <Text
+            className={cn(
+              'text-[13px] font-bold',
+              status === 'partial' && 'text-primary',
+              status === 'missed' && 'text-secondary',
+              status === 'unknown' && 'text-muted-foreground',
+            )}
+          >
+            {STATUS_LABEL[status]}
+          </Text>
+        ) : (
+          <View
+            className={cn(
+              'h-6 justify-center rounded-full px-2',
+              status === 'partial' && 'bg-primary-soft',
+              status === 'missed' && 'bg-secondary-soft',
+              status === 'unknown' && 'bg-muted',
+            )}
+          >
+            <Text
+              className={cn(
+                'text-[11px] font-bold',
+                status === 'partial' && 'text-primary-soft-foreground',
+                status === 'missed' && 'text-secondary-soft-foreground',
+                status === 'unknown' && 'text-muted-foreground',
+              )}
+            >
+              {STATUS_LABEL[status]}
+            </Text>
+          </View>
+        )
+      ) : null}
+    </Pressable>
+  );
+}
+
+/** 하루의 달성 정도. full 다 함, half 절반 넘김, some 조금, none 못 함, rest 잡은 일 없음, future 아직 안 온 날 */
+export type DayMark = 'full' | 'half' | 'some' | 'none' | 'rest' | 'future';
+
+function MarkDot({ mark, size }: { mark: DayMark; size: number }) {
+  const box = { width: size, height: size };
+  if (mark === 'full') {
+    return (
+      <View style={box} className="items-center justify-center rounded-full bg-primary">
+        <Icon as={CheckIcon} size={size * 0.5} className="text-primary-foreground" />
+      </View>
+    );
+  }
+  if (mark === 'half' || mark === 'some') {
+    return (
+      <View
+        style={box}
+        className="overflow-hidden rounded-full border-2 border-primary bg-background"
+      >
+        <View
+          className="absolute bottom-0 left-0 right-0 bg-primary/40"
+          style={{ height: mark === 'half' ? '60%' : '25%' }}
+        />
+      </View>
+    );
+  }
+  if (mark === 'none')
+    return (
+      <View style={box} className="rounded-full border-2 border-secondary/60 bg-secondary-soft" />
+    );
+  if (mark === 'future')
+    return <View style={box} className="rounded-full border border-dashed border-border" />;
+  return <View style={box} className="rounded-full bg-muted" />;
+}
+
+export const DAY_MARK_LABEL: Record<DayMark, string> = {
+  full: '다 함',
+  half: '절반 넘김',
+  some: '조금',
+  none: '못 함',
+  rest: '쉰 날',
+  future: '아직',
+};
+
+/** 한 주를 요일별 동그라미로. 누르면 그날 숫자를 아래에 글로 보여 줘요 */
+export function WeekMarks({
+  days,
+}: {
+  days: { label: string; date: number; mark: DayMark; detail: string }[];
+}) {
+  const [picked, setPicked] = React.useState<number | undefined>(undefined);
+  return (
+    <View className="gap-2.5">
+      <View className="flex-row">
+        {days.map((d, i) => (
+          <Pressable
+            key={d.date}
+            onPress={() => setPicked(picked === i ? undefined : i)}
+            accessibilityLabel={`${d.label}요일 ${DAY_MARK_LABEL[d.mark]}`}
+            className={cn(
+              'flex-1 items-center gap-1.5 rounded-lg py-2',
+              picked === i && 'bg-accent',
+            )}
+          >
+            <Text className="text-[11px] text-muted-foreground">{d.label}</Text>
+            <MarkDot mark={d.mark} size={32} />
+            <Text className="text-[11px] text-foreground">{d.date}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {picked !== undefined ? (
+        <Text className="text-xs text-foreground">
+          {days[picked].label}요일: {DAY_MARK_LABEL[days[picked].mark]}. {days[picked].detail}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+/** 한 달을 작은 동그라미로. 주마다 한 줄이고, 지금 보는 주는 연한 면으로 표시해요 */
+export function MonthMarks({ weeks, current }: { weeks: DayMark[][]; current?: number }) {
+  return (
+    <View className="gap-1">
+      {weeks.map((w, wi) => (
+        <View
+          key={wi}
+          className={cn(
+            'flex-row items-center rounded-md px-1 py-1',
+            wi === current && 'bg-primary-soft',
+          )}
+        >
+          <Text className="w-10 text-[11px] text-muted-foreground">{wi + 1}주</Text>
+          {w.map((m, di) => (
+            <View key={di} className="flex-1 items-center">
+              <MarkDot mark={m} size={16} />
+            </View>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** 동그라미 뜻 설명. 색만으로 구분하지 않게 항상 같이 둬요 */
+export function MarkLegend({ marks = ['full', 'half', 'none', 'rest'] }: { marks?: DayMark[] }) {
+  return (
+    <View className="flex-row flex-wrap gap-x-3.5 gap-y-1">
+      {marks.map((m) => (
+        <View key={m} className="flex-row items-center gap-1.5">
+          <MarkDot mark={m} size={12} />
+          <Text className="text-xs text-muted-foreground">{DAY_MARK_LABEL[m]}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** 절반이나 전부를 채웠을 때의 축하. 상자 없이 큰 글자로 말해요. 처음 넘긴 순간에는 화면 가득 한 번 보여 줘요 */
+export function CelebrateCard({
+  title,
+  detail,
+  tone = 'half',
+}: {
+  title: string;
+  detail: string;
+  tone?: 'half' | 'full';
+}) {
+  return (
+    <View className="gap-1">
+      <View className="flex-row items-center gap-1.5">
+        <Icon as={PartyPopperIcon} size={16} className="text-primary" />
+        <Text className="text-[13px] font-bold text-primary">
+          {tone === 'full' ? '모두 끝냄' : '절반 넘김'}
+        </Text>
+      </View>
+      <Text className="text-[26px] font-bold leading-8 tracking-tight text-foreground">
+        {title}
       </Text>
+      <Text className="text-[15px] text-muted-foreground">{detail}</Text>
     </View>
   );
 }

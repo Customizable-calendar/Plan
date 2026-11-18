@@ -206,11 +206,12 @@ export const FONTS: Record<FontKey, { label: string; family: string; note: strin
 export const DEFAULT_STATE: DesignState = {
   version: 1,
   mode: 'light',
-  primary: '#0b6b8a',
-  secondary: '#b5470b',
+  // 보라 메인과 같이 쓸 색을 색약 구분 계산으로 골랐어요 (docs/colors.md)
+  primary: '#6247c9',
+  secondary: '#8e2d00',
   destructive: '#d1343a',
   neutral: 'cool',
-  cardColors: { event: '#a8430a', task: '#0b5d78', person: '#5b35a8', idea: '#2c6e31' },
+  cardColors: { event: '#297cae', task: '#007047', person: '#8a1a6f', idea: '#966c13' },
   radius: 14,
   font: 'pretendard',
   ai: {
@@ -245,25 +246,69 @@ export const DEFAULT_STATE: DesignState = {
     density: 'regular',
     statusStyle: 'segment',
   },
-  overrides: { light: {}, dark: {} },
+  // 다크는 자동으로 만든 색이 서로 비슷해져서 직접 골랐어요
+  overrides: {
+    light: {},
+    dark: {
+      secondary: '#ce6234',
+      event: '#6fc1f6',
+      task: '#38c789',
+      person: '#c35c9b',
+      idea: '#d9a00f',
+    },
+  },
 };
 
 export const PRESETS: { name: string; note: string; patch: Partial<DesignState> }[] = [
-  { name: '목업 기본', note: '틸 + 주황', patch: {} },
+  { name: '바이올렛 (기본)', note: '보라 메인, 색약에서도 구분되게 고른 카드 색', patch: {} },
+  {
+    name: '예전 틸',
+    note: '틸과 주황 (처음 목업 색)',
+    patch: {
+      primary: '#0b6b8a',
+      secondary: '#b5470b',
+      cardColors: { event: '#a8430a', task: '#0b5d78', person: '#5b35a8', idea: '#2c6e31' },
+      overrides: { light: {}, dark: {} },
+    },
+  },
   {
     name: '잉크 블루',
     note: '차분한 업무용',
-    patch: { primary: '#2f5bd3', secondary: '#e0882f', neutral: 'cool' },
+    patch: {
+      primary: '#2f5bd3',
+      secondary: '#e0882f',
+      neutral: 'cool',
+      overrides: {
+        light: {},
+        dark: { event: '#6fc1f6', task: '#38c789', person: '#c35c9b', idea: '#d9a00f' },
+      },
+    },
   },
   {
     name: '포레스트',
     note: '초록 + 따뜻한 회색',
-    patch: { primary: '#2f6b4f', secondary: '#c2603a', neutral: 'warm' },
+    patch: {
+      primary: '#2f6b4f',
+      secondary: '#c2603a',
+      neutral: 'warm',
+      overrides: {
+        light: {},
+        dark: { event: '#6fc1f6', task: '#38c789', person: '#c35c9b', idea: '#d9a00f' },
+      },
+    },
   },
   {
     name: '모노',
     note: '검정 메인',
-    patch: { primary: '#1d2125', secondary: '#0b6b8a', neutral: 'pure' },
+    patch: {
+      primary: '#1d2125',
+      secondary: '#0b6b8a',
+      neutral: 'pure',
+      overrides: {
+        light: {},
+        dark: { event: '#6fc1f6', task: '#38c789', person: '#c35c9b', idea: '#d9a00f' },
+      },
+    },
   },
   {
     name: '라벤더',

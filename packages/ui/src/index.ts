@@ -1,4 +1,4 @@
-// 디자인 시스템(note-app-design-system, 기준 커밋 3d34e72)에서 그대로 옮긴 코드예요. (담당: D)
+// 디자인 시스템(note-app-design-system, 기준 커밋 0ea29f8)에서 그대로 옮긴 코드예요. (담당: D)
 // 누구나 고칠 수 있어요. 모양을 바꾸면 디자인 시스템 레포에도 맞추고, 기능 폴더에 복사해서 고쳐 쓰지 않아요.
 
 // 예전 이름 (각자 화면을 옮기는 동안 남겨 둬요, #33)
@@ -40,9 +40,13 @@ export * from './components/ui/textarea';
 // components/app (앱 공용)
 export * from './components/app/calendar';
 export * from './components/app/cards';
+export * from './components/app/doc';
+export * from './components/app/home';
 export * from './components/app/lnb';
 export * from './components/app/navigation';
 export * from './components/app/overlays';
+export * from './components/app/record';
+export * from './components/app/tree';
 
 // components/chat (AI 채팅)
 export * from './components/chat/chat';

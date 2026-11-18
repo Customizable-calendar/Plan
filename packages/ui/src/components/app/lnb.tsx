@@ -1,12 +1,14 @@
-import { NavDesignContext } from './navigation';
-import { Icon } from '../ui/icon';
-import { Text } from '../ui/text';
+import { NavDesignContext } from '../../components/app/navigation';
+import { TreeRow } from '../../components/app/tree';
+import { Icon } from '../../components/ui/icon';
+import { Text } from '../../components/ui/text';
 import type { CardType } from '../../lib/design/tokens';
 import { cn } from '../../lib/utils';
 import {
   AlignLeftIcon,
   ArchiveIcon,
   CalendarDaysIcon,
+  CheckIcon,
   ChevronsUpDownIcon,
   FileTextIcon,
   FolderIcon,
@@ -25,7 +27,7 @@ import {
   type LucideIcon,
 } from 'lucide-react-native';
 import * as React from 'react';
-import { ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 
 export type LnbKey =
   | 'home'
@@ -139,6 +141,49 @@ export function LnbItem({
   );
 }
 
+/** 캘린더별로 켜고 끄는 줄. 끄면 그 캘린더 일정이 달력과 홈에서 빠져요 */
+export function LnbToggle({
+  color,
+  label,
+  on = true,
+}: {
+  color: 'cal-1' | 'cal-2' | 'ai';
+  label: string;
+  on?: boolean;
+}) {
+  const [value, setValue] = React.useState(on);
+  const fill =
+    color === 'cal-1'
+      ? 'bg-cal-1 border-cal-1'
+      : color === 'cal-2'
+        ? 'bg-cal-2 border-cal-2'
+        : 'bg-ai border-ai';
+  const line =
+    color === 'cal-1' ? 'border-cal-1' : color === 'cal-2' ? 'border-cal-2' : 'border-ai';
+  return (
+    <Pressable
+      onPress={() => setValue((v) => !v)}
+      className="h-11 flex-row items-center gap-3 rounded-md px-2"
+    >
+      <View className="w-5 items-center">
+        <View
+          className={cn(
+            'h-4 w-4 items-center justify-center rounded border-2',
+            value ? fill : line,
+          )}
+        >
+          {value ? <Icon as={CheckIcon} size={11} className="text-background" /> : null}
+        </View>
+      </View>
+      <Text
+        className={cn('flex-1 text-[15px]', value ? 'text-foreground' : 'text-muted-foreground')}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 export function LnbProfile() {
   return (
     <View className="flex-row items-center gap-3 px-5 pb-3 pt-4">
@@ -172,12 +217,61 @@ export function UsageMeter({ percent = 31 }: { percent?: number }) {
   );
 }
 
-const SESSIONS: { id: string; label: string; icon: LucideIcon; count: number }[] = [
-  { id: 'worklog', label: '업무일지', icon: LayoutTemplateIcon, count: 12 },
-  { id: 'blog', label: '블로그', icon: ImageIcon, count: 4 },
-  { id: 'minutes', label: '회의록', icon: AlignLeftIcon, count: 7 },
-  { id: 'paper', label: '연구논문', icon: FileTextIcon, count: 1 },
+const SESSIONS: { id: string; label: string; icon: LucideIcon; count: number; docs: string[] }[] = [
+  {
+    id: 'worklog',
+    label: '업무일지',
+    icon: LayoutTemplateIcon,
+    count: 12,
+    docs: ['업무일지 10/24', '업무일지 10/23'],
+  },
+  { id: 'blog', label: '블로그', icon: ImageIcon, count: 4, docs: ['가을 카페 투어 3곳'] },
+  {
+    id: 'minutes',
+    label: '회의록',
+    icon: AlignLeftIcon,
+    count: 7,
+    docs: ['주간 회의 10/24', '기획 회의 10/21'],
+  },
+  { id: 'paper', label: '연구논문', icon: FileTextIcon, count: 1, docs: ['추천 시스템 정리'] },
 ];
+
+/** 세션을 자료함과 같은 펼치는 목록으로 보여 줘요. 양식을 누르면 최근 문서가 펼쳐져요 */
+function LnbTree({ active }: { active?: LnbKey }) {
+  const [open, setOpen] = React.useState<string[]>(['worklog']);
+  return (
+    <View>
+      {SESSIONS.map((s) => {
+        const on = open.includes(s.id);
+        return (
+          <View key={s.id}>
+            <TreeRow
+              icon={s.icon}
+              label={s.label}
+              count={s.count}
+              expanded={on}
+              selected={active === `session:${s.id}` && !on}
+              onPress={() => setOpen((l) => (on ? l.filter((x) => x !== s.id) : [...l, s.id]))}
+            />
+            {on
+              ? s.docs.map((d, i) => (
+                  <TreeRow
+                    key={d}
+                    icon={FileTextIcon}
+                    label={d}
+                    depth={1}
+                    selected={active === `session:${s.id}` && i === 0}
+                    status={i === 0 && s.id === 'worklog' ? '고치는 중' : undefined}
+                  />
+                ))
+              : null}
+          </View>
+        );
+      })}
+      <TreeRow icon={FolderIcon} label="자료함 전체" />
+    </View>
+  );
+}
 
 /**
  * LNB 메뉴.
@@ -227,15 +321,7 @@ export function Lnb({
         ) : null}
         {showSessions ? (
           <LnbSection title="세션" action={PlusIcon}>
-            {SESSIONS.map((s) => (
-              <LnbItem
-                key={s.id}
-                icon={s.icon}
-                label={s.label}
-                count={s.count}
-                active={active === `session:${s.id}`}
-              />
-            ))}
+            <LnbTree active={active} />
           </LnbSection>
         ) : (
           <LnbSection>
@@ -251,10 +337,17 @@ export function Lnb({
             <LnbItem label="확인 대기" count={2} emphasis active={active === 'pending'} />
           </LnbSection>
         ) : null}
+        {nav.tabs !== 'calendar' ? (
+          <LnbSection title="캘린더">
+            <LnbToggle color="cal-1" label="회사" />
+            <LnbToggle color="cal-2" label="개인" />
+            <LnbToggle color="ai" label="AI 후보" />
+          </LnbSection>
+        ) : null}
         <LnbSection>
           <LnbItem icon={UserRoundIcon} label="사람 목록" active={active === 'people'} />
-          <LnbItem icon={ArchiveIcon} label="보관함 · 버린 카드" active={active === 'archive'} />
-          <LnbItem icon={SettingsIcon} label="설정 · 연동" active={active === 'settings'} />
+          <LnbItem icon={ArchiveIcon} label="보관함" active={active === 'archive'} />
+          <LnbItem icon={SettingsIcon} label="설정" active={active === 'settings'} />
         </LnbSection>
       </ScrollView>
       {nav.showUsage ? (
