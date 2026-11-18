@@ -103,11 +103,18 @@ export function settledCount(
   return n;
 }
 
+/** 말소리는 있었는데 문장으로 못 알아들은 곳에 남기는 글. 녹음 원본이 있으면 다시 들어 볼 수 있어요. */
+export const UNCLEAR = '(잘 안 들린 말)';
+
+/** 이보다 짧은 말("네", "좋아요")은 앞 문장과 같아도 남겨요. 실제로 두 번 말했을 때가 많아요. */
+const SAME_AS_PREVIOUS_MIN = 6;
+
 /** 받아쓴 조각 하나를 다듬어요. 쓸 말이 없으면 빈 글이에요. */
 export function cleanSegment(text: string, previous?: string): string {
   const squashed = squashRepeats(text.trim());
   if (!squashed || isMadeUp(squashed)) return '';
-  // 조각이 바뀌는 곳에서 같은 문장을 두 번 받아쓰면 한 번만 둬요.
-  if (previous && squashed === previous.trim()) return '';
+  // 조각이 바뀌는 곳에서 같은 문장을 두 번 받아쓰면 한 번만 둬요. 짧은 말은 그대로 둬요.
+  if (previous && squashed.length >= SAME_AS_PREVIOUS_MIN && squashed === previous.trim())
+    return '';
   return squashed;
 }

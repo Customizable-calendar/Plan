@@ -21,7 +21,7 @@ import {
 } from './recordings';
 import { clearSession, leftover, type SavedChunk, saveChunk, saveSegments } from './session';
 import { cutAtGap, keepSpeech } from './speech';
-import { cleanSegment, type PreviewSegment, promptFor, settledCount } from './text';
+import { cleanSegment, type PreviewSegment, promptFor, settledCount, UNCLEAR } from './text';
 import { openSenseVoice } from './sensevoice';
 import { prepareVad, releaseVad, speechIn } from './vad';
 import { startKeepAlive, stopKeepAlive, updateKeepAlive } from '@/modules/stt-native';
@@ -274,13 +274,20 @@ function previewSegments(
 }
 
 /**
- * 조각을 말소리만 남게 다듬어요(VAD). 말소리가 없으면 null이라 받아쓰지 않아요.
- * VAD를 못 쓰면 소리 크기로 본 결과(silent)를 따라요.
+ * 조각을 말소리만 남게 다듬어요(VAD). 받아쓸 게 없으면 null이에요.
+ * - VAD가 말소리를 찾으면 그 부분만 남겨요(sure: 말이 있었다고 확실해요).
+ * - VAD를 못 쓰거나 말소리를 못 찾았어도, 소리 크기로 조용하지 않은 조각이면 통째로 받아써요.
+ *   작게 말하거나 VAD가 놓친 말을 버리지 않게요. 조용한 조각만 건너뛰어요(없는 말을 지어내지 않게).
  */
-async function speechOnly(chunk: Chunk): Promise<{ pcm: Uint8Array; offsetMs: number } | null> {
+async function speechOnly(
+  chunk: Chunk,
+): Promise<{ pcm: Uint8Array; offsetMs: number; sure: boolean } | null> {
   const spans = await speechIn(chunk.pcm);
-  if (spans === null) return chunk.silent ? null : chunk;
-  return keepSpeech(chunk.pcm, chunk.offsetMs, spans);
+  if (spans !== null && spans.length > 0) {
+    const kept = keepSpeech(chunk.pcm, chunk.offsetMs, spans);
+    if (kept) return { ...kept, sure: true };
+  }
+  return chunk.silent ? null : { pcm: chunk.pcm, offsetMs: chunk.offsetMs, sure: false };
 }
 
 /** 30초가 되도록 쉬는 곳이 없을 때 말소리 감지로 말이 끊기지 않는 곳을 찾아요. */
@@ -296,6 +303,14 @@ function resultOf(segments: SttSegment[], durationMs: number): SttResult {
     segments,
     durationMs,
   };
+}
+
+/** 조각을 넣을 때 같이 주는 것. 문장으로 못 알아들었을 때 써요. */
+interface ChunkExtra {
+  /** 녹음하는 동안 이 조각을 미리 받아써서 보여 준 글 */
+  hint?: string;
+  /** VAD가 말소리를 찾았는지. false면(소리 크기로만 넣은 조각) 못 알아들어도 자리를 안 남겨요. */
+  sure?: boolean;
 }
 
 /**
@@ -318,40 +333,69 @@ function createTranscriber(
   let cancelled = false;
   let running: { stop(): Promise<void> } | null = null;
 
-  const run = async (saved: Promise<SavedChunk | null>) => {
-    const chunk = await saved;
-    if (!chunk) return; // 말소리가 없는 조각
-    const bytes = await chunk.file.bytes();
-    await previewJob?.stop().catch(() => {});
-    await previewDone;
+  /** 조각 하나를 받아써서 다듬은 덩어리. 그만두면(취소) null */
+  const transcribeOnce = async (
+    chunk: SavedChunk,
+    bytes: Uint8Array,
+    withPrompt: boolean,
+  ): Promise<SttSegment[] | null> => {
     // 밀린 게 적으면 후보 여러 개를 비교해서 더 정확하게, 많으면 빠르게 받아써요.
     const careful = queued - done <= BEAM_BACKLOG;
     const job = (await context).transcribeData(toArrayBuffer(bytes), {
       language: 'ko',
       // 앞에서 받아쓴 글 끝을 같이 줘서 조각이 바뀌어도 말이 이어지게 해요.
-      prompt: promptFor(
-        segments.map((s) => s.text),
-        words,
-      ),
+      ...(withPrompt
+        ? {
+            prompt: promptFor(
+              segments.map((s) => s.text),
+              words,
+            ),
+          }
+        : {}),
       ...(careful ? { beamSize: BEAM_SIZE } : { bestOf: 2 }),
       onProgress: (p) => (inChunk = p / 100),
     });
     running = job;
     const result = await job.promise;
     running = null;
-    if (result.isAborted || cancelled) return;
+    if (result.isAborted || cancelled) return null;
+    const out: SttSegment[] = [];
     let previous = segments[segments.length - 1]?.text;
     for (const s of result.segments) {
       const text = cleanSegment(s.text, previous);
       if (!text) continue;
       previous = text;
       // whisper.cpp 시간 단위는 10ms예요.
-      segments.push({
-        text,
-        startMs: chunk.offsetMs + s.t0 * 10,
-        endMs: chunk.offsetMs + s.t1 * 10,
-      });
+      out.push({ text, startMs: chunk.offsetMs + s.t0 * 10, endMs: chunk.offsetMs + s.t1 * 10 });
     }
+    return out;
+  };
+
+  const run = async (saved: Promise<SavedChunk | null>, extra: ChunkExtra = {}) => {
+    const chunk = await saved;
+    if (!chunk) return; // 말소리가 없는 조각
+    const bytes = await chunk.file.bytes();
+    await previewJob?.stop().catch(() => {});
+    await previewDone;
+    let found = await transcribeOnce(chunk, bytes, true);
+    if (found === null) return;
+    // 문장으로 못 알아들었으면 들은 걸 버리지 않아요.
+    // 1) 예시 문장 없이 한 번 더(예시 때문에 빈 답이 나올 때가 있어요)
+    if (found.length === 0) {
+      found = await transcribeOnce(chunk, bytes, false);
+      if (found === null) return;
+    }
+    const chunkEndMs = chunk.offsetMs + Math.round((bytes.length / BYTES_PER_SECOND) * 1000);
+    // 2) 녹음하는 동안 이 조각을 미리 받아써서 보여 준 글(회색 글)이 있으면 그걸 써요.
+    if (found.length === 0 && extra.hint) {
+      const text = cleanSegment(extra.hint, segments[segments.length - 1]?.text);
+      if (text) found = [{ text, startMs: chunk.offsetMs, endMs: chunkEndMs }];
+    }
+    // 3) 말소리는 확실히 있었는데 글이 안 나오면 자리를 남겨요. 시각이 남아서 원본을 다시 들어 볼 수 있어요.
+    if (found.length === 0 && extra.sure !== false) {
+      found = [{ text: UNCLEAR, startMs: chunk.offsetMs, endMs: chunkEndMs }];
+    }
+    segments.push(...found);
     await saveSegments(segments);
     chunk.file.delete();
   };
@@ -359,15 +403,18 @@ function createTranscriber(
   const progress = () => (queued === 0 ? 1 : Math.min(1, (done + inChunk) / queued));
 
   return {
-    /** onDone: 이 조각을 다 받아쓰면(건너뛰어도) 불러요. */
-    add(saved: Promise<SavedChunk | null>, onDone?: () => void) {
+    /**
+     * onDone: 이 조각을 다 받아쓰면(건너뛰어도) 불러요.
+     * extra: 녹음 중 미리 받아쓴 글(hint), 말소리가 확실한지(sure). 못 알아들었을 때 써요.
+     */
+    add(saved: Promise<SavedChunk | null>, onDone?: () => void, extra?: ChunkExtra) {
       queued++;
       saved.catch(() => {});
       chain = chain.then(async () => {
         if (failure || cancelled) return;
         inChunk = 0;
         try {
-          await run(saved);
+          await run(saved, extra);
         } catch (e) {
           failure = e;
         } finally {
@@ -494,11 +541,22 @@ export async function startDictation(
   let confirmed = 0;
   const chunker = createChunker((chunk) => {
     const end = Math.round((chunk.offsetMs / 1000) * BYTES_PER_SECOND) + chunk.pcm.length;
-    // 말이 없는 조각은 받아쓰지 않아요(없는 말을 지어내지 않게).
-    const saved = speechOnly(chunk).then((kept) =>
-      kept ? saveChunk(kept.offsetMs, kept.pcm) : null,
-    );
-    transcriber.add(saved, () => (confirmed = Math.max(confirmed, end)));
+    // 이 조각을 녹음하는 동안 미리 받아써서 보여 준 글(회색 글). 못 알아들으면 이걸 남겨요.
+    const start = chunker.emittedBytes() - chunk.pcm.length;
+    const hint = preview.base === start ? previewText(preview) : '';
+    let sure = true;
+    // 조용한 조각은 받아쓰지 않아요(없는 말을 지어내지 않게).
+    const saved = speechOnly(chunk).then((kept) => {
+      if (!kept) return null;
+      sure = kept.sure;
+      return saveChunk(kept.offsetMs, kept.pcm);
+    });
+    transcriber.add(saved, () => (confirmed = Math.max(confirmed, end)), {
+      hint,
+      get sure() {
+        return sure;
+      },
+    });
   }, findGap);
 
   let total = 0;
@@ -706,10 +764,17 @@ export async function transcribeRecording(
     let confirmed = 0;
     const chunker = createChunker((chunk) => {
       const end = Math.round((chunk.offsetMs / 1000) * BYTES_PER_SECOND) + chunk.pcm.length;
-      const saved = speechOnly(chunk).then((kept) =>
-        kept ? saveChunk(kept.offsetMs, kept.pcm) : null,
-      );
-      transcriber.add(saved, () => (confirmed = Math.max(confirmed, end)));
+      let sure = true;
+      const saved = speechOnly(chunk).then((kept) => {
+        if (!kept) return null;
+        sure = kept.sure;
+        return saveChunk(kept.offsetMs, kept.pcm);
+      });
+      transcriber.add(saved, () => (confirmed = Math.max(confirmed, end)), {
+        get sure() {
+          return sure;
+        },
+      });
     }, findGap);
     const report = () => onProgress?.(total === 0 ? 1 : Math.min(0.99, confirmed / total));
     const timer = onProgress ? setInterval(report, 300) : null;
