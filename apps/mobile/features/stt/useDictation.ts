@@ -8,14 +8,23 @@ import {
   resumeLeftover,
   type SttResult,
   startDictation,
+  transcribeRecording,
 } from './engine';
 import { SttError } from './errors';
 import type { SttModel } from './models';
+import type { Recording } from './recordings';
 
 export type DictationState =
   | { phase: 'idle' }
-  /** partial: 받아쓴 글, preview: 아직 조각이 안 된 말을 미리 받아쓴 글, backlog: 못 받아쓴 조각 수 */
-  | { phase: 'recording'; seconds: number; partial: string; preview: string; backlog: number }
+  /** partial: 받아쓴 글, preview: 아직 조각이 안 된 말을 미리 받아쓴 글, backlog: 못 받아쓴 조각 수, level: 소리 크기 0~1 */
+  | {
+      phase: 'recording';
+      seconds: number;
+      partial: string;
+      preview: string;
+      backlog: number;
+      level: number;
+    }
   | { phase: 'transcribing'; ratio: number }
   | { phase: 'done'; result: SttResult }
   | { phase: 'error'; message: string };
@@ -49,7 +58,7 @@ export function useDictation(
   const start = useCallback(async () => {
     try {
       current.current = await startDictation(model, latest.current);
-      setState({ phase: 'recording', seconds: 0, partial: '', preview: '', backlog: 0 });
+      setState({ phase: 'recording', seconds: 0, partial: '', preview: '', backlog: 0, level: 0 });
     } catch (e) {
       setState({ phase: 'error', message: messageOf(e) });
     }
@@ -81,6 +90,13 @@ export function useDictation(
     [model, transcribe],
   );
 
+  /** 남겨 둔 녹음 원본을 지금 모델로 다시 받아써요. */
+  const again = useCallback(
+    (recording: Recording) =>
+      transcribe((onProgress) => transcribeRecording(model, recording, onProgress, latest.current)),
+    [model, transcribe],
+  );
+
   const cancel = useCallback(async () => {
     await current.current?.cancel();
     current.current = null;
@@ -105,8 +121,9 @@ export function useDictation(
           partial: d.partial(),
           preview: d.preview(),
           backlog: d.backlog(),
+          level: d.level(),
         });
-    }, 500);
+    }, 250);
     return () => clearInterval(timer);
   }, [recording, finish]);
 
@@ -121,5 +138,5 @@ export function useDictation(
   // 화면을 나가면 녹음을 버려요.
   useEffect(() => () => void current.current?.cancel(), []);
 
-  return { state, start, finish, resume, cancel, reset };
+  return { state, start, finish, resume, again, cancel, reset };
 }

@@ -15,6 +15,8 @@ import {
   type SttResult,
 } from './engine';
 import type { SttModel, SttModelId } from './models';
+import { KeepAudioToggle, LevelBar, MicCheck, RecordingList } from './AudioTools';
+import { keepAudioEnabled, setKeepAudio } from './recordings';
 import { SmallButton } from './SmallButton';
 import { TranscriptAi } from './TranscriptAi';
 import { useDictation } from './useDictation';
@@ -107,7 +109,7 @@ function ModelItem({
   onStop: () => void;
   onRemove: () => void;
 }) {
-  const { model, downloaded, progress } = row;
+  const { model, downloaded, progress, partial } = row;
   return (
     <Pressable
       onPress={downloaded ? onSelect : undefined}
@@ -120,7 +122,11 @@ function ModelItem({
       <View className="flex-1 gap-0.5">
         <Text className="text-[15px] font-bold text-foreground">{model.label}</Text>
         <Text className="text-[13px] text-muted-foreground">
-          {progress !== undefined ? `받는 중 ${Math.round(progress * 100)}%` : model.note}
+          {progress !== undefined
+            ? `받는 중 ${Math.round(progress * 100)}%`
+            : partial !== null
+              ? `${model.note} · ${Math.round(partial * 100)}% 받다 멈춤`
+              : model.note}
         </Text>
       </View>
       {progress !== undefined ? (
@@ -128,7 +134,7 @@ function ModelItem({
       ) : downloaded ? (
         <SmallButton label="지우기" onPress={onRemove} />
       ) : (
-        <SmallButton label="받기" onPress={onDownload} primary />
+        <SmallButton label={partial !== null ? '이어 받기' : '받기'} onPress={onDownload} primary />
       )}
     </Pressable>
   );
@@ -166,9 +172,21 @@ function Recorder({ model }: { model: SttModel }) {
       .catch(() => {});
   }, []);
 
-  const { state, start, finish, resume, cancel, reset } = useDictation(model, findCards, {
+  // 녹음 원본 남기기(이 기기 설정). 기본은 꺼져 있어요.
+  const [keepAudio, setKeepAudioState] = useState(false);
+  useEffect(() => {
+    keepAudioEnabled().then(setKeepAudioState, () => {});
+  }, []);
+  const toggleKeepAudio = (on: boolean) => {
+    setKeepAudioState(on);
+    void setKeepAudio(on);
+  };
+
+  const { state, start, finish, resume, again, cancel, reset } = useDictation(model, findCards, {
     words,
+    keepAudio,
   });
+  const idle = state.phase === 'idle' || state.phase === 'error' || state.phase === 'done';
 
   return (
     <View className="gap-4">
@@ -201,8 +219,10 @@ function Recorder({ model }: { model: SttModel }) {
       {state.phase === 'recording' ? (
         <View className="gap-3">
           <BigButton label={`끝내기  ${clock(state.seconds)}`} onPress={finish} danger />
+          <LevelBar level={state.level} />
           <Text className="text-center text-[13px] leading-5 text-muted-foreground">
             최대 {MAX_SECONDS / 3600}시간까지 받아써요. 화면을 켜 두고 앱을 나가지 마세요.
+            {keepAudio ? ' 녹음 원본도 이 기기에 남기는 중이에요.' : ''}
           </Text>
           <View className="gap-2 rounded-xl border border-border bg-card p-4">
             <Text className="text-[13px] font-bold text-muted-foreground">
@@ -235,6 +255,21 @@ function Recorder({ model }: { model: SttModel }) {
           }}
         />
       )}
+
+      {idle ? (
+        <View className="gap-3">
+          <MicCheck />
+          <KeepAudioToggle on={keepAudio} onChange={toggleKeepAudio} />
+          <RecordingList
+            refreshKey={`${state.phase}:${keepAudio}`}
+            onAgain={(recording) => {
+              setFound(null);
+              setLeft(null); // 다시 받아쓰면 남은 녹음은 지워져요.
+              void again(recording);
+            }}
+          />
+        </View>
+      ) : null}
 
       {state.phase === 'error' ? (
         <View className="gap-2">
