@@ -7,3 +7,4 @@ export * from './note';
 export * from './session';
 export * from './template';
 export * from './tag';
+export * from './transform';

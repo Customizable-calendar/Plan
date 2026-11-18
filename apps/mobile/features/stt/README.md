@@ -3,7 +3,7 @@
 - **담당**: B
 - **하는 일**: 말한 내용을 기기 안에서 한국어 글로 바꿔요. [whisper.rn](https://github.com/mybigday/whisper.rn)(whisper.cpp, MIT)을 써서 서버, API 키, 요금이 없어요. 소리는 기기 밖으로 안 나가요.
 - **화면**: `/stt` (모델 받기, 말하기, 받아쓴 글로 카드 찾기)
-- **데이터**: 서버 데이터 없음. 모델 파일은 기기 `Documents/stt/`, 받아쓰는 중인 녹음은 `Documents/stt/session/`에 있어요.
+- **데이터**: 내 지시문만 `stt_transforms` 테이블(로그인하면 계정에도). 받아쓴 글과 소리는 서버에 없어요. 모델 파일은 기기 `Documents/stt/`, 받아쓰는 중인 녹음은 `Documents/stt/session/`에 있어요.
 - **다른 기능에 주는 것**: `useDictation`, `startDictation`, `prewarmStt`, `isSttAvailable`, `leftoverSeconds`, `discardLeftover`, `MODELS`, `isDownloaded`
 - **받는 것**: 카드(cards)의 `findCardsFromTranscript` (받아쓰기가 끝나면 회의록에서 일정, 약속, 할 일을 찾아 확인 기다리는 카드로 넣어요)
 
@@ -29,7 +29,11 @@
 - **속도 설정**: iOS는 GPU(Metal)에 flash attention을 켜요. 그 설정으로 못 열면 기본 설정으로 다시 열어요. Android는 whisper.rn이 CPU로만 돌려서(코어가 4개보다 많으면 스레드 4개) 그대로 둬요.
 - 녹음하는 동안 화면이 꺼지지 않게 해요(`expo-keep-awake`). 앱을 나가면 녹음이 멈출 수 있어요. 백그라운드 녹음은 네이티브 설정(포그라운드 서비스)이 필요해서 아직 안 해요.
 - 누가 말했는지 나누는 화자 구분은 아직 안 해요.
-- **AI로 정리하기 (선택)**: 받아쓴 뒤 사용자 Gemini 키(`gemini-3.6-flash`)로 요약하고 일정·할 일 카드를 다시 찾아요(`ai.ts`). **받아쓴 글만** Google로 가고 소리는 안 보내요. 규칙으로 찾은 카드 중 확인 안 한 건 AI가 찾은 카드로 바뀌어요. 키는 기기 보안 저장소(`lib/secrets`)에만 있어요. 설정(D)에 AI 키 화면이 생기면 키 입력은 그쪽으로 옮겨요.
+- **AI로 정리하기 (팀 AI)**: 받아쓴 뒤 팀 AI(서버에 둔 팀 Claude 키, `lib/team-ai`, docs/decisions/0005)로 정리해요(`ai.ts`, 화면은 `TranscriptAi.tsx`). **받아쓴 글만** 보내고 소리는 안 보내요. 로그인한 팀원만 써요. 키 입력은 없어요.
+  - **요약하고 카드 다시 찾기**: 규칙으로 찾은 카드 중 확인 안 한 건 AI가 찾은 카드로 바뀌어요.
+  - **지시문으로 바꾸기**(Whispering의 transformation 참고): "회의록으로 정리", "할 일만 뽑기", "공유 메일 초안" 기본 지시문과 내가 만든 지시문을 받아쓴 글에 적용해요. 받아쓴 글은 그대로 두고 결과만 보여 주고 공유해요(결과는 저장 안 해요).
+  - 내 지시문은 `stt_transforms` 테이블이에요(`transforms.ts`, 메모와 같은 local-first). `EXPO_PUBLIC_SUPABASE_FEATURES`에 `stt`가 있으면 계정에도 저장해요.
+  - 지시문 하나를 "받아쓰기 끝나면 자동으로"로 고르면 받아쓰기가 끝날 때 바로 돌려요. 이 선택은 이 기기에만 기억해요.
 
 ## 다른 화면에 붙이기 (예: 편집기 녹음 버튼)
 
