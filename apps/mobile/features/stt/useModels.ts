@@ -10,6 +10,8 @@ import {
   isDownloaded,
   MODELS,
   partialRatio,
+  PREVIEW_MODEL,
+  removeRetiredModels,
   type SttModel,
   type SttModelId,
 } from './models';
@@ -24,7 +26,7 @@ export interface ModelRow {
 }
 
 // Expo Go에서도 파일은 볼 수 있지만, 받아도 못 쓰니 목록만 보여 줘요.
-// SenseVoice, Qwen3 0.6B는 sherpa-onnx가 든 APK에서만, Qwen3 1.7B는 GPU·NPU가 잡히는 폰에서만 보여요.
+// Qwen3 0.6B는 sherpa-onnx가 든 APK에서만, Qwen3 1.7B는 GPU·NPU가 잡히는 폰에서만 보여요.
 const usable = (accelerated: boolean) =>
   MODELS.filter((m) =>
     m.engine === 'whisper' ? true : m.engine === 'llama' ? accelerated : hasSherpa(),
@@ -40,7 +42,11 @@ const scan = (accelerated = false): ModelRow[] =>
 /** 모델 목록과 받기·지우기. 받는 중에 화면을 나가면 받기를 멈춰요. */
 export function useModels() {
   const [accelerated, setAccelerated] = useState(false);
-  const [rows, setRows] = useState<ModelRow[]>(() => scan());
+  // 예전 모델(whisper small, SenseVoice) 파일이 남아 있으면 처음 목록을 만들 때 지워서 공간을 돌려줘요.
+  const [rows, setRows] = useState<ModelRow[]>(() => {
+    removeRetiredModels();
+    return scan();
+  });
   // GPU·NPU가 있는지는 장치 목록을 물어봐야 알아서 나중에 채워요.
   useEffect(() => {
     let alive = true;
@@ -80,6 +86,16 @@ export function useModels() {
       setProgress(model.id, 0);
       try {
         await downloadModel(model, (ratio) => setProgress(model.id, ratio), abort.signal);
+        // Qwen3는 회색 글을 whisper base가 맡아서 같이 받아요(60MB).
+        if (model.engine !== 'whisper' && !isDownloaded(PREVIEW_MODEL)) {
+          refresh();
+          setProgress(PREVIEW_MODEL.id, 0);
+          await downloadModel(
+            PREVIEW_MODEL,
+            (ratio) => setProgress(PREVIEW_MODEL.id, ratio),
+            abort.signal,
+          );
+        }
       } catch (e) {
         if (!abort.signal.aborted) setError(e instanceof SttError ? e.message : String(e));
       } finally {

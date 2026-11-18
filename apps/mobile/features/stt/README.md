@@ -29,11 +29,10 @@
 - **Expo Go에서는 안 돼요.** `whisper.rn`과 녹음(`@fugood/react-native-audio-pcm-stream`)이 네이티브 모듈이에요. EAS 개발 빌드가 있어야 해요(#5). Expo Go에서는 `isSttAvailable()`이 `false`이고 화면에 안내만 나와요. 앱이 죽지는 않아요.
 - **모델은 처음 쓸 때 받아요.** 앱에 넣으면 너무 커서요. 16MB씩 나눠 받아서(HTTP Range) 인터넷이 끊기거나 앱이 꺼지거나 멈춰도 다음에 "이어 받기"로 받은 데부터 받아요(`models.ts`).
 
-  | 모델                                        | 크기  | 쓰임                                                                          |
-  | ------------------------------------------- | ----- | ----------------------------------------------------------------------------- |
-  | `small` (whisper ggml-small-q5_1)           | 190MB | 한국어 추천, 내 단어 예시를 잘 따라요                                         |
-  | `sensevoice` (SenseVoice int8, sherpa-onnx) | 240MB | 아주 빠름, 긴 회의에 적당, 부호도 찍어요. 내 단어 예시는 못 써요 (새 APK부터) |
-  | `base` (whisper ggml-base-q5_1)             | 60MB  | 짧은 말, 느린 폰                                                              |
+  | 모델                                       | 크기  | 쓰임                                |
+  | ------------------------------------------ | ----- | ----------------------------------- |
+  | `qwen3` (Qwen3-ASR 0.6B int8, sherpa-onnx) | 940MB | 기본. 한국어 제일 정확, 회의에 추천 |
+  | `base` (whisper ggml-base-q5_1)            | 60MB  | 짧은 말, 느린 폰                    |
 
 - **긴 녹음**: 최대 3시간. 말이 쉬는 곳에서 20~30초 조각으로 잘라(`chunker.ts`) 녹음하는 동안 뒤에서 차례로 받아써요. 그래서 말하는 동안 글이 조각마다 늘어나고, 메모리는 조각 하나(약 1MB)만큼만 써요. 말이 없는 조각은 받아쓰지 않아요(없는 말을 지어내지 않게).
 - **앱이 꺼져도 이어서**: 조각과 받아쓴 글을 기기 `Documents/stt/session/`에 적어 둬요(`session.ts`). 다음에 화면을 열면 "이어서 받아쓰기"가 나와요. 끝내거나 버리면 지워요. 기기 밖으로는 안 나가요.
@@ -57,14 +56,13 @@
   - 한 번에 28초까지 넣어요(LocalSTT와 같아요). 더 긴 조각은 비슷한 길이로 나눠서 받아써요(`splitPcm`).
   - 내 단어(해시태그 등)는 hotwords로 줘요. 단어가 바뀌면 모델을 다시 열어요.
   - 새로 만드는 글 길이 기본값(128토큰)이면 28초 한국어가 잘려서 512로 늘렸어요.
-  - 정확하지만 느려서, 말하는 중 회색 글은 받아 둔 whisper(base, 없으면 small)가 따로 맡아요. 엔진이 달라서 Qwen3가 조각을 받아쓰는 동안에도 회색 글이 나와요. 받아 둔 whisper가 없으면 회색 글 없이 조각마다 글이 나와요.
-  - sherpa-onnx는 받아쓰기 모델을 하나만 띄워서 SenseVoice와 Qwen3를 같이 못 써요.
+  - 정확하지만 느려서, 말하는 중 회색 글은 whisper base가 따로 맡아요(Qwen3를 받으면 base도 같이 받아요). 엔진이 달라서 Qwen3가 조각을 받아쓰는 동안에도 회색 글이 나와요. base가 없으면 회색 글 없이 조각마다 글이 나와요.
+  - 예전 whisper small, SenseVoice는 뺐어요. Qwen3보다 덜 정확하고, SenseVoice는 sherpa-onnx가 모델을 하나만 띄워서 Qwen3와 같이 못 써요. 받아 둔 파일은 처음 모델 목록을 볼 때 지워요(`removeRetiredModels`).
 - **Qwen3-ASR 1.7B (GPU·NPU 폰, 새 APK)**: LocalSTT 1등 모델 그대로예요. llama.rn(llama.cpp, MIT)으로 `ggml-org/Qwen3-ASR-1.7B-GGUF` Q8(본체 2.0GB + 소리 projector 340MB, 커밋 고정)을 돌려요(`llama.ts`).
   - 모델 받기 전에 llama.rn 장치 목록(`getBackendDevicesInfo`)으로 GPU(OpenCL, Snapdragon Adreno 700+)나 NPU(Hexagon, 8 Gen 1+)가 있는지 보고, 있을 때만 목록에 보여요(`canAccelerate`). Exynos, MediaTek 폰은 CPU라 0.6B를 써요. iOS는 Metal이 늘 있어요.
   - 28초씩 나눠 넣고, 내 단어는 시스템 글(context)로 줘요. 회색 글은 0.6B처럼 whisper가 따로 맡아요.
   - Expo 플러그인(`llama.rn`, `enableOpenCLAndHexagon`)이 `libOpenCL.so`, `libcdsprpc.so`를 매니페스트에 넣어요. 이 PC(Windows)에서는 설치 스크립트의 tar가 안 돼서 `RNLLAMA_SKIP_POSTINSTALL=1`로 설치했어요. EAS·CI(Linux)는 그대로 받아요.
 - **받아쓴 글 다듬기**: 기본 양식에 "받아쓴 글 다듬기"를 넣었어요. 받아쓴 글만 팀 AI로 보내서 잘못 알아들은 글자, 띄어쓰기, 부호만 고쳐요(LocalSTT도 LLM 후보정을 권해요).
-- **SenseVoice 엔진 (새 APK, Android)**: whisper처럼 한 글자씩 이어 만들지 않고 한 번에 통째로 받아써서 훨씬 빨라요(SpokenLog 참고). `@siteed/sherpa-onnx.rn`(MIT)로 기기 안에서 돌려요. 엔진은 whisper.rn 컨텍스트와 같은 모양으로 감싸서(`sensevoice.ts`) 조각 나누기·VAD·이어서 받아쓰기는 그대로 써요. 문장마다 시각은 안 줘서 조각 하나가 한 덩어리예요. 모델은 FunASR 모델 라이선스 1.1(출처·이름 표시)이에요.
 - **화자 구분 (새 APK, Android)**: 받아쓴 뒤 "화자 나누기"를 누르면 녹음 원본으로 누가 말했는지 나눠서 "화자 1: …" 줄로 보여 줘요(`speakers.ts`, `SpeakerSplit.tsx`). pyannote 분할 3.0(MIT) + 3D-Speaker ERes2Net(Apache-2.0) 모델(45MB)을 처음 쓸 때 받아요. 사람 수는 알아서·2·3·4명 중에 골라요. 녹음 원본이 있어야 하고(원본 남기기·파일 가져오기), 30분 이하 녹음만 돼요. "화자 1"은 목소리로 나눈 것이라 실제 이름은 몰라요. 시각 붙은 글·자막·AI 정리에도 화자가 들어가요.
 - sherpa-onnx는 불러오는 순간 네이티브 모듈을 찾아서, `sherpa.ts`로만 불러요(없는 빌드에서는 안 불러요). 웹은 `sherpa.web.ts`가 대신해서 웹 묶음에 안 들어가요.
 - **마이크 확인**: 녹음 전에 "마이크 확인"을 누르면 녹음하지 않고 소리 크기만 막대로 보여 줘요(10초 뒤 알아서 멈춰요). 녹음하는 동안에도 막대가 보여요(`AudioTools.tsx`, `testMicrophone`).
