@@ -3,5 +3,5 @@
 export const hasSherpa = (): boolean => false;
 
 export function sherpa(): unknown {
-  throw new Error('웹에서는 SenseVoice·화자 구분을 못 써요.');
+  throw new Error('웹에서는 SenseVoice와 화자 구분을 못 써요.');
 }

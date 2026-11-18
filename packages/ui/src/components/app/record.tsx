@@ -23,6 +23,7 @@ import * as React from 'react';
 import { Pressable, View } from 'react-native';
 
 // 녹음, 받아쓴 글, AI 요약에 쓰는 컴포넌트예요.
+// 앱에서 더한 것: RecordPanel onCancel·onFinish, RecordMiniBar onFinish, PlayerBar onBack·onForward·onSpeed·onLocate (모양은 그대로)
 // 구조는 docs/benchmark/README.md 의 "받아쓰기" 항목을 따라요.
 
 const BARS = [
@@ -86,6 +87,8 @@ export function RecordPanel({
   onPause,
   onBookmark,
   onMemo,
+  onCancel,
+  onFinish,
 }: {
   time: string;
   paused?: boolean;
@@ -95,11 +98,16 @@ export function RecordPanel({
   onPause?: () => void;
   onBookmark?: () => void;
   onMemo?: () => void;
+  /** 앱에서 더함: 맨 위 "취소", "끝내기"를 누를 때 */
+  onCancel?: () => void;
+  onFinish?: () => void;
 }) {
   return (
     <View className="gap-4">
       <View className="flex-row items-center justify-between">
-        <Text className="text-sm text-muted-foreground">취소</Text>
+        <Pressable onPress={onCancel} accessibilityRole="button" hitSlop={8}>
+          <Text className="text-sm text-muted-foreground">취소</Text>
+        </Pressable>
         <View className="flex-row items-center gap-1.5">
           <View
             className={cn('h-2 w-2 rounded-full', paused ? 'bg-muted-foreground' : 'bg-secondary')}
@@ -108,7 +116,9 @@ export function RecordPanel({
             {paused ? '잠시 멈춤' : '한국어 받아쓰는 중'}
           </Text>
         </View>
-        <Text className="text-sm font-bold text-primary">끝내기</Text>
+        <Pressable onPress={onFinish} accessibilityRole="button" hitSlop={8}>
+          <Text className="text-sm font-bold text-primary">끝내기</Text>
+        </Pressable>
       </View>
       <View className="items-center gap-2">
         <Text className="text-[40px] font-bold tracking-tight text-foreground">{time}</Text>
@@ -148,11 +158,14 @@ export function RecordMiniBar({
   paused = false,
   onOpen,
   onBookmark,
+  onFinish,
 }: {
   time: string;
   paused?: boolean;
   onOpen?: () => void;
   onBookmark?: () => void;
+  /** 앱에서 더함: 오른쪽 네모(끝내기)를 누를 때 */
+  onFinish?: () => void;
 }) {
   return (
     <Pressable
@@ -173,9 +186,13 @@ export function RecordMiniBar({
       >
         <Icon as={BookmarkIcon} size={19} className="text-foreground" />
       </Pressable>
-      <View className="h-9 w-9 items-center justify-center rounded-full bg-secondary">
+      <Pressable
+        onPress={onFinish}
+        accessibilityLabel="끝내기"
+        className="h-9 w-9 items-center justify-center rounded-full bg-secondary"
+      >
         <Icon as={SquareIcon} size={14} className="text-secondary-foreground" />
-      </View>
+      </Pressable>
     </Pressable>
   );
 }
@@ -299,6 +316,10 @@ export function PlayerBar({
   playing = false,
   showLocate = false,
   onToggle,
+  onBack,
+  onForward,
+  onSpeed,
+  onLocate,
 }: {
   current: string;
   total: string;
@@ -307,17 +328,22 @@ export function PlayerBar({
   playing?: boolean;
   showLocate?: boolean;
   onToggle?: () => void;
+  /** 앱에서 더함: 5초 뒤로, 5초 앞으로, 속도 바꾸기(1.0 같은 배속), 재생 위치로 */
+  onBack?: () => void;
+  onForward?: () => void;
+  onSpeed?: (rate: number) => void;
+  onLocate?: () => void;
 }) {
   const [speed, setSpeed] = React.useState(0);
   return (
     <View className="gap-2 border-t border-border bg-background px-5 pb-3 pt-2.5">
       {showLocate ? (
-        <View className="absolute -top-11 self-center">
+        <Pressable onPress={onLocate} className="absolute -top-11 self-center">
           <View className="h-9 flex-row items-center gap-1.5 rounded-full bg-foreground px-3.5 shadow-lg shadow-black/20">
             <Icon as={LocateFixedIcon} size={14} className="text-background" />
             <Text className="text-[13px] font-bold text-background">재생 위치로</Text>
           </View>
-        </View>
+        </Pressable>
       ) : null}
       <View className="h-1 overflow-hidden rounded-full bg-muted">
         <View
@@ -330,10 +356,10 @@ export function PlayerBar({
           {current} / {total}
         </Text>
         <View className="flex-row items-center gap-5">
-          <View className="items-center">
+          <Pressable onPress={onBack} accessibilityLabel="5초 뒤로" className="items-center">
             <Icon as={RotateCcwIcon} size={22} className="text-foreground" />
             <Text className="text-[10px] text-muted-foreground">5초</Text>
-          </View>
+          </Pressable>
           <Pressable
             onPress={onToggle}
             className="h-12 w-12 items-center justify-center rounded-full bg-primary"
@@ -344,14 +370,18 @@ export function PlayerBar({
               className="text-primary-foreground"
             />
           </Pressable>
-          <View className="items-center">
+          <Pressable onPress={onForward} accessibilityLabel="5초 앞으로" className="items-center">
             <Icon as={RotateCwIcon} size={22} className="text-foreground" />
             <Text className="text-[10px] text-muted-foreground">5초</Text>
-          </View>
+          </Pressable>
         </View>
         <View className="w-[84px] items-end">
           <Pressable
-            onPress={() => setSpeed((s) => (s + 1) % SPEEDS.length)}
+            onPress={() => {
+              const next = (speed + 1) % SPEEDS.length;
+              setSpeed(next);
+              onSpeed?.(Number(SPEEDS[next]));
+            }}
             className="h-8 w-12 items-center justify-center rounded-md border border-border"
           >
             <Text className="text-xs font-bold text-foreground">{SPEEDS[speed]}x</Text>

@@ -119,6 +119,10 @@ export interface Dictation {
   backlog(): number;
   /** 지금 들어오는 소리 크기 0~1 (막대로 보여 줘요) */
   level(): number;
+  /** 잠시 멈춤. 멈춘 동안 들어온 소리는 버리고 녹음 시간에도 안 세요. */
+  pause(): void;
+  resume(): void;
+  paused(): boolean;
   /** 녹음을 끝내고 남은 조각을 받아써요. onProgress는 0~1 */
   finish(onProgress?: (ratio: number) => void): Promise<SttResult>;
   /** 녹음을 버려요 */
@@ -499,6 +503,7 @@ export async function startDictation(
 
   let total = 0;
   let stopped = false;
+  let paused = false;
   let level = 0;
   // 원본을 남기기로 했으면 들어오는 소리를 그대로 WAV에 이어 써요. 못 열면 원본 없이 받아써요.
   let original: RecordingWriter | null = null;
@@ -513,7 +518,7 @@ export async function startDictation(
   // 화면이 꺼지거나 앱을 나가도 녹음을 이어 가게 알림을 띄워요(Android 포그라운드 서비스, 새 APK부터).
   startKeepAlive('받아쓰는 중', '화면이 꺼져도 녹음을 이어 가요. 눌러서 앱으로 돌아가요.');
   const closeMic = openMic((bytes) => {
-    if (stopped || total >= MAX_SECONDS * BYTES_PER_SECOND) return;
+    if (stopped || paused || total >= MAX_SECONDS * BYTES_PER_SECOND) return;
     total += bytes.length;
     level = levelOf(rmsOf(bytes));
     try {
@@ -560,7 +565,18 @@ export async function startDictation(
     // 이 말이 든 조각을 받아쓰고 나면 partial에 들어가서 여기서는 빼요.
     preview: () => (preview.base >= confirmed ? previewText(preview) : ''),
     backlog: () => transcriber.backlog(),
-    level: () => level,
+    level: () => (paused ? 0 : level),
+    pause() {
+      if (stopped || paused) return;
+      paused = true;
+      updateKeepAlive('받아쓰기 잠시 멈춤', '앱으로 돌아가서 이어서를 누르면 다시 녹음해요.');
+    },
+    resume() {
+      if (stopped || !paused) return;
+      paused = false;
+      updateKeepAlive('받아쓰는 중', '화면이 꺼져도 녹음을 이어 가요. 눌러서 앱으로 돌아가요.');
+    },
+    paused: () => paused,
     async cancel() {
       await stop();
       original?.discard();

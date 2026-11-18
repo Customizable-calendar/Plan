@@ -17,7 +17,7 @@ export function hasSherpa(): boolean {
 /** 라이브러리 전체(ASR, Diarization 등). hasSherpa()가 false면 던져요. */
 export function sherpa(): unknown {
   if (!hasSherpa())
-    throw new Error('이 앱 버전에는 SenseVoice·화자 구분이 없어요. 새 APK를 깔아 주세요.');
+    throw new Error('이 앱 버전에는 SenseVoice와 화자 구분이 없어요. 새 APK를 깔아 주세요.');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   return require('@siteed/sherpa-onnx.rn');
 }
