@@ -1,20 +1,16 @@
-import { AiError, createProvider } from '@noteapp/ai-client';
-import type { Card } from '@noteapp/shared';
+import { AiError } from '@noteapp/ai-client';
+import type { Card, SttTransform } from '@noteapp/shared';
 
 import { addAiCardsFromTranscript, type TranscriptItem } from '@/features/cards';
-import { getAiKey, setAiKey } from '@/lib/secrets';
+import { canUseTeamAi, teamAi } from '@/lib/team-ai';
 
-// 받아쓴 글을 사용자 Gemini 키로 정리해요: 요약 + 일정·할 일 카드.
-// 소리는 안 보내고 받아쓴 글만 Google로 가요. 키는 기기 보안 저장소에만 있어요 (docs/decisions/0002).
-// TODO(B): 설정(D)에 AI 키 화면이 생기면 여기 키 입력은 그쪽으로 보내요.
+// 받아쓴 글을 팀 AI(서버에 둔 팀 Claude 키, lib/team-ai, docs/decisions/0005)로 정리해요.
+// - organizeTranscript: 요약 + 일정·할 일 카드
+// - runTransform: 내 지시문(회의록 정리, 할 일만 뽑기 등)을 적용한 새 글
+// 소리는 안 보내고 받아쓴 글만 보내요. 로그인한 팀원만, 사람마다 하루 한도 안에서 써요.
 
-export async function hasGeminiKey(): Promise<boolean> {
-  return !!(await getAiKey('gemini'));
-}
-
-export async function saveGeminiKey(key: string): Promise<void> {
-  await setAiKey('gemini', key.trim());
-}
+/** 지금 계정으로 팀 AI를 쓸 수 있는지(로그인한 팀원인지) */
+export const canUseAi = canUseTeamAi;
 
 const TIMEZONE = 'Asia/Seoul';
 
@@ -38,10 +34,12 @@ const SCHEMA = {
           quote: { type: 'string', description: '근거가 된 원문 문장을 글자 그대로 복사' },
         },
         required: ['type', 'title', 'startAt', 'endAt', 'dueAt', 'quote'],
+        additionalProperties: false,
       },
     },
   },
   required: ['summary', 'items'],
+  additionalProperties: false,
 };
 
 function systemPrompt(now: Date): string {
@@ -67,12 +65,11 @@ export interface Organized {
 }
 
 /**
- * 받아쓴 글을 Gemini로 요약하고 일정·할 일 카드를 다시 찾아요.
+ * 받아쓴 글을 팀 AI로 요약하고 일정·할 일 카드를 다시 찾아요.
  * replaced: 규칙으로 먼저 찾은 카드 id. AI가 찾은 카드로 바꿔요(확인 안 한 것만).
  */
 export async function organizeTranscript(text: string, replaced: string[]): Promise<Organized> {
-  const key = await getAiKey('gemini');
-  const answer = await createProvider('gemini', key ?? '').complete({
+  const answer = await teamAi.complete({
     system: systemPrompt(new Date()),
     prompt: `받아쓴 회의록:\n\n${text}`,
     json: SCHEMA,
@@ -92,4 +89,22 @@ export async function organizeTranscript(text: string, replaced: string[]): Prom
   }));
   const cards = await addAiCardsFromTranscript(text, items, replaced);
   return { summary: (parsed.summary ?? '').trim(), cards };
+}
+
+/**
+ * 받아쓴 글에 지시문을 적용해서 새 글을 받아요. 받아쓴 글은 바꾸지 않아요.
+ * 지시문이 system, 받아쓴 글이 prompt예요(Whispering과 같은 모양).
+ */
+export async function runTransform(transform: SttTransform, text: string): Promise<string> {
+  const answer = await teamAi.complete({
+    system: [
+      transform.instructions,
+      '',
+      '받아쓴 글은 음성 인식 결과라서 틀린 글자나 끊긴 문장이 있을 수 있어. 뜻이 맞게 고쳐 읽어.',
+      '원문에 없는 내용은 지어내지 마. 한국어로 답해. 앞뒤 인사말 없이 결과만 써.',
+    ].join('\n'),
+    prompt: `받아쓴 글:\n\n${text}`,
+    maxTokens: 4000,
+  });
+  return answer.trim();
 }
