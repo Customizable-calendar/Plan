@@ -1,5 +1,5 @@
-import { Icon } from '../ui/icon';
-import { Text } from '../ui/text';
+import { Icon } from '../../components/ui/icon';
+import { Text } from '../../components/ui/text';
 import { DEFAULT_STATE, type NavDesign, type TabLayout } from '../../lib/design/tokens';
 import { cn } from '../../lib/utils';
 import {
@@ -7,13 +7,17 @@ import {
   ChevronLeftIcon,
   FolderIcon,
   HomeIcon,
+  ArrowUpDownIcon,
   LayersIcon,
+  MenuIcon,
   SearchIcon,
+  XIcon,
+  ZapIcon,
   UsersIcon,
   type LucideIcon,
 } from 'lucide-react-native';
 import * as React from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 
 export type TabKey = 'home' | 'cards' | 'calendar' | 'sessions' | 'feed' | 'search';
 
@@ -65,17 +69,24 @@ export function TabBar({ active, layout }: { active: TabKey; layout?: TabLayout 
 export function TopBar({
   title,
   back = true,
+  menu = false,
   center = false,
   right,
 }: {
   title: string;
   back?: boolean;
+  /** 뒤로 대신 왼쪽 메뉴 버튼을 보여 줘요 (탭의 첫 화면) */
+  menu?: boolean;
   center?: boolean;
   right?: React.ReactNode;
 }) {
   return (
     <View className="h-14 flex-row items-center gap-2 border-b border-border px-4">
-      {back ? <Icon as={ChevronLeftIcon} size={24} className="text-foreground" /> : null}
+      {menu ? (
+        <Icon as={MenuIcon} size={22} className="text-foreground" />
+      ) : back ? (
+        <Icon as={ChevronLeftIcon} size={24} className="text-foreground" />
+      ) : null}
       <Text
         className={cn(
           'flex-1 text-base font-bold text-foreground',
@@ -119,7 +130,65 @@ export function Fab({
   );
 }
 
-/** 피드 · 오늘 카드의 필터 칩 */
+export type SpeedDialItem = { icon: LucideIcon; label: string; ai?: boolean };
+
+/** 빠른 도구. 버튼 하나가 떠 있고, 누르면 도구들이 이름과 같이 위로 펼쳐져요. 홈에서만 보여요 */
+export function SpeedDial({
+  items,
+  open: openProp,
+  onOpenChange,
+}: {
+  items: SpeedDialItem[];
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const [inner, setInner] = React.useState(false);
+  const open = openProp ?? inner;
+  const toggle = () => {
+    setInner(!open);
+    onOpenChange?.(!open);
+  };
+  return (
+    <View className="items-end gap-3">
+      {open
+        ? items.map((it) => (
+            <View key={it.label} className="flex-row items-center gap-2.5">
+              <View className="rounded-full bg-foreground px-3 py-1.5 shadow-lg shadow-black/20">
+                <Text className="text-[13px] font-bold text-background">{it.label}</Text>
+              </View>
+              <View
+                className={cn(
+                  'h-12 w-12 items-center justify-center rounded-full shadow-lg shadow-black/20',
+                  it.ai ? 'bg-ai' : 'border border-border bg-background',
+                )}
+              >
+                <Icon
+                  as={it.icon}
+                  size={20}
+                  className={it.ai ? 'text-ai-foreground' : 'text-foreground'}
+                />
+              </View>
+            </View>
+          ))
+        : null}
+      <Pressable
+        onPress={toggle}
+        accessibilityLabel={open ? '빠른 도구 닫기' : '빠른 도구'}
+        className={cn(
+          'h-14 w-14 items-center justify-center rounded-full shadow-lg shadow-black/20',
+          open ? 'border border-border bg-background' : 'bg-primary',
+        )}
+      >
+        <Icon
+          as={open ? XIcon : ZapIcon}
+          size={24}
+          className={open ? 'text-foreground' : 'text-primary-foreground'}
+        />
+      </Pressable>
+    </View>
+  );
+}
+
 export function FilterChips({
   items,
   active,
@@ -181,5 +250,69 @@ export function SegmentTabs({
         );
       })}
     </View>
+  );
+}
+
+export type ChipItem = { key: string; label: string; count?: number; dot?: string };
+
+/** 옆으로 넘기는 필터 칩 한 줄. 줄을 두 개 쌓아서 서로 다른 기준(상태, 종류)을 같이 걸러요 */
+export function ScrollChips({
+  items,
+  active,
+  onChange,
+}: {
+  items: ChipItem[];
+  active: string;
+  onChange?: (key: string) => void;
+}) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerClassName="gap-2 px-5"
+    >
+      {items.map((it) => {
+        const on = it.key === active;
+        return (
+          <Pressable
+            key={it.key}
+            onPress={() => onChange?.(it.key)}
+            className={cn(
+              'h-8 flex-row items-center gap-1.5 rounded-full border px-3',
+              on ? 'border-foreground bg-foreground' : 'border-border bg-background',
+            )}
+          >
+            {it.dot ? <View className={cn('h-2 w-2 rounded-full', it.dot)} /> : null}
+            <Text
+              className={cn('text-[13px]', on ? 'font-bold text-background' : 'text-foreground')}
+            >
+              {it.label}
+            </Text>
+            {it.count !== undefined ? (
+              <Text
+                className={cn('text-[13px] font-bold', on ? 'text-background' : 'text-primary')}
+              >
+                {it.count}
+              </Text>
+            ) : null}
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+/** 정렬 버튼. 누르면 정렬 기준을 차례로 바꿔요 (앱에서는 팝업으로 골라요) */
+export function SortButton({ options }: { options: string[] }) {
+  const [at, setAt] = React.useState(0);
+  return (
+    <Pressable
+      onPress={() => setAt((i) => (i + 1) % options.length)}
+      accessibilityLabel="정렬 바꾸기"
+      className="h-9 flex-row items-center gap-1 rounded-md px-2"
+    >
+      <Icon as={ArrowUpDownIcon} size={15} className="text-muted-foreground" />
+      <Text className="text-[13px] text-foreground">{options[at]}</Text>
+    </Pressable>
   );
 }
