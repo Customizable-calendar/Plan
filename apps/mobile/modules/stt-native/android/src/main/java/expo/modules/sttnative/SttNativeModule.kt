@@ -170,14 +170,14 @@ private fun pushMono(pcm: ByteBuffer, channels: Int, floatPcm: Boolean, resample
  * 출력 형식이 중간에 바뀌면(prev) 시간을 이어 가요.
  */
 private class Resampler(rate: Int, private val writer: WavWriter, prev: Resampler? = null) {
-  private val step = rate.toDouble() / TARGET_RATE
-  private val smooth = step.toInt().coerceIn(1, 8)
-  private val window = FloatArray(smooth)
-  private var filled = 0
-  private var sum = 0f
-  private var n = 0L
-  private var t = 0.0
-  private var last = prev?.last ?: 0f
+  private val step: Double = rate.toDouble() / TARGET_RATE
+  private val smooth: Int = step.toInt().coerceIn(1, 8)
+  private val window: FloatArray = FloatArray(smooth)
+  private var filled: Int = 0
+  private var sum: Float = 0f
+  private var n: Long = 0L
+  private var t: Double = 0.0
+  private var last: Float = prev?.last ?: 0f
 
   fun push(sample: Float) {
     // 이웃 smooth개 평균(간단한 저역 통과)
