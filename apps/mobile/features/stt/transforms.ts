@@ -33,6 +33,12 @@ const starter = (id: string, title: string, instructions: string, order: number)
 
 export const STARTERS: readonly SttTransform[] = [
   starter(
+    'polish',
+    '받아쓴 글 다듬기',
+    '음성 인식으로 받아쓴 글이야. 잘못 알아들은 글자, 띄어쓰기, 문장 부호만 고쳐서 원래 말한 내용 그대로 다시 써 줘. 앞뒤 문맥으로 확실한 것만 고치고, 모르는 부분은 그대로 둬. 내용을 요약하거나 빼거나 더하지 마. "(잘 안 들린 말)"은 그대로 둬.',
+    -1,
+  ),
+  starter(
     'minutes',
     '회의록으로 정리',
     '받아쓴 회의를 회의록으로 정리해 줘. "안건", "결정한 것", "할 일(누가, 언제까지)" 순서로 나누고, 항목마다 "- "로 시작해. 원문에 없는 내용은 넣지 마.',
