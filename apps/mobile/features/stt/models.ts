@@ -48,24 +48,67 @@ export function isDownloaded(model: SttModel): boolean {
   return file.exists && file.size === model.bytes;
 }
 
-/** 모델을 받아요. 다 받기 전에는 .part로 두고, 크기가 맞으면 이름을 바꿔요. */
+/** 한 번에 받는 크기. 끊기면 다음엔 받은 데까지 건너뛰고 이어서 받아요. */
+const PIECE_BYTES = 16 * 1024 * 1024;
+
+const partFile = (model: SttModel) => new File(folder(), `${model.file}.part`);
+
+/** 받다 만 모델이 있으면 받은 비율(0~1), 없으면 null. 다시 받기를 누르면 여기서부터 이어 받아요. */
+export function partialRatio(model: SttModel): number | null {
+  const part = partFile(model);
+  if (!part.exists || part.size <= 0 || part.size >= model.bytes) return null;
+  return part.size / model.bytes;
+}
+
+/**
+ * 모델을 받아요. 16MB씩(HTTP Range) 받아서 .part 뒤에 붙이고, 크기가 맞으면 이름을 바꿔요.
+ * 인터넷이 끊기거나 앱이 꺼지거나 멈춰도 .part가 남아서, 다음에 받은 데부터 이어 받아요(SpokenLog 참고).
+ */
 export async function downloadModel(
   model: SttModel,
   onProgress: (ratio: number) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const part = new File(folder(), `${model.file}.part`);
-  if (part.exists) part.delete();
+  const part = partFile(model);
+  if (part.exists && part.size > model.bytes) part.delete();
+  if (!part.exists) part.create();
+  const piece = new File(folder(), `${model.file}.piece`);
   try {
-    await File.downloadFileAsync(BASE_URL + model.file, part, {
-      idempotent: true,
-      signal,
-      onProgress: ({ bytesWritten }) => onProgress(Math.min(1, bytesWritten / model.bytes)),
-    });
+    while (part.size < model.bytes) {
+      const start = part.size;
+      const end = Math.min(start + PIECE_BYTES, model.bytes) - 1;
+      if (piece.exists) piece.delete();
+      await File.downloadFileAsync(BASE_URL + model.file, piece, {
+        headers: { Range: `bytes=${start}-${end}` },
+        idempotent: true,
+        signal,
+        onProgress: ({ bytesWritten }) =>
+          onProgress(Math.min(1, (start + bytesWritten) / model.bytes)),
+      });
+      if (piece.size === model.bytes && start === 0) {
+        // 서버가 나눠 받기를 무시하고 통째로 보냈어요. 그대로 써요.
+        part.delete();
+        await piece.move(part);
+        break;
+      }
+      if (piece.size !== end - start + 1) {
+        // 나눠 받기가 안 되는 응답이에요. 이어 붙이면 파일이 깨져서 처음부터 다시 받게 해요.
+        part.delete();
+        throw new SttError('모델 파일을 이어 받지 못했어요. 다시 받아 주세요.');
+      }
+      await part.write(await piece.bytes(), { append: true });
+      piece.delete();
+      onProgress(part.size / model.bytes);
+    }
   } catch (e) {
-    if (part.exists) part.delete();
-    if (signal?.aborted) throw new SttError('받기를 멈췄어요.');
-    throw new SttError('모델을 받지 못했어요. 인터넷 연결을 확인하고 다시 받아 주세요.', e);
+    if (piece.exists) piece.delete();
+    if (signal?.aborted)
+      throw new SttError('받기를 멈췄어요. 다시 누르면 받은 데부터 이어 받아요.');
+    if (e instanceof SttError) throw e;
+    throw new SttError(
+      '모델을 받지 못했어요. 인터넷 연결을 확인하고 다시 누르면 받은 데부터 이어 받아요.',
+      e,
+    );
   }
   if (part.size !== model.bytes) {
     part.delete();
@@ -80,6 +123,8 @@ export async function downloadModel(
 export function deleteModel(model: SttModel): void {
   const file = modelFile(model);
   if (file.exists) file.delete();
+  const part = partFile(model);
+  if (part.exists) part.delete();
 }
 
 // ---------- 말소리 감지(VAD) 모델 ----------

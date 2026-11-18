@@ -29,6 +29,16 @@ export interface Chunk {
   silent: boolean;
 }
 
+/** 소리 크기(rms)를 막대 높이 0~1로 바꿔요. -60dB 아래는 0, 0dB(최대)는 1이에요. */
+export function levelOf(rms: number): number {
+  if (rms <= 0) return 0;
+  const db = 20 * Math.log10(rms / 32767);
+  return Math.min(1, Math.max(0, (db + 60) / 60));
+}
+
+/** 말이 들린다고 볼 막대 높이(조용한 조각 기준 소리의 두 배쯤) */
+export const SPEECH_LEVEL = levelOf(SILENT_RMS * 2);
+
 export function rmsOf(bytes: Uint8Array): number {
   const n = Math.floor(bytes.length / 2);
   if (n === 0) return 0;

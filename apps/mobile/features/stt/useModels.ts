@@ -7,6 +7,7 @@ import {
   downloadModel,
   isDownloaded,
   MODELS,
+  partialRatio,
   type SttModel,
   type SttModelId,
 } from './models';
@@ -16,10 +17,17 @@ export interface ModelRow {
   downloaded: boolean;
   /** 받는 중이면 0~1 */
   progress?: number;
+  /** 받다 멈춘 비율 0~1. 다시 받으면 여기서부터 이어 받아요. */
+  partial: number | null;
 }
 
 // Expo Go에서도 파일은 볼 수 있지만, 받아도 못 쓰니 목록만 보여 줘요.
-const scan = (): ModelRow[] => MODELS.map((model) => ({ model, downloaded: isDownloaded(model) }));
+const scan = (): ModelRow[] =>
+  MODELS.map((model) => ({
+    model,
+    downloaded: isDownloaded(model),
+    partial: partialRatio(model),
+  }));
 
 /** 모델 목록과 받기·지우기. 받는 중에 화면을 나가면 받기를 멈춰요. */
 export function useModels() {

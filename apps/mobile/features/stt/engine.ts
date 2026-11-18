@@ -1,9 +1,24 @@
 import { punctuateSpoken } from '@noteapp/extractor';
 import { NativeModules, PermissionsAndroid, Platform, TurboModuleRegistry } from 'react-native';
 
-import { BYTES_PER_SECOND, type Chunk, createChunker, SAMPLE_RATE } from './chunker';
+import { FileMode } from 'expo-file-system';
+
+import {
+  BYTES_PER_SECOND,
+  type Chunk,
+  createChunker,
+  levelOf,
+  rmsOf,
+  SAMPLE_RATE,
+} from './chunker';
 import { SttError } from './errors';
 import { isDownloaded, modelFile, type SttModel } from './models';
+import {
+  type Recording,
+  type RecordingWriter,
+  startRecordingFile,
+  WAV_HEADER_BYTES,
+} from './recordings';
 import { clearSession, leftover, type SavedChunk, saveChunk, saveSegments } from './session';
 import { cutAtGap, keepSpeech } from './speech';
 import { cleanSegment, type PreviewSegment, promptFor, settledCount } from './text';
@@ -78,11 +93,15 @@ export interface SttResult {
   text: string;
   segments: SttSegment[];
   durationMs: number;
+  /** 녹음 원본을 남겼으면 그 녹음 id(recordings.ts) */
+  recordingId?: string;
 }
 
 export interface DictationOptions {
   /** 사용자가 자주 쓰는 말(해시태그·카테고리 이름 등). 예시로 줘서 더 맞게 받아써요. */
   words?: string[];
+  /** 녹음 원본을 WAV로 이 기기에 남길지(recordings.ts) */
+  keepAudio?: boolean;
 }
 
 export interface Dictation {
@@ -94,6 +113,8 @@ export interface Dictation {
   preview(): string;
   /** 녹음은 됐지만 아직 못 받아쓴 조각 수 */
   backlog(): number;
+  /** 지금 들어오는 소리 크기 0~1 (막대로 보여 줘요) */
+  level(): number;
   /** 녹음을 끝내고 남은 조각을 받아써요. onProgress는 0~1 */
   finish(onProgress?: (ratio: number) => void): Promise<SttResult>;
   /** 녹음을 버려요 */
@@ -382,6 +403,43 @@ function createTranscriber(
   };
 }
 
+/** 마이크를 열어서 들어오는 소리(16kHz 모노 16비트 PCM)를 넘겨요. 돌려준 함수로 닫아요. */
+function openMic(onBytes: (bytes: Uint8Array) => void): () => Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const audio = require('@fugood/react-native-audio-pcm-stream').default as LiveAudioStream;
+  audio.init({
+    sampleRate: SAMPLE_RATE,
+    channels: 1,
+    bitsPerSample: 16,
+    audioSource: 6, // Android VOICE_RECOGNITION
+    bufferSize: 4096,
+    wavFile: '',
+  });
+  let open = true;
+  const subscription = audio.on('data', (base64) => {
+    if (open) onBytes(decodeBase64(base64));
+  });
+  audio.start();
+  return async () => {
+    if (!open) return;
+    open = false;
+    await audio.stop();
+    subscription?.remove();
+  };
+}
+
+/**
+ * 마이크 확인: 녹음하지 않고 소리 크기만 onLevel(0~1)로 계속 알려 줘요. 돌려준 함수로 멈춰요.
+ * 받아쓰는 중에는 쓰지 마세요(마이크를 같이 써요).
+ */
+export async function testMicrophone(
+  onLevel: (level: number) => void,
+): Promise<() => Promise<void>> {
+  ensureAvailable();
+  await askMicrophone();
+  return openMic((bytes) => onLevel(levelOf(rmsOf(bytes))));
+}
+
 /** 녹음을 시작해요. 말하는 동안 조각마다 받아쓰고, 끝낼 때 finish()로 남은 걸 받아써요. */
 export async function startDictation(
   model: SttModel,
@@ -415,32 +473,37 @@ export async function startDictation(
     transcriber.add(saved, () => (confirmed = Math.max(confirmed, end)));
   }, findGap);
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const audio = require('@fugood/react-native-audio-pcm-stream').default as LiveAudioStream;
   let total = 0;
   let stopped = false;
+  let level = 0;
+  // 원본을 남기기로 했으면 들어오는 소리를 그대로 WAV에 이어 써요. 못 열면 원본 없이 받아써요.
+  let original: RecordingWriter | null = null;
+  if (options.keepAudio) {
+    try {
+      original = startRecordingFile(Date.now());
+    } catch {
+      original = null;
+    }
+  }
 
-  audio.init({
-    sampleRate: SAMPLE_RATE,
-    channels: 1,
-    bitsPerSample: 16,
-    audioSource: 6, // Android VOICE_RECOGNITION
-    bufferSize: 4096,
-    wavFile: '',
-  });
-  const subscription = audio.on('data', (base64) => {
+  const closeMic = openMic((bytes) => {
     if (stopped || total >= MAX_SECONDS * BYTES_PER_SECOND) return;
-    const bytes = decodeBase64(base64);
     total += bytes.length;
+    level = levelOf(rmsOf(bytes));
+    try {
+      original?.write(bytes);
+    } catch {
+      original?.discard(); // 저장 공간이 모자라면 원본은 그만 남기고 받아쓰기는 계속해요.
+      original = null;
+    }
     chunker.push(bytes);
   });
-  audio.start();
 
   const stop = async () => {
     if (stopped) return;
     stopped = true;
-    await audio.stop();
-    subscription?.remove();
+    level = 0;
+    await closeMic();
   };
 
   // 말하는 동안 아직 조각이 안 된 말을 계속 미리 받아써요(회색 글).
@@ -469,8 +532,10 @@ export async function startDictation(
     // 이 말이 든 조각을 받아쓰고 나면 partial에 들어가서 여기서는 빼요.
     preview: () => (preview.base >= confirmed ? previewText(preview) : ''),
     backlog: () => transcriber.backlog(),
+    level: () => level,
     async cancel() {
       await stop();
+      original?.discard();
       await transcriber.cancel();
       clearSession();
       release();
@@ -479,14 +544,20 @@ export async function startDictation(
       await stop();
       try {
         if (total < BYTES_PER_SECOND / 2) {
+          original?.discard();
           await transcriber.cancel();
           clearSession();
           throw new SttError('녹음이 너무 짧아요. 다시 말해 주세요.');
         }
+        // 원본은 받아쓰기가 실패해도 남겨요. 나중에 다시 받아쓸 수 있어요.
+        original?.finish();
         chunker.flush();
         await transcriber.idle(onProgress);
         clearSession();
-        return resultOf(segments, Math.round((total / BYTES_PER_SECOND) * 1000));
+        return {
+          ...resultOf(segments, Math.round((total / BYTES_PER_SECOND) * 1000)),
+          ...(original ? { recordingId: original.id } : {}),
+        };
       } finally {
         release();
       }
@@ -557,6 +628,76 @@ export async function resumeLeftover(
     await transcriber.idle(onProgress);
     clearSession();
     return resultOf(left.segments, durationMs);
+  } finally {
+    release();
+  }
+}
+
+/** 파일에서 읽는 한 번 크기. 마이크와 같게 해서 쉬는 곳을 똑같이 찾아요. */
+const READ_BYTES = 4096;
+/** 밀린 조각이 이만큼이면 파일 읽기를 잠깐 쉬어요(메모리를 조각 몇 개만큼만 써요). */
+const READ_AHEAD = 2;
+
+/**
+ * 남겨 둔 녹음 원본을 다시 받아써요. 예: 빠른 모델로 받아쓴 걸 정확한 모델로 다시.
+ * 녹음할 때처럼 쉬는 곳에서 조각으로 나눠 차례로 받아써요. 중간에 앱이 꺼지면 "이어서 받아쓰기"로 이어요.
+ */
+export async function transcribeRecording(
+  model: SttModel,
+  recording: Recording,
+  onProgress?: (ratio: number) => void,
+  options: DictationOptions = {},
+): Promise<SttResult> {
+  ensureAvailable();
+  if (!isDownloaded(model)) throw new SttError('먼저 음성 인식 모델을 받아 주세요.');
+  const release = hold();
+  try {
+    clearSession();
+    prepareVad();
+    const segments: SttSegment[] = [];
+    const transcriber = createTranscriber(contextFor(model), segments, options.words);
+    const total = Math.max(0, recording.file.size - WAV_HEADER_BYTES);
+    let confirmed = 0;
+    const chunker = createChunker((chunk) => {
+      const end = Math.round((chunk.offsetMs / 1000) * BYTES_PER_SECOND) + chunk.pcm.length;
+      const saved = speechOnly(chunk).then((kept) =>
+        kept ? saveChunk(kept.offsetMs, kept.pcm) : null,
+      );
+      transcriber.add(saved, () => (confirmed = Math.max(confirmed, end)));
+    }, findGap);
+    const report = () => onProgress?.(total === 0 ? 1 : Math.min(0.99, confirmed / total));
+    const timer = onProgress ? setInterval(report, 300) : null;
+    try {
+      const handle = recording.file.open(FileMode.ReadOnly);
+      try {
+        handle.offset = WAV_HEADER_BYTES;
+        let read = 0;
+        while (read < total) {
+          while (transcriber.backlog() >= READ_AHEAD) {
+            await new Promise((r) => setTimeout(r, 200));
+          }
+          const bytes = handle.readBytesSync(Math.min(READ_BYTES, total - read));
+          if (bytes.length === 0) break;
+          read += bytes.length;
+          chunker.push(bytes);
+        }
+      } finally {
+        handle.close();
+      }
+      chunker.flush();
+      await transcriber.idle();
+    } catch (e) {
+      if (e instanceof SttError) throw e;
+      throw new SttError('녹음 원본을 다시 받아쓰지 못했어요.', e);
+    } finally {
+      if (timer) clearInterval(timer);
+    }
+    clearSession();
+    onProgress?.(1);
+    return {
+      ...resultOf(segments, Math.round((total / BYTES_PER_SECOND) * 1000)),
+      recordingId: recording.id,
+    };
   } finally {
     release();
   }
