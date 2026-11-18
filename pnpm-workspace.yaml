@@ -6,5 +6,4 @@ packages:
 onlyBuiltDependencies:
   - '@siteed/sherpa-onnx.rn'
   - esbuild
-  - llama.rn
   - unrs-resolver

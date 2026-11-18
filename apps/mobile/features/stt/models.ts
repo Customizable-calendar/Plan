@@ -9,8 +9,7 @@ import { SttError } from './errors';
 // - whisper base(whisper.cpp ggml, MIT): 가벼워요. Qwen3의 회색 글을 맡고, 오래된 폰에서는 이걸로 받아써요.
 // 예전에 있던 whisper small, SenseVoice는 뺐어요(Qwen3보다 덜 정확하고, SenseVoice는 Qwen3와 같이 못 띄워요).
 // 받아 둔 파일은 RETIRED로 지워요.
-// - Qwen3-ASR 1.7B(llama.rn GGUF): GPU·NPU가 잡히는 폰에서만 보여요(llama.ts의 canAccelerate).
-export type SttModelId = 'qwen3-1.7b' | 'qwen3' | 'base';
+export type SttModelId = 'qwen3' | 'base';
 
 /** 받을 파일 하나 */
 export interface ModelFile {
@@ -29,37 +28,15 @@ export interface ModelPack {
 
 export interface SttModel extends ModelPack {
   id: SttModelId;
-  engine: 'whisper' | 'qwen3' | 'llama';
+  engine: 'whisper' | 'qwen3';
 }
 
 const WHISPER_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/';
 // 고친 모델이 올라와도 받는 파일이 바뀌지 않게 커밋으로 고정해요.
-const QWEN3_17B_URL =
-  'https://huggingface.co/ggml-org/Qwen3-ASR-1.7B-GGUF/resolve/36a678687ba7d07a74ca70ccb0e36902e005fb80/';
 const QWEN3_URL =
   'https://huggingface.co/csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25/resolve/68818b2313fe77bd06f6a7c5068ff3ef59d02b8a/';
 
 export const MODELS: SttModel[] = [
-  {
-    // llama.rn으로 GPU·NPU에서 돌려요. GPU나 NPU가 잡히는 폰에서만 보여요(llama.ts의 canAccelerate).
-    id: 'qwen3-1.7b',
-    engine: 'llama',
-    label: '최고 정확도 (Qwen3 1.7B, GPU)',
-    note: 'GPU로 돌려요, 2.4GB',
-    dir: 'qwen3-asr-1.7b-q8',
-    files: [
-      {
-        name: 'Qwen3-ASR-1.7B-Q8_0.gguf',
-        url: `${QWEN3_17B_URL}Qwen3-ASR-1.7B-Q8_0.gguf`,
-        bytes: 2_165_034_944,
-      },
-      {
-        name: 'mmproj-Qwen3-ASR-1.7B-Q8_0.gguf',
-        url: `${QWEN3_17B_URL}mmproj-Qwen3-ASR-1.7B-Q8_0.gguf`,
-        bytes: 355_709_344,
-      },
-    ],
-  },
   {
     id: 'qwen3',
     engine: 'qwen3',
