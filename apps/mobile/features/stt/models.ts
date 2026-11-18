@@ -9,7 +9,7 @@ import { SttError } from './errors';
 //   지어낸 말이 적고 부호도 찍어요. 예시(내 단어)는 못 써요. SpokenLog 참고.
 // - Qwen3-ASR 0.6B(sherpa-onnx, Apache-2.0): 로컬 모델 중 한국어가 제일 정확해요(LocalSTT 벤치마크).
 //   한 글자씩 만들어서 SenseVoice보다 느려요. 말하는 중 회색 글은 whisper base로 따로 보여 줘요.
-export type SttModelId = 'qwen3' | 'small' | 'base' | 'sensevoice';
+export type SttModelId = 'qwen3-1.7b' | 'qwen3' | 'small' | 'base' | 'sensevoice';
 
 /** 받을 파일 하나 */
 export interface ModelFile {
@@ -28,17 +28,39 @@ export interface ModelPack {
 
 export interface SttModel extends ModelPack {
   id: SttModelId;
-  engine: 'whisper' | 'sensevoice' | 'qwen3';
+  engine: 'whisper' | 'sensevoice' | 'qwen3' | 'llama';
 }
 
 const WHISPER_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/';
 // 고친 모델이 올라와도 받는 파일이 바뀌지 않게 커밋으로 고정해요.
+const QWEN3_17B_URL =
+  'https://huggingface.co/ggml-org/Qwen3-ASR-1.7B-GGUF/resolve/36a678687ba7d07a74ca70ccb0e36902e005fb80/';
 const QWEN3_URL =
   'https://huggingface.co/csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25/resolve/68818b2313fe77bd06f6a7c5068ff3ef59d02b8a/';
 const SENSE_VOICE_URL =
   'https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/';
 
 export const MODELS: SttModel[] = [
+  {
+    // llama.rn으로 GPU·NPU에서 돌려요. GPU나 NPU가 잡히는 폰에서만 보여요(llama.ts의 canAccelerate).
+    id: 'qwen3-1.7b',
+    engine: 'llama',
+    label: '최고 정확도 (Qwen3 1.7B, GPU)',
+    note: 'GPU로 돌려요, 2.4GB',
+    dir: 'qwen3-asr-1.7b-q8',
+    files: [
+      {
+        name: 'Qwen3-ASR-1.7B-Q8_0.gguf',
+        url: `${QWEN3_17B_URL}Qwen3-ASR-1.7B-Q8_0.gguf`,
+        bytes: 2_165_034_944,
+      },
+      {
+        name: 'mmproj-Qwen3-ASR-1.7B-Q8_0.gguf',
+        url: `${QWEN3_17B_URL}mmproj-Qwen3-ASR-1.7B-Q8_0.gguf`,
+        bytes: 355_709_344,
+      },
+    ],
+  },
   {
     id: 'qwen3',
     engine: 'qwen3',
