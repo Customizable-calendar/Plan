@@ -3,7 +3,7 @@
 - **담당**: A
 - **하는 일**: 업무일지·블로그·회의록·연구논문·학습일지 같은 양식을 고르는 곳이에요. 양식은 코드가 아니라 `packages/shared/src/templates/*.json` 데이터예요.
 - **화면**: `/sessions` 세션 목록 (`SessionsListScreen`)
-- **데이터**: `docs_` 테이블 (만든 문서), 템플릿은 JSON 파일
+- **데이터**: `docs_sessions`(세션, 미완성 세션), `docs_documents`(만든 문서) 테이블. 저장은 `lib/documents.ts`예요: 메모처럼 기기에 먼저 저장하고, `EXPO_PUBLIC_SUPABASE_FEATURES`에 `sessions`가 있고 로그인하면 계정에도 올려요. 계정 연결이 꺼진 빌드에서는 예시 세션·문서를 처음 한 번 넣어요. 템플릿은 JSON 파일이라 테이블이 없어요.
 - **다른 기능에 주는 것**: 선택한 템플릿 id를 AI 초안(B)과 편집기에 넘겨요.
 - **받는 것**: `@noteapp/shared`의 `templates`
 
