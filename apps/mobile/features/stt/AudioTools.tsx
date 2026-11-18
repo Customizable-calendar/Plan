@@ -1,10 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Button, cn, Icon, Switch, Text } from '@noteapp/ui';
+import {
+  FileAudioIcon,
+  MicIcon,
+  RefreshCwIcon,
+  Share2Icon,
+  Trash2Icon,
+  type LucideIcon,
+} from 'lucide-react-native';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, View } from 'react-native';
+
+import { hasDecoder } from '@/modules/stt-native';
 
 import { SPEECH_LEVEL } from './chunker';
 import { testMicrophone } from './engine';
-import { hasDecoder } from '@/modules/stt-native';
-
 import {
   importAudioFile,
   listRecordings,
@@ -13,7 +22,8 @@ import {
   removeRecording,
 } from './recordings';
 import { shareFile } from './share';
-import { SmallButton } from './SmallButton';
+
+// 받아쓰기 화면 아래 도구들이에요. 디자인 시스템처럼 상자 없이 위쪽 구분선으로 나눠요.
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
@@ -22,16 +32,52 @@ export function LevelBar({ level }: { level: number }) {
   const heard = level >= SPEECH_LEVEL;
   return (
     <View
-      className="h-2 overflow-hidden rounded-full bg-muted"
+      className="h-1 overflow-hidden rounded-full bg-muted"
       accessibilityRole="progressbar"
       accessibilityLabel="마이크 소리 크기"
       accessibilityValue={{ min: 0, max: 100, now: Math.round(level * 100) }}
     >
       <View
-        className={`h-2 rounded-full ${heard ? 'bg-primary' : 'bg-muted-foreground'}`}
+        className={cn('h-full rounded-full', heard ? 'bg-secondary' : 'bg-muted-foreground')}
         style={{ width: `${Math.round(level * 100)}%` }}
       />
     </View>
+  );
+}
+
+/** 도구 한 줄: 아이콘, 이름, 설명, 오른쪽 요소. 누를 수 있으면 onPress */
+function ToolRow({
+  icon,
+  label,
+  hint,
+  right,
+  onPress,
+  disabled,
+}: {
+  icon: LucideIcon;
+  label: string;
+  hint?: string;
+  right?: ReactNode;
+  onPress?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled || !onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
+      className={cn(
+        'min-h-14 flex-row items-center gap-3 border-t border-border py-3',
+        disabled && 'opacity-50',
+      )}
+    >
+      <Icon as={icon} size={20} className="text-foreground" />
+      <View className="flex-1 gap-0.5">
+        <Text className="text-[15px] text-foreground">{label}</Text>
+        {hint ? <Text className="text-[13px] leading-5 text-muted-foreground">{hint}</Text> : null}
+      </View>
+      {right}
+    </Pressable>
   );
 }
 
@@ -77,22 +123,27 @@ export function MicCheck() {
     }
   };
 
+  const testing = level !== null;
   return (
-    <View className="gap-2">
-      {level === null ? (
-        <SmallButton label="마이크 확인" onPress={() => void startCheck()} />
-      ) : (
-        <View className="gap-2 rounded-xl border border-border bg-card p-4">
-          <Text className="text-[13px] leading-5 text-muted-foreground">
-            {heard
+    <View>
+      <ToolRow
+        icon={MicIcon}
+        label={testing ? '마이크 확인 끝내기' : '마이크 확인'}
+        hint={
+          error ??
+          (testing
+            ? heard
               ? '잘 들려요. 이대로 말하기를 시작하면 돼요.'
-              : '아무 말이나 해 보세요. 막대가 진하게 움직이면 잘 들리는 거예요.'}
-          </Text>
+              : '아무 말이나 해 보세요. 막대가 진하게 움직이면 잘 들리는 거예요.'
+            : '녹음하지 않고 소리가 잘 들어오는지만 봐요.')
+        }
+        onPress={() => void (testing ? stop() : startCheck())}
+      />
+      {testing ? (
+        <View className="pb-3 pl-8">
           <LevelBar level={level} />
-          <SmallButton label="확인 끝" onPress={() => void stop()} />
         </View>
-      )}
-      {error ? <Text className="text-[14px] text-destructive">{error}</Text> : null}
+      ) : null}
     </View>
   );
 }
@@ -106,24 +157,15 @@ export function KeepAudioToggle({
   onChange: (on: boolean) => void;
 }) {
   return (
-    <Pressable
+    <ToolRow
+      icon={FileAudioIcon}
+      label="녹음 원본 남기기"
+      hint="소리를 이 기기에만 남겨서 다시 듣고, 다시 받아쓰고, 화자를 나눠요. 1시간에 약 115MB예요."
       onPress={() => onChange(!on)}
-      accessibilityRole="switch"
-      accessibilityState={{ checked: on }}
-      className="flex-row items-center gap-3 rounded-xl border border-border bg-card p-4"
-    >
-      <View className="flex-1 gap-0.5">
-        <Text className="text-[15px] font-bold text-foreground">녹음 원본 남기기</Text>
-        <Text className="text-[13px] leading-5 text-muted-foreground">
-          소리를 이 기기에만 남겨서 나중에 다시 받아쓸 수 있어요. 1시간에 약 115MB예요.
-        </Text>
-      </View>
-      <View
-        className={`h-7 w-12 justify-center rounded-full px-1 ${on ? 'bg-primary' : 'bg-muted'}`}
-      >
-        <View className={`h-5 w-5 rounded-full bg-background ${on ? 'self-end' : 'self-start'}`} />
-      </View>
-    </Pressable>
+      right={
+        <Switch checked={on} onCheckedChange={onChange} accessibilityLabel="녹음 원본 남기기" />
+      }
+    />
   );
 }
 
@@ -132,8 +174,24 @@ const sizeLabel = (bytes: number) =>
     ? `${(bytes / 1024 / 1024 / 1024).toFixed(1)}GB`
     : `${Math.round(bytes / 1024 / 1024)}MB`;
 
+function IconButton({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: LucideIcon;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Button variant="ghost" size="icon" onPress={onPress} accessibilityLabel={label}>
+      <Icon as={icon} size={18} className="text-foreground" />
+    </Button>
+  );
+}
+
 /**
- * 남겨 둔 녹음 원본 목록. 지금 고른 모델로 다시 받아쓰거나 지워요.
+ * 남겨 둔 녹음 원본 목록. 지금 고른 모델로 다시 받아쓰거나, 내보내거나, 지워요.
  * refreshKey가 바뀌면 다시 읽어요(받아쓰기가 끝났을 때 등).
  */
 export function RecordingList({
@@ -157,25 +215,29 @@ export function RecordingList({
 
   if (list.length === 0) return null;
   return (
-    <View className="gap-2">
-      <Text className="text-[13px] font-bold text-muted-foreground">
-        남긴 녹음 {list.length}개 · {sizeLabel(bytes)}
+    <View>
+      <Text className="pb-2 pt-4 text-[13px] font-bold text-muted-foreground">
+        남긴 녹음 {list.length}개, {sizeLabel(bytes)}
       </Text>
       {list.map((r) => (
         <View
           key={r.id}
-          className="flex-row items-center gap-2 rounded-xl border border-border bg-card p-3"
+          className="min-h-14 flex-row items-center gap-1 border-t border-border py-1.5"
         >
-          <Text className="flex-1 text-[14px] text-foreground">
-            {r.startedAt.toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })} ·{' '}
-            {clock(r.seconds)}
-          </Text>
-          <SmallButton label="다시 받아쓰기" onPress={() => onAgain(r)} />
-          <SmallButton
-            label="공유"
+          <View className="flex-1 gap-0.5">
+            <Text className="text-[15px] text-foreground">
+              {r.startedAt.toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })}
+            </Text>
+            <Text className="text-[13px] text-muted-foreground">{clock(r.seconds)}</Text>
+          </View>
+          <IconButton icon={RefreshCwIcon} label="다시 받아쓰기" onPress={() => onAgain(r)} />
+          <IconButton
+            icon={Share2Icon}
+            label="내보내기"
             onPress={() => void shareFile(r.file, 'audio/wav').catch(() => {})}
           />
-          <SmallButton
+          <IconButton
+            icon={Trash2Icon}
             label="지우기"
             onPress={() => {
               removeRecording(r.id);
@@ -208,13 +270,12 @@ export function ImportAudio({ onImported }: { onImported: (recording: Recording)
   };
 
   return (
-    <View className="gap-2">
-      <SmallButton
-        label={busy ? '파일을 바꾸는 중이에요' : '음성 파일 가져와서 받아쓰기'}
-        disabled={busy}
-        onPress={() => void pick()}
-      />
-      {error ? <Text className="text-[14px] text-destructive">{error}</Text> : null}
-    </View>
+    <ToolRow
+      icon={FileAudioIcon}
+      label={busy ? '파일을 바꾸는 중이에요' : '음성 파일 가져와서 받아쓰기'}
+      hint={error ?? 'm4a, mp3, 동영상 등을 골라요. 원래 파일은 그대로예요.'}
+      disabled={busy}
+      onPress={() => void pick()}
+    />
   );
 }

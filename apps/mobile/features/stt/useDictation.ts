@@ -24,6 +24,7 @@ export type DictationState =
       preview: string;
       backlog: number;
       level: number;
+      paused: boolean;
     }
   | { phase: 'transcribing'; ratio: number }
   | { phase: 'done'; result: SttResult }
@@ -58,7 +59,15 @@ export function useDictation(
   const start = useCallback(async () => {
     try {
       current.current = await startDictation(model, latest.current);
-      setState({ phase: 'recording', seconds: 0, partial: '', preview: '', backlog: 0, level: 0 });
+      setState({
+        phase: 'recording',
+        seconds: 0,
+        partial: '',
+        preview: '',
+        backlog: 0,
+        level: 0,
+        paused: false,
+      });
     } catch (e) {
       setState({ phase: 'error', message: messageOf(e) });
     }
@@ -97,6 +106,14 @@ export function useDictation(
     [model, transcribe],
   );
 
+  /** 잠시 멈추거나 이어서 녹음해요. */
+  const togglePause = useCallback(() => {
+    const d = current.current;
+    if (!d) return;
+    if (d.paused()) d.resume();
+    else d.pause();
+  }, []);
+
   const cancel = useCallback(async () => {
     await current.current?.cancel();
     current.current = null;
@@ -122,6 +139,7 @@ export function useDictation(
           preview: d.preview(),
           backlog: d.backlog(),
           level: d.level(),
+          paused: d.paused(),
         });
     }, 250);
     return () => clearInterval(timer);
@@ -138,5 +156,5 @@ export function useDictation(
   // 화면을 나가면 녹음을 버려요.
   useEffect(() => () => void current.current?.cancel(), []);
 
-  return { state, start, finish, resume, again, cancel, reset };
+  return { state, start, finish, resume, again, togglePause, cancel, reset };
 }

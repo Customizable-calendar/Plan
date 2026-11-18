@@ -7,6 +7,22 @@
 - **다른 기능에 주는 것**: `useDictation`, `startDictation`, `prewarmStt`, `isSttAvailable`, `leftoverSeconds`, `discardLeftover`, `MODELS`, `isDownloaded`
 - **받는 것**: 카드(cards)의 `findCardsFromTranscript` (받아쓰기가 끝나면 회의록에서 일정, 약속, 할 일을 찾아 확인 기다리는 카드로 넣어요)
 
+## 화면 (디자인 시스템 녹음 화면)
+
+디자인 시스템(note-app-design-system `0ea29f8`)의 녹음 시트와 녹음 노트를 따라요(클로바노트 참고, 디자인 시스템 `docs/benchmark`).
+
+- **고르기**: "말하기 시작", 마이크 확인, 음성 파일 가져오기, 녹음 원본 남기기, 남긴 녹음, 모델 목록. 상자 없이 구분선으로 나눠요(`AudioTools.tsx`).
+- **녹음 시트**: `RecordPanel`(시각, 파형, 받아쓰는 글, 북마크, 잠시 멈춤, 메모)을 `BottomSheet`에 넣어요. 시트를 누르면 `RecordMiniBar`로 줄고, 막대를 누르면 다시 열려요. 위쪽에는 받아쓴 글이 계속 보여요.
+  - 잠시 멈춤: 멈춘 동안 들어온 소리는 버리고 녹음 시간에도 안 세요(`Dictation.pause`).
+  - 북마크, 메모: 녹음 시각과 같이 남겨서 녹음 노트에 보여 줘요(이 화면에만 있고 저장은 안 해요).
+- **녹음 노트**(`NoteView.tsx`): `CountTabs` 3개
+  - 받아쓴 글: 문장 줄마다 `TranscriptBlock`(시각, 화자, 북마크, 메모). 녹음 원본이 있으면 단어를 누르면 그 자리부터 재생하고, 재생 중인 단어가 표시돼요(줄 안 단어 시각은 글자 비율로 짐작해요). 아래에 글로 공유, .txt, .srt 내보내기, 화자 나누기.
+  - 요약(`TranscriptAi.tsx`의 `SummaryTab`): `SummaryHeader`, `SummarySection`(요약, 다음 할 일, 양식으로 정리), `NextActionRow`로 카드 후보를 바로 확인, `AiNotice`.
+  - 메모: 녹음 중 북마크와 메모를 시각 순서로. 누르면 그 자리부터 재생해요.
+  - 녹음 원본이 있으면 아래에 `PlayerBar`(재생, 5초 앞뒤, 속도)가 있어요(`expo-audio`).
+- `@noteapp/ui` 녹음 컴포넌트에 누를 수 있게 props만 더했어요(모양은 그대로): `RecordPanel`의 `onCancel`, `onFinish`, `RecordMiniBar`의 `onFinish`, `PlayerBar`의 `onBack`, `onForward`, `onSpeed`, `onLocate`.
+- 버튼은 `@noteapp/ui`의 `Button`을 써요(`SmallButton`은 그 얇은 포장이에요). 화면 글자에 가운뎃점 같은 기호는 안 써요(AGENTS.md).
+
 ## 꼭 알아 둘 것
 
 - **Expo Go에서는 안 돼요.** `whisper.rn`과 녹음(`@fugood/react-native-audio-pcm-stream`)이 네이티브 모듈이에요. EAS 개발 빌드가 있어야 해요(#5). Expo Go에서는 `isSttAvailable()`이 `false`이고 화면에 안내만 나와요. 앱이 죽지는 않아요.
