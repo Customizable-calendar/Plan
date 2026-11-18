@@ -1,3 +1,4 @@
+import { timedLines, toSrt, toTimedText } from '@noteapp/extractor';
 import type { Card } from '@noteapp/shared';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -13,6 +14,7 @@ import {
 } from 'react-native';
 
 import { cardDetail, findCardsFromTranscript, typeLabel } from '@/features/cards';
+import { listTagCategories } from '@/lib/tag-categories';
 
 import { hasGeminiKey, organizeTranscript, saveGeminiKey } from './ai';
 import {
@@ -164,7 +166,17 @@ function Recorder({ model }: { model: SttModel }) {
     }
   }, []);
 
-  const { state, start, finish, resume, cancel, reset } = useDictation(model, findCards);
+  // 내 해시태그 카테고리 이름과 태그를 받아쓰기 예시로 줘서 내가 쓰는 말을 더 맞게 받아써요.
+  const [words, setWords] = useState<string[]>([]);
+  useEffect(() => {
+    listTagCategories()
+      .then((categories) => setWords(categories.flatMap((c) => [c.name, ...c.tags])))
+      .catch(() => {});
+  }, []);
+
+  const { state, start, finish, resume, cancel, reset } = useDictation(model, findCards, {
+    words,
+  });
 
   return (
     <View className="gap-4">
@@ -252,6 +264,16 @@ function Recorder({ model }: { model: SttModel }) {
               <SmallButton
                 label="공유"
                 onPress={() => Share.share({ message: state.result.text })}
+              />
+              <SmallButton
+                label="시각 붙여 공유"
+                onPress={() =>
+                  Share.share({ message: toTimedText(timedLines(state.result.segments)) })
+                }
+              />
+              <SmallButton
+                label="자막(SRT) 공유"
+                onPress={() => Share.share({ message: toSrt(timedLines(state.result.segments)) })}
               />
             </View>
           ) : null}

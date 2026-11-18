@@ -80,6 +80,11 @@ export interface SttResult {
   durationMs: number;
 }
 
+export interface DictationOptions {
+  /** 사용자가 자주 쓰는 말(해시태그·카테고리 이름 등). 예시로 줘서 더 맞게 받아써요. */
+  words?: string[];
+}
+
 export interface Dictation {
   /** 녹음한 길이(초) */
   seconds(): number;
@@ -249,7 +254,11 @@ function resultOf(segments: SttSegment[], durationMs: number): SttResult {
  * 조각을 하나씩 차례로 받아써요. 녹음하는 동안에도 뒤에서 계속 돌아요.
  * 받아쓴 조각은 글을 기기에 적고 소리 파일을 지워요.
  */
-function createTranscriber(context: Promise<WhisperContext>, segments: SttSegment[]) {
+function createTranscriber(
+  context: Promise<WhisperContext>,
+  segments: SttSegment[],
+  words: string[] = [],
+) {
   let chain: Promise<void> = Promise.resolve();
   // 미리 받아쓰기는 조각이 없을 때만 돌고, 조각이 오면 멈춰요(모델 하나를 같이 써요).
   let previewJob: { stop(): Promise<void> } | null = null;
@@ -272,7 +281,10 @@ function createTranscriber(context: Promise<WhisperContext>, segments: SttSegmen
     const job = (await context).transcribeData(toArrayBuffer(bytes), {
       language: 'ko',
       // 앞에서 받아쓴 글 끝을 같이 줘서 조각이 바뀌어도 말이 이어지게 해요.
-      prompt: promptFor(segments.map((s) => s.text)),
+      prompt: promptFor(
+        segments.map((s) => s.text),
+        words,
+      ),
       ...(careful ? { beamSize: BEAM_SIZE } : { bestOf: 2 }),
       onProgress: (p) => (inChunk = p / 100),
     });
@@ -330,7 +342,7 @@ function createTranscriber(context: Promise<WhisperContext>, segments: SttSegmen
         const previous = [...segments.map((s) => s.text), ...before];
         const job = ctx.transcribeData(toArrayBuffer(pcm), {
           language: 'ko',
-          prompt: promptFor(previous),
+          prompt: promptFor(previous, words),
         });
         previewJob = job;
         previewDone = job.promise.catch(() => {});
@@ -371,7 +383,10 @@ function createTranscriber(context: Promise<WhisperContext>, segments: SttSegmen
 }
 
 /** 녹음을 시작해요. 말하는 동안 조각마다 받아쓰고, 끝낼 때 finish()로 남은 걸 받아써요. */
-export async function startDictation(model: SttModel): Promise<Dictation> {
+export async function startDictation(
+  model: SttModel,
+  options: DictationOptions = {},
+): Promise<Dictation> {
   ensureAvailable();
   if (!isDownloaded(model)) throw new SttError('먼저 음성 인식 모델을 받아 주세요.');
   const release = hold();
@@ -388,7 +403,7 @@ export async function startDictation(model: SttModel): Promise<Dictation> {
   prepareVad();
 
   const segments: SttSegment[] = [];
-  const transcriber = createTranscriber(contextReady, segments);
+  const transcriber = createTranscriber(contextReady, segments, options.words);
   /** 여기(바이트)까지는 조각으로 받아써서 partial에 들어갔어요. */
   let confirmed = 0;
   const chunker = createChunker((chunk) => {
@@ -528,6 +543,7 @@ export function leftoverSeconds(): number | null {
 export async function resumeLeftover(
   model: SttModel,
   onProgress?: (ratio: number) => void,
+  options: DictationOptions = {},
 ): Promise<SttResult> {
   ensureAvailable();
   if (!isDownloaded(model)) throw new SttError('먼저 음성 인식 모델을 받아 주세요.');
@@ -536,7 +552,7 @@ export async function resumeLeftover(
   const durationMs = (leftoverSeconds() ?? 0) * 1000;
   const release = hold();
   try {
-    const transcriber = createTranscriber(contextFor(model), left.segments);
+    const transcriber = createTranscriber(contextFor(model), left.segments, options.words);
     for (const chunk of left.chunks) transcriber.add(Promise.resolve(chunk));
     await transcriber.idle(onProgress);
     clearSession();
