@@ -22,6 +22,7 @@ import {
 import { clearSession, leftover, type SavedChunk, saveChunk, saveSegments } from './session';
 import { cutAtGap, keepSpeech } from './speech';
 import { cleanSegment, type PreviewSegment, promptFor, settledCount, UNCLEAR } from './text';
+import { openLlamaQwen3 } from './llama';
 import { openQwen3 } from './sensevoice';
 import { prepareVad, releaseVad, speechIn } from './vad';
 import { startKeepAlive, stopKeepAlive, updateKeepAlive } from '@/modules/stt-native';
@@ -178,7 +179,9 @@ async function openContext(model: SttModel, words: string[] = []): Promise<Whisp
   // Qwen3는 whisper.rn 컨텍스트와 같은 모양으로 감싸서 나머지는 똑같이 써요(sensevoice.ts).
   if (model.engine !== 'whisper') {
     try {
-      return await openQwen3(model, words);
+      return await (model.engine === 'llama'
+        ? openLlamaQwen3(model, words)
+        : openQwen3(model, words));
     } catch (e) {
       if (e instanceof SttError) throw e;
       throw new SttError(`${model.label} 모델을 열지 못했어요. 모델을 지우고 다시 받아 주세요.`, e);
@@ -206,7 +209,9 @@ async function openContext(model: SttModel, words: string[] = []): Promise<Whisp
 
 /** 열어 둔 모델을 가리키는 이름. Qwen3는 내 단어(hotwords)를 열 때 넣어서, 단어가 바뀌면 다시 열어요. */
 const keyOf = (model: SttModel, words: string[]) =>
-  model.engine === 'qwen3' ? `${model.id}|${words.join(',')}` : model.id;
+  model.engine === 'qwen3' || model.engine === 'llama'
+    ? `${model.id}|${words.join(',')}`
+    : model.id;
 
 /** 모델을 열어요. 이미 열었거나 여는 중이면 그걸 같이 써요(두 번 열지 않아요). */
 function contextFor(model: SttModel, words: string[] = []): Promise<WhisperContext> {
@@ -230,14 +235,17 @@ function contextFor(model: SttModel, words: string[] = []): Promise<WhisperConte
 // sherpa-onnx(Qwen3)와 whisper.rn은 엔진이 달라서 같이 띄울 수 있어요. 받아 둔 whisper가 없으면 회색 글 없이 조각마다 글이 나와요.
 let previewLoaded: { id: string; context: Promise<WhisperContext> } | null = null;
 
+/** 회색 글을 따로 맡겨야 하는 엔진(정확하지만 느린 Qwen3) */
+const slowEngine = (model: SttModel) => model.engine === 'qwen3' || model.engine === 'llama';
+
 function previewModelFor(main: SttModel): SttModel | null {
-  if (main.engine !== 'qwen3') return null;
+  if (!slowEngine(main)) return null;
   return isDownloaded(PREVIEW_MODEL) ? PREVIEW_MODEL : null;
 }
 
 /** main으로 받아쓸 때 회색 글을 맡을 컨텍스트. undefined: main이 같이 해요, null: 회색 글 없어요 */
 function previewContextFor(main: SttModel): Promise<WhisperContext> | null | undefined {
-  if (main.engine !== 'qwen3') return undefined;
+  if (!slowEngine(main)) return undefined;
   const model = previewModelFor(main);
   if (!model) return null;
   if (previewLoaded?.id === model.id) return previewLoaded.context;

@@ -58,7 +58,10 @@
   - 새로 만드는 글 길이 기본값(128토큰)이면 28초 한국어가 잘려서 512로 늘렸어요.
   - 정확하지만 느려서, 말하는 중 회색 글은 whisper base가 따로 맡아요(Qwen3를 받으면 base도 같이 받아요). 엔진이 달라서 Qwen3가 조각을 받아쓰는 동안에도 회색 글이 나와요. base가 없으면 회색 글 없이 조각마다 글이 나와요.
   - 예전 whisper small, SenseVoice는 뺐어요. Qwen3보다 덜 정확하고, SenseVoice는 sherpa-onnx가 모델을 하나만 띄워서 Qwen3와 같이 못 써요. 받아 둔 파일은 처음 모델 목록을 볼 때 지워요(`removeRetiredModels`).
-  - 다음 단계: llama.rn(GGUF)으로 Qwen3-ASR 1.7B를 GPU(OpenCL)·NPU(Hexagon)로 돌려요. 네이티브라 APK를 새로 만들 때 해요. iOS는 Metal과 whisper CoreML 인코더로 같은 조합을 써요.
+- **Qwen3-ASR 1.7B (GPU·NPU 폰, 새 APK)**: LocalSTT 1등 모델 그대로예요. llama.rn(llama.cpp, MIT)으로 `ggml-org/Qwen3-ASR-1.7B-GGUF` Q8(본체 2.0GB + 소리 projector 340MB, 커밋 고정)을 돌려요(`llama.ts`).
+  - 모델 받기 전에 llama.rn 장치 목록(`getBackendDevicesInfo`)으로 GPU(OpenCL, Snapdragon Adreno 700+)나 NPU(Hexagon, 8 Gen 1+)가 있는지 보고, 있을 때만 목록에 보여요(`canAccelerate`). Exynos, MediaTek 폰은 CPU라 0.6B를 써요. iOS는 Metal이 늘 있어요.
+  - 28초씩 나눠 넣고, 내 단어는 시스템 글(context)로 줘요. 회색 글은 0.6B처럼 whisper가 따로 맡아요.
+  - Expo 플러그인(`llama.rn`, `enableOpenCLAndHexagon`)이 `libOpenCL.so`, `libcdsprpc.so`를 매니페스트에 넣어요. 이 PC(Windows)에서는 설치 스크립트의 tar가 안 돼서 `RNLLAMA_SKIP_POSTINSTALL=1`로 설치했어요. EAS·CI(Linux)는 그대로 받아요.
 - **받아쓴 글 다듬기**: 기본 양식에 "받아쓴 글 다듬기"를 넣었어요. 받아쓴 글만 팀 AI로 보내서 잘못 알아들은 글자, 띄어쓰기, 부호만 고쳐요(LocalSTT도 LLM 후보정을 권해요).
 - **화자 구분 (새 APK, Android)**: 받아쓴 뒤 "화자 나누기"를 누르면 녹음 원본으로 누가 말했는지 나눠서 "화자 1: …" 줄로 보여 줘요(`speakers.ts`, `SpeakerSplit.tsx`). pyannote 분할 3.0(MIT) + 3D-Speaker ERes2Net(Apache-2.0) 모델(45MB)을 처음 쓸 때 받아요. 사람 수는 알아서·2·3·4명 중에 골라요. 녹음 원본이 있어야 하고(원본 남기기·파일 가져오기), 30분 이하 녹음만 돼요. "화자 1"은 목소리로 나눈 것이라 실제 이름은 몰라요. 시각 붙은 글·자막·AI 정리에도 화자가 들어가요.
 - sherpa-onnx는 불러오는 순간 네이티브 모듈을 찾아서, `sherpa.ts`로만 불러요(없는 빌드에서는 안 불러요). 웹은 `sherpa.web.ts`가 대신해서 웹 묶음에 안 들어가요.
