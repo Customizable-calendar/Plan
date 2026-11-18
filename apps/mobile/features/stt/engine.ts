@@ -12,7 +12,7 @@ import {
   SAMPLE_RATE,
 } from './chunker';
 import { SttError } from './errors';
-import { isDownloaded, MODELS, modelFile, type SttModel } from './models';
+import { isDownloaded, modelFile, PREVIEW_MODEL, type SttModel } from './models';
 import {
   type Recording,
   type RecordingWriter,
@@ -22,7 +22,7 @@ import {
 import { clearSession, leftover, type SavedChunk, saveChunk, saveSegments } from './session';
 import { cutAtGap, keepSpeech } from './speech';
 import { cleanSegment, type PreviewSegment, promptFor, settledCount, UNCLEAR } from './text';
-import { openQwen3, openSenseVoice } from './sensevoice';
+import { openQwen3 } from './sensevoice';
 import { prepareVad, releaseVad, speechIn } from './vad';
 import { startKeepAlive, stopKeepAlive, updateKeepAlive } from '@/modules/stt-native';
 
@@ -175,10 +175,10 @@ function hold(): () => void {
 }
 
 async function openContext(model: SttModel, words: string[] = []): Promise<WhisperContext> {
-  // SenseVoice, Qwen3는 whisper.rn 컨텍스트와 같은 모양으로 감싸서 나머지는 똑같이 써요(sensevoice.ts).
+  // Qwen3는 whisper.rn 컨텍스트와 같은 모양으로 감싸서 나머지는 똑같이 써요(sensevoice.ts).
   if (model.engine !== 'whisper') {
     try {
-      return await (model.engine === 'qwen3' ? openQwen3(model, words) : openSenseVoice(model));
+      return await openQwen3(model, words);
     } catch (e) {
       if (e instanceof SttError) throw e;
       throw new SttError(`${model.label} 모델을 열지 못했어요. 모델을 지우고 다시 받아 주세요.`, e);
@@ -226,17 +226,13 @@ function contextFor(model: SttModel, words: string[] = []): Promise<WhisperConte
 }
 
 // ── 미리 받아쓰기(회색 글)만 하는 모델 ──
-// Qwen3는 정확하지만 느려서 말하는 중 회색 글은 받아 둔 whisper(base, 없으면 small)로 따로 보여 줘요.
+// Qwen3는 정확하지만 느려서 말하는 중 회색 글은 whisper base로 따로 보여 줘요(Qwen3를 받을 때 같이 받아요).
 // sherpa-onnx(Qwen3)와 whisper.rn은 엔진이 달라서 같이 띄울 수 있어요. 받아 둔 whisper가 없으면 회색 글 없이 조각마다 글이 나와요.
 let previewLoaded: { id: string; context: Promise<WhisperContext> } | null = null;
 
 function previewModelFor(main: SttModel): SttModel | null {
   if (main.engine !== 'qwen3') return null;
-  return (
-    ['base', 'small']
-      .map((id) => MODELS.find((m) => m.id === id))
-      .find((m): m is SttModel => !!m && isDownloaded(m)) ?? null
-  );
+  return isDownloaded(PREVIEW_MODEL) ? PREVIEW_MODEL : null;
 }
 
 /** main으로 받아쓸 때 회색 글을 맡을 컨텍스트. undefined: main이 같이 해요, null: 회색 글 없어요 */

@@ -4,12 +4,12 @@ import { SttError } from './errors';
 
 // 받아쓰기 모델은 앱에 넣지 않고 처음 쓸 때 기기에 받아요. 크기로 다 받았는지 확인해요.
 // 모델을 바꾸면 bytes도 같이 바꿔요.
-// - whisper(whisper.cpp ggml, MIT): 문장 부호·예시(prompt)를 잘 따라요. 무거워요.
-// - SenseVoice(sherpa-onnx, FunASR 모델 라이선스 1.1): 한 번에 통째로 받아써서 훨씬 빠르고,
-//   지어낸 말이 적고 부호도 찍어요. 예시(내 단어)는 못 써요. SpokenLog 참고.
-// - Qwen3-ASR 0.6B(sherpa-onnx, Apache-2.0): 로컬 모델 중 한국어가 제일 정확해요(LocalSTT 벤치마크).
-//   한 글자씩 만들어서 SenseVoice보다 느려요. 말하는 중 회색 글은 whisper base로 따로 보여 줘요.
-export type SttModelId = 'qwen3' | 'small' | 'base' | 'sensevoice';
+// - Qwen3-ASR 0.6B(sherpa-onnx, Apache-2.0): 기본. 로컬 모델 중 한국어가 제일 정확해요(LocalSTT 벤치마크).
+//   느려서 말하는 중 회색 글은 whisper base가 따로 보여 줘요. Qwen3를 받으면 base도 같이 받아요.
+// - whisper base(whisper.cpp ggml, MIT): 가벼워요. Qwen3의 회색 글을 맡고, 오래된 폰에서는 이걸로 받아써요.
+// 예전에 있던 whisper small, SenseVoice는 뺐어요(Qwen3보다 덜 정확하고, SenseVoice는 Qwen3와 같이 못 띄워요).
+// 받아 둔 파일은 RETIRED로 지워요.
+export type SttModelId = 'qwen3' | 'base';
 
 /** 받을 파일 하나 */
 export interface ModelFile {
@@ -28,15 +28,13 @@ export interface ModelPack {
 
 export interface SttModel extends ModelPack {
   id: SttModelId;
-  engine: 'whisper' | 'sensevoice' | 'qwen3';
+  engine: 'whisper' | 'qwen3';
 }
 
 const WHISPER_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/';
 // 고친 모델이 올라와도 받는 파일이 바뀌지 않게 커밋으로 고정해요.
 const QWEN3_URL =
   'https://huggingface.co/csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25/resolve/68818b2313fe77bd06f6a7c5068ff3ef59d02b8a/';
-const SENSE_VOICE_URL =
-  'https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/';
 
 export const MODELS: SttModel[] = [
   {
@@ -63,35 +61,57 @@ export const MODELS: SttModel[] = [
     ],
   },
   {
-    id: 'small',
-    engine: 'whisper',
-    label: '정확하게',
-    note: '한국어 추천, 190MB',
-    files: [
-      { name: 'ggml-small-q5_1.bin', url: `${WHISPER_URL}ggml-small-q5_1.bin`, bytes: 190_085_487 },
-    ],
-  },
-  {
-    id: 'sensevoice',
-    engine: 'sensevoice',
-    label: '아주 빠르게 (SenseVoice)',
-    note: '긴 회의에 적당, 내 단어 예시는 못 써요, 240MB',
-    dir: 'sense-voice-int8',
-    files: [
-      { name: 'model.int8.onnx', url: `${SENSE_VOICE_URL}model.int8.onnx`, bytes: 239_233_841 },
-      { name: 'tokens.txt', url: `${SENSE_VOICE_URL}tokens.txt`, bytes: 315_894 },
-    ],
-  },
-  {
     id: 'base',
     engine: 'whisper',
-    label: '빠르게',
-    note: '짧은 말에 적당, 60MB',
+    label: '가볍게 (whisper base)',
+    note: '오래된 폰에 적당, Qwen3 회색 글에도 써요, 60MB',
     files: [
       { name: 'ggml-base-q5_1.bin', url: `${WHISPER_URL}ggml-base-q5_1.bin`, bytes: 59_707_625 },
     ],
   },
 ];
+
+/** 회색 글을 맡는 가벼운 모델(whisper base) */
+export const PREVIEW_MODEL = MODELS.find((m) => m.id === 'base')!;
+
+/** 예전에 받을 수 있던 모델. 받아 둔 파일이 남아 있으면 지워서 공간을 돌려줘요. */
+const RETIRED: ModelPack[] = [
+  {
+    label: 'whisper small',
+    note: '',
+    files: [{ name: 'ggml-small-q5_1.bin', url: '', bytes: 190_085_487 }],
+  },
+  {
+    label: 'SenseVoice',
+    note: '',
+    dir: 'sense-voice-int8',
+    files: [
+      { name: 'model.int8.onnx', url: '', bytes: 239_233_841 },
+      { name: 'tokens.txt', url: '', bytes: 315_894 },
+    ],
+  },
+];
+
+/** 예전 모델 파일을 지워요. 지운 게 있으면 true */
+export function removeRetiredModels(): boolean {
+  let removed = false;
+  for (const pack of RETIRED) {
+    for (const f of pack.files) {
+      for (const name of [f.name, `${f.name}.part`, `${f.name}.piece`]) {
+        try {
+          const file = new File(packDir(pack), name);
+          if (file.exists) {
+            file.delete();
+            removed = true;
+          }
+        } catch {
+          // 못 지우면 다음에 다시 해 봐요.
+        }
+      }
+    }
+  }
+  return removed;
+}
 
 /**
  * 누가 말했는지 나누는(화자 구분) 모델. 받아쓴 뒤에 녹음 원본으로 돌려요(sherpa-onnx, SpokenLog 참고).
