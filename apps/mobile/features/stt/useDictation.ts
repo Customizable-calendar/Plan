@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   type Dictation,
+  type DictationOptions,
   MAX_SECONDS,
   resumeLeftover,
   type SttResult,
@@ -29,18 +30,25 @@ const KEEP_AWAKE_TAG = 'stt';
  * start() → 말하기(state.preview에 바로, 조각마다 state.partial에 글이 늘어나요) → finish() → state.result.text
  * resume(): 앱이 꺼져서 다 못 받아쓴 녹음을 이어서 받아써요(leftoverSeconds()로 있는지 봐요).
  * onDone: 받아쓰기가 끝나면 결과로 한 번 불러요. (최대 길이에서 알아서 끝나도요)
+ * options.words: 사용자가 자주 쓰는 말. 녹음을 시작할 때의 값을 써요.
  */
-export function useDictation(model: SttModel, onDone?: (result: SttResult) => void) {
+export function useDictation(
+  model: SttModel,
+  onDone?: (result: SttResult) => void,
+  options: DictationOptions = {},
+) {
   const [state, setState] = useState<DictationState>({ phase: 'idle' });
   const current = useRef<Dictation | null>(null);
   const done = useRef(onDone);
+  const latest = useRef(options);
   useEffect(() => {
     done.current = onDone;
-  }, [onDone]);
+    latest.current = options;
+  });
 
   const start = useCallback(async () => {
     try {
-      current.current = await startDictation(model);
+      current.current = await startDictation(model, latest.current);
       setState({ phase: 'recording', seconds: 0, partial: '', preview: '', backlog: 0 });
     } catch (e) {
       setState({ phase: 'error', message: messageOf(e) });
@@ -69,7 +77,7 @@ export function useDictation(model: SttModel, onDone?: (result: SttResult) => vo
   }, [transcribe]);
 
   const resume = useCallback(
-    () => transcribe((onProgress) => resumeLeftover(model, onProgress)),
+    () => transcribe((onProgress) => resumeLeftover(model, onProgress, latest.current)),
     [model, transcribe],
   );
 

@@ -15,20 +15,44 @@ const NAMES = '민성, 준호, 재민, 서현이 참석한 회의예요.';
 /** 앞 조각 끝에서 이만큼(글자)을 다음 조각 예시로 넘겨요. */
 const TAIL_CHARS = 60;
 
+/** 내 단어 줄 앞말. 이 말로 시작하는 글은 받아쓴 말이 아니라 예시가 그대로 나온 거예요. */
+const WORDS_LEAD = '자주 쓰는 말:';
+/** 내 단어 줄 길이 한도(글자). 예시 길이 한도 안에 들게 짧게 둬요. */
+const WORDS_CHARS = 50;
+
+/**
+ * 사용자가 자주 쓰는 말(해시태그·카테고리 이름 등)을 예시 한 줄로 만들어요(SimulStreaming의
+ * static prompt 참고). 앞에 둔 말일수록 먼저 넣고, 한도를 넘으면 뒤는 빼요. 없으면 빈 글이에요.
+ */
+export function wordsLine(words: string[]): string {
+  const picked: string[] = [];
+  let length = 0;
+  for (const raw of words) {
+    const word = raw.replace(/^#/, '').replace(/[_-]+/g, ' ').trim();
+    if (word.length < 2 || word.length > 15 || picked.includes(word)) continue;
+    if (length + word.length + 2 > WORDS_CHARS) break;
+    picked.push(word);
+    length += word.length + 2;
+  }
+  return picked.length ? `${WORDS_LEAD} ${picked.join(', ')}.` : '';
+}
+
 /**
  * 다음 조각을 받아쓸 때 줄 예시 문장. 앞에서 받아쓴 글 끝을 같이 주면
- * 조각이 바뀌어도 말투·이름·주제가 이어져요.
+ * 조각이 바뀌어도 말투·이름·주제가 이어져요. words: 사용자가 자주 쓰는 말(wordsLine)
  */
-export function promptFor(previous: string[]): string {
+export function promptFor(previous: string[], words: string[] = []): string {
+  const line = wordsLine(words);
   const joined = previous.slice(-4).join(' ').trim();
-  if (!joined) return PROMPT;
+  // 예시가 너무 길면 whisper가 앞부분부터 버려요. 그래서 꼭 남길 말을 뒤에 둬요.
+  if (!joined) return [PROMPT, line].filter(Boolean).join(' ');
   let tail = joined.slice(-TAIL_CHARS);
   if (tail.length < joined.length) {
     // 낱말 중간에서 시작하지 않게 첫 띄어쓰기 뒤부터 써요.
     const space = tail.indexOf(' ');
     if (space >= 0) tail = tail.slice(space + 1);
   }
-  return `${NAMES} ${tail}`;
+  return [NAMES, line, tail].filter(Boolean).join(' ');
 }
 
 /** 조용할 때 whisper가 자주 지어내는 말이에요(방송·영상 자막에서 배운 말). */
@@ -38,7 +62,8 @@ const MADE_UP =
 /** 예시 문장(PROMPT·NAMES)이 그대로 나온 것도 지어낸 말로 봐요. */
 const PROMPT_SENTENCES = [...PROMPT.split(/(?<=[.?])\s+/), NAMES].filter((t) => t.length >= 15);
 
-export const isMadeUp = (text: string) => MADE_UP.test(text) || PROMPT_SENTENCES.includes(text);
+export const isMadeUp = (text: string) =>
+  MADE_UP.test(text) || PROMPT_SENTENCES.includes(text) || text.startsWith(WORDS_LEAD);
 
 /**
  * 같은 말이 세 번 넘게 이어지면 한 번만 남겨요.
