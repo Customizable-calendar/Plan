@@ -3,7 +3,16 @@ import { Pressable, Text, View } from 'react-native';
 
 import { SPEECH_LEVEL } from './chunker';
 import { testMicrophone } from './engine';
-import { listRecordings, type Recording, recordingsBytes, removeRecording } from './recordings';
+import { hasDecoder } from '@/modules/stt-native';
+
+import {
+  importAudioFile,
+  listRecordings,
+  type Recording,
+  recordingsBytes,
+  removeRecording,
+} from './recordings';
+import { shareFile } from './share';
 import { SmallButton } from './SmallButton';
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -163,6 +172,10 @@ export function RecordingList({
           </Text>
           <SmallButton label="다시 받아쓰기" onPress={() => onAgain(r)} />
           <SmallButton
+            label="공유"
+            onPress={() => void shareFile(r.file, 'audio/wav').catch(() => {})}
+          />
+          <SmallButton
             label="지우기"
             onPress={() => {
               removeRecording(r.id);
@@ -171,6 +184,37 @@ export function RecordingList({
           />
         </View>
       ))}
+    </View>
+  );
+}
+
+/** 휴대폰에 있는 음성·동영상 파일을 가져와서 받아써요(Android 새 APK부터). */
+export function ImportAudio({ onImported }: { onImported: (recording: Recording) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!hasDecoder()) return null;
+
+  const pick = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const recording = await importAudioFile();
+      if (recording) onImported(recording);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <View className="gap-2">
+      <SmallButton
+        label={busy ? '파일을 바꾸는 중이에요' : '음성 파일 가져와서 받아쓰기'}
+        disabled={busy}
+        onPress={() => void pick()}
+      />
+      {error ? <Text className="text-[14px] text-destructive">{error}</Text> : null}
     </View>
   );
 }

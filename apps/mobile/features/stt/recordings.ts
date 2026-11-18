@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Directory, File, FileMode, Paths } from 'expo-file-system';
 
+import { decodeToWav } from '@/modules/stt-native';
+
 import { BYTES_PER_SECOND, SAMPLE_RATE } from './chunker';
 
 // 녹음 원본 남기기(선택, SpokenLog·Whispering 참고). (담당: B)
@@ -124,6 +126,30 @@ function fixHeader(file: File, dataBytes: number) {
   } catch {
     // 못 고쳐도 소리는 그대로 있어요.
   }
+}
+
+/**
+ * 음성·동영상 파일을 골라서 남긴 녹음으로 가져와요(SpokenLog 참고). 고르지 않으면 null이에요.
+ * OS 디코더로 16kHz 모노 WAV로 바꿔서 recordings 폴더에 둬요. 원래 파일은 그대로예요.
+ * Android 새 APK부터 돼요(modules/stt-native).
+ */
+export async function importAudioFile(): Promise<Recording | null> {
+  const picked = await File.pickFileAsync({ mimeTypes: ['audio/*', 'video/*'] });
+  if (picked.canceled) return null;
+  const id = String(Date.now());
+  const out = new File(dir(), `${id}.wav`);
+  try {
+    await decodeToWav(picked.result.uri, out.uri);
+  } catch (e) {
+    if (out.exists) out.delete();
+    throw new Error(e instanceof Error && e.message ? e.message : '이 파일은 가져오지 못했어요.');
+  }
+  const recording = listRecordings().find((r) => r.id === id);
+  if (!recording) {
+    if (out.exists) out.delete();
+    throw new Error('파일에 소리가 거의 없어요.');
+  }
+  return recording;
 }
 
 export function removeRecording(id: string): void {

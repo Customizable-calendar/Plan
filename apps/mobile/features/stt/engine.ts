@@ -23,6 +23,7 @@ import { clearSession, leftover, type SavedChunk, saveChunk, saveSegments } from
 import { cutAtGap, keepSpeech } from './speech';
 import { cleanSegment, type PreviewSegment, promptFor, settledCount } from './text';
 import { prepareVad, releaseVad, speechIn } from './vad';
+import { startKeepAlive, stopKeepAlive, updateKeepAlive } from '@/modules/stt-native';
 
 // 기기 안에서 받아써요(whisper.rn = whisper.cpp). 소리는 기기 밖으로 나가지 않아요.
 // 네이티브 모듈이라 Expo Go에는 없어요. 개발 빌드(EAS)에서만 돌아요.
@@ -219,6 +220,16 @@ async function askMicrophone() {
   const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
   if (result !== PermissionsAndroid.RESULTS.GRANTED)
     throw new SttError('마이크 권한이 없어요. 설정에서 마이크를 허용해 주세요.');
+}
+
+/** 녹음 중 알림(화면이 꺼져도 녹음을 이어 가요). Android 13부터는 알림 권한을 물어봐요. 안 줘도 녹음은 돼요. */
+async function askNotifications() {
+  if (Platform.OS !== 'android' || Number(Platform.Version) < 33) return;
+  try {
+    await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+  } catch {
+    // 알림 없이도 녹음은 돼요.
+  }
 }
 
 function decodeBase64(base64: string): Uint8Array {
@@ -450,6 +461,7 @@ export async function startDictation(
   const release = hold();
   try {
     await askMicrophone();
+    await askNotifications();
   } catch (e) {
     release();
     throw e;
@@ -486,6 +498,8 @@ export async function startDictation(
     }
   }
 
+  // 화면이 꺼지거나 앱을 나가도 녹음을 이어 가게 알림을 띄워요(Android 포그라운드 서비스, 새 APK부터).
+  startKeepAlive('받아쓰는 중', '화면이 꺼져도 녹음을 이어 가요. 눌러서 앱으로 돌아가요.');
   const closeMic = openMic((bytes) => {
     if (stopped || total >= MAX_SECONDS * BYTES_PER_SECOND) return;
     total += bytes.length;
@@ -503,6 +517,8 @@ export async function startDictation(
     if (stopped) return;
     stopped = true;
     level = 0;
+    // 녹음은 끝났지만 남은 부분을 받아쓰는 동안에도 앱이 멈추지 않게 알림은 남겨 둬요.
+    updateKeepAlive('받아쓰는 중', '녹음을 끝냈어요. 남은 부분을 받아쓰고 있어요.');
     await closeMic();
   };
 
@@ -538,6 +554,7 @@ export async function startDictation(
       original?.discard();
       await transcriber.cancel();
       clearSession();
+      stopKeepAlive();
       release();
     },
     async finish(onProgress) {
@@ -559,6 +576,7 @@ export async function startDictation(
           ...(original ? { recordingId: original.id } : {}),
         };
       } finally {
+        stopKeepAlive();
         release();
       }
     },
