@@ -10,7 +10,17 @@ export type { Assumption, ParsedEvent, ParseOptions, Recurrence, Span, Segment }
 export { cardHints, splitPieces } from './extract';
 export { markSpokenBreaks, punctuateSpoken, tidySpokenTitle } from './spoken';
 // 받아쓴 글 → 시각 붙은 줄, 시각 붙은 글, 자막(SRT)
-export { clockOf, timedLines, toSrt, toTimedText, type TimedText } from './transcript';
+export {
+  assignSpeakers,
+  clockOf,
+  type SpeakerTurn,
+  speakerLabel,
+  timedLines,
+  toSpeakerText,
+  toSrt,
+  toTimedText,
+  type TimedText,
+} from './transcript';
 
 export interface ExtractOptions {
   /** "내일", "다음 주" 같은 표현을 계산할 기준 시각 */

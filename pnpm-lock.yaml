@@ -44,6 +44,9 @@ importers:
       '@react-native-async-storage/async-storage':
         specifier: 2.2.0
         version: 2.2.0(react-native@0.88.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))
+      '@siteed/sherpa-onnx.rn':
+        specifier: 2.0.1
+        version: 2.0.1(react-native@0.88.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
       '@supabase/supabase-js':
         specifier: ~2.118.0
         version: 2.118.0(@opentelemetry/api@1.10.0)
@@ -1795,6 +1798,12 @@ packages:
   '@sinclair/typebox@0.27.12':
     resolution: {integrity: sha512-hhyNJ+nbR6ZR7pToHvllEFun9TL0sbL+tk/ON75lo+Xas054uez98qRbsuNt7MBCyZKK4+8Yli/OAGZhmfBZ/g==}
 
+  '@siteed/sherpa-onnx.rn@2.0.1':
+    resolution: {integrity: sha512-afCUVgnbBL880h9qc0tH39eaMuSJpfkdR3d0lO2BX7zK94yAt7OGqLT6p54nPxP1U5LcUri57vR5cA2UKIpAmg==}
+    peerDependencies:
+      react: '*'
+      react-native: '*'
+
   '@stablelib/base64@1.0.1':
     resolution: {integrity: sha512-1bnPQqSxSuc3Ii6MhBysoWCg58j97aUjuCSZrGSmDxNqtytIi0k8utUenAwTZN4V5mXXYGsVUI9zeBqy+jBOSQ==}
 
@@ -2108,6 +2117,10 @@ packages:
     resolution: {integrity: sha512-oJlA3XiRm7Cyk6qFD2Jn8ak9B7jSy0qy00ADO3+8dpT0LSjFihQYv4C02LFCSYJV3Q37xYwwRy5m+IpIiUzqWw==}
     engines: {node: '>=0.4.0'}
     hasBin: true
+
+  adm-zip@0.5.18:
+    resolution: {integrity: sha512-ufJnssQGbxzLNS1Ho9bCtX4rQKCCvoVuDLHoJyc3F9dOGDB4BkWs2Ci0kv53lqocAEQ/Cbi+I2XCsNYGqVYqng==}
+    engines: {node: '>=12.0'}
 
   agent-base@7.1.4:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
@@ -5651,7 +5664,7 @@ snapshots:
       2g: 1.0.1(typescript@6.0.3)
       '@expo/code-signing-certificates': 0.0.7
       '@expo/config': 58.0.8(typescript@6.0.3)
-      '@expo/config-plugins': 58.0.10(typescript@6.0.3)
+      '@expo/config-plugins': 58.0.13(typescript@6.0.3)
       '@expo/devcert': 1.2.2
       '@expo/env': 2.5.3
       '@expo/image-utils': 0.12.5(typescript@6.0.3)
@@ -5667,7 +5680,7 @@ snapshots:
       '@expo/platforms': 58.0.1
       '@expo/plist': 0.10.2
       '@expo/prebuild-config': 58.0.16(typescript@6.0.3)
-      '@expo/require-utils': 58.0.4(typescript@6.0.3)
+      '@expo/require-utils': 58.0.6(typescript@6.0.3)
       '@expo/router-server': 58.0.17(@expo/metro-runtime@58.0.15)(expo-constants@58.0.13)(expo-font@58.0.10)(expo-router@58.0.26)(expo-server@58.0.6)(expo@58.0.19)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@expo/schema-utils': 58.0.2
       '@expo/spawn-async': 1.8.0
@@ -5737,7 +5750,7 @@ snapshots:
       '@expo/config-types': 58.0.3
       '@expo/json-file': 11.2.1
       '@expo/plist': 0.10.2
-      '@expo/require-utils': 58.0.4(typescript@6.0.3)
+      '@expo/require-utils': 58.0.6(typescript@6.0.3)
       '@expo/sdk-runtime-versions': 1.0.1
       chalk: 4.1.2
       debug: 4.4.3
@@ -5773,11 +5786,11 @@ snapshots:
 
   '@expo/config@58.0.8(typescript@6.0.3)':
     dependencies:
-      '@expo/config-plugins': 58.0.10(typescript@6.0.3)
+      '@expo/config-plugins': 58.0.13(typescript@6.0.3)
       '@expo/config-types': 58.0.3
       '@expo/json-file': 11.2.1
       '@expo/platforms': 58.0.1
-      '@expo/require-utils': 58.0.4(typescript@6.0.3)
+      '@expo/require-utils': 58.0.6(typescript@6.0.3)
       deepmerge: 4.3.1
       getenv: 2.0.0
       glob: 13.0.6
@@ -5855,7 +5868,7 @@ snapshots:
 
   '@expo/inline-modules@0.2.7(typescript@6.0.3)':
     dependencies:
-      '@expo/config-plugins': 58.0.10(typescript@6.0.3)
+      '@expo/config-plugins': 58.0.13(typescript@6.0.3)
     transitivePeerDependencies:
       - supports-color
       - typescript
@@ -5897,7 +5910,7 @@ snapshots:
       '@expo/json-file': 11.2.1
       '@expo/metro': 58.0.0
       '@expo/platforms': 58.0.1
-      '@expo/require-utils': 58.0.4(typescript@6.0.3)
+      '@expo/require-utils': 58.0.6(typescript@6.0.3)
       '@expo/spawn-async': 1.8.0
       '@jridgewell/gen-mapping': 0.3.13
       '@jridgewell/remapping': 2.3.5
@@ -6005,7 +6018,7 @@ snapshots:
   '@expo/prebuild-config@58.0.16(typescript@6.0.3)':
     dependencies:
       '@expo/config': 58.0.8(typescript@6.0.3)
-      '@expo/config-plugins': 58.0.10(typescript@6.0.3)
+      '@expo/config-plugins': 58.0.13(typescript@6.0.3)
       '@expo/config-types': 58.0.3
       '@expo/image-utils': 0.12.5(typescript@6.0.3)
       '@expo/json-file': 11.2.1
@@ -6726,6 +6739,19 @@ snapshots:
 
   '@sinclair/typebox@0.27.12': {}
 
+  '@siteed/sherpa-onnx.rn@2.0.1(react-native@0.88.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)(typescript@6.0.3)':
+    dependencies:
+      '@expo/config-plugins': 58.0.13(typescript@6.0.3)
+      adm-zip: 0.5.18
+      node-fetch: 2.7.0
+      progress: 2.0.3
+      react: 19.3.0
+      react-native: 0.88.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0)
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+      - typescript
+
   '@stablelib/base64@1.0.1': {}
 
   '@supabase/auth-js@2.118.0':
@@ -7032,6 +7058,8 @@ snapshots:
       acorn: 8.19.0
 
   acorn@8.19.0: {}
+
+  adm-zip@0.5.18: {}
 
   agent-base@7.1.4: {}
 
@@ -8028,7 +8056,7 @@ snapshots:
   expo-modules-autolinking@58.0.15(typescript@6.0.3):
     dependencies:
       '@expo/platforms': 58.0.1
-      '@expo/require-utils': 58.0.4(typescript@6.0.3)
+      '@expo/require-utils': 58.0.6(typescript@6.0.3)
       '@expo/spawn-async': 1.8.0
       chalk: 4.1.2
       commander: 7.2.0
