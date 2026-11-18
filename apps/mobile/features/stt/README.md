@@ -53,6 +53,14 @@
 - **화면이 꺼져도 녹음 (Android)**: 녹음하는 동안 "받아쓰는 중" 알림을 띄워요(포그라운드 서비스, 마이크 종류, `modules/stt-native`). 화면이 꺼지거나 앱을 나가도 녹음과 받아쓰기를 이어 가요. 녹음을 끝내도 남은 부분을 다 받아쓸 때까지 알림이 남아요. Android 13부터는 처음에 알림 권한을 물어봐요(안 줘도 녹음은 돼요). 화면을 켜 두는 것(`expo-keep-awake`)도 그대로예요. iOS 앱은 아직 안 만들어서 iOS 백그라운드 녹음은 안 해요.
 - **음성 파일 가져오기 (Android)**: "음성 파일 가져와서 받아쓰기"로 m4a·mp3·aac·ogg·mp4 등을 골라요. OS 디코더(MediaCodec)로 16kHz 모노 WAV로 바꿔서 남긴 녹음 목록에 넣고 바로 받아써요(`importAudioFile`, `decodeToWav`). 원래 파일은 그대로예요.
 - **파일로 내보내기**: "시각 붙여 공유"는 `.txt`, "자막(SRT) 공유"는 `.srt` 파일로, 남긴 녹음은 `.wav`로 공유해요(`expo-sharing`, `share.ts`). 파일 공유가 안 되는 곳에서는 글로 공유해요.
+- **Qwen3-ASR 엔진 (기본 추천, sherpa-onnx가 든 APK)**: 로컬 모델 중 한국어가 제일 정확해서 골랐어요. LocalSTT 한국어 강의 벤치마크 CER(낮을수록 좋음)은 Qwen3-ASR-1.7B 5.60, Whisper large-v3-turbo 7.76, Alt(Lightning-SimulWhisper) 7.94예요. 앱에는 sherpa-onnx 공식 0.6B int8(약 940MB, `csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25`, 커밋 고정)을 넣었어요(`sensevoice.ts`의 `openQwen3`).
+  - 한 번에 28초까지 넣어요(LocalSTT와 같아요). 더 긴 조각은 비슷한 길이로 나눠서 받아써요(`splitPcm`).
+  - 내 단어(해시태그 등)는 hotwords로 줘요. 단어가 바뀌면 모델을 다시 열어요.
+  - 새로 만드는 글 길이 기본값(128토큰)이면 28초 한국어가 잘려서 512로 늘렸어요.
+  - 정확하지만 느려서, 말하는 중 회색 글은 받아 둔 whisper(base, 없으면 small)가 따로 맡아요. 엔진이 달라서 Qwen3가 조각을 받아쓰는 동안에도 회색 글이 나와요. 받아 둔 whisper가 없으면 회색 글 없이 조각마다 글이 나와요.
+  - sherpa-onnx는 받아쓰기 모델을 하나만 띄워서 SenseVoice와 Qwen3를 같이 못 써요.
+  - 다음 단계: llama.rn(GGUF)으로 Qwen3-ASR 1.7B를 GPU(OpenCL)·NPU(Hexagon)로 돌려요. 네이티브라 APK를 새로 만들 때 해요. iOS는 Metal과 whisper CoreML 인코더로 같은 조합을 써요.
+- **받아쓴 글 다듬기**: 기본 양식에 "받아쓴 글 다듬기"를 넣었어요. 받아쓴 글만 팀 AI로 보내서 잘못 알아들은 글자, 띄어쓰기, 부호만 고쳐요(LocalSTT도 LLM 후보정을 권해요).
 - **SenseVoice 엔진 (새 APK, Android)**: whisper처럼 한 글자씩 이어 만들지 않고 한 번에 통째로 받아써서 훨씬 빨라요(SpokenLog 참고). `@siteed/sherpa-onnx.rn`(MIT)로 기기 안에서 돌려요. 엔진은 whisper.rn 컨텍스트와 같은 모양으로 감싸서(`sensevoice.ts`) 조각 나누기·VAD·이어서 받아쓰기는 그대로 써요. 문장마다 시각은 안 줘서 조각 하나가 한 덩어리예요. 모델은 FunASR 모델 라이선스 1.1(출처·이름 표시)이에요.
 - **화자 구분 (새 APK, Android)**: 받아쓴 뒤 "화자 나누기"를 누르면 녹음 원본으로 누가 말했는지 나눠서 "화자 1: …" 줄로 보여 줘요(`speakers.ts`, `SpeakerSplit.tsx`). pyannote 분할 3.0(MIT) + 3D-Speaker ERes2Net(Apache-2.0) 모델(45MB)을 처음 쓸 때 받아요. 사람 수는 알아서·2·3·4명 중에 골라요. 녹음 원본이 있어야 하고(원본 남기기·파일 가져오기), 30분 이하 녹음만 돼요. "화자 1"은 목소리로 나눈 것이라 실제 이름은 몰라요. 시각 붙은 글·자막·AI 정리에도 화자가 들어가요.
 - sherpa-onnx는 불러오는 순간 네이티브 모듈을 찾아서, `sherpa.ts`로만 불러요(없는 빌드에서는 안 불러요). 웹은 `sherpa.web.ts`가 대신해서 웹 묶음에 안 들어가요.

@@ -12,7 +12,7 @@ import {
   SAMPLE_RATE,
 } from './chunker';
 import { SttError } from './errors';
-import { isDownloaded, modelFile, type SttModel } from './models';
+import { isDownloaded, MODELS, modelFile, type SttModel } from './models';
 import {
   type Recording,
   type RecordingWriter,
@@ -22,7 +22,7 @@ import {
 import { clearSession, leftover, type SavedChunk, saveChunk, saveSegments } from './session';
 import { cutAtGap, keepSpeech } from './speech';
 import { cleanSegment, type PreviewSegment, promptFor, settledCount, UNCLEAR } from './text';
-import { openSenseVoice } from './sensevoice';
+import { openQwen3, openSenseVoice } from './sensevoice';
 import { prepareVad, releaseVad, speechIn } from './vad';
 import { startKeepAlive, stopKeepAlive, updateKeepAlive } from '@/modules/stt-native';
 
@@ -174,14 +174,14 @@ function hold(): () => void {
   };
 }
 
-async function openContext(model: SttModel): Promise<WhisperContext> {
-  // SenseVoice는 whisper.rn 컨텍스트와 같은 모양으로 감싸서 나머지는 똑같이 써요(sensevoice.ts).
-  if (model.engine === 'sensevoice') {
+async function openContext(model: SttModel, words: string[] = []): Promise<WhisperContext> {
+  // SenseVoice, Qwen3는 whisper.rn 컨텍스트와 같은 모양으로 감싸서 나머지는 똑같이 써요(sensevoice.ts).
+  if (model.engine !== 'whisper') {
     try {
-      return await openSenseVoice(model);
+      return await (model.engine === 'qwen3' ? openQwen3(model, words) : openSenseVoice(model));
     } catch (e) {
       if (e instanceof SttError) throw e;
-      throw new SttError('SenseVoice 모델을 열지 못했어요. 모델을 지우고 다시 받아 주세요.', e);
+      throw new SttError(`${model.label} 모델을 열지 못했어요. 모델을 지우고 다시 받아 주세요.`, e);
     }
   }
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -204,15 +204,20 @@ async function openContext(model: SttModel): Promise<WhisperContext> {
   }
 }
 
+/** 열어 둔 모델을 가리키는 이름. Qwen3는 내 단어(hotwords)를 열 때 넣어서, 단어가 바뀌면 다시 열어요. */
+const keyOf = (model: SttModel, words: string[]) =>
+  model.engine === 'qwen3' ? `${model.id}|${words.join(',')}` : model.id;
+
 /** 모델을 열어요. 이미 열었거나 여는 중이면 그걸 같이 써요(두 번 열지 않아요). */
-function contextFor(model: SttModel): Promise<WhisperContext> {
-  if (loaded?.id === model.id) return loaded.context;
+function contextFor(model: SttModel, words: string[] = []): Promise<WhisperContext> {
+  const key = keyOf(model, words);
+  if (loaded?.id === key) return loaded.context;
   const previous = loaded?.context;
   const context = (async () => {
     await previous?.then((c) => c.release()).catch(() => {});
-    return openContext(model);
+    return openContext(model, words);
   })();
-  const entry = { id: model.id, context };
+  const entry = { id: key, context };
   loaded = entry;
   context.catch(() => {
     if (loaded === entry) loaded = null; // 다음에 다시 열어 보게 해요
@@ -220,13 +225,48 @@ function contextFor(model: SttModel): Promise<WhisperContext> {
   return context;
 }
 
+// ── 미리 받아쓰기(회색 글)만 하는 모델 ──
+// Qwen3는 정확하지만 느려서 말하는 중 회색 글은 받아 둔 whisper(base, 없으면 small)로 따로 보여 줘요.
+// sherpa-onnx(Qwen3)와 whisper.rn은 엔진이 달라서 같이 띄울 수 있어요. 받아 둔 whisper가 없으면 회색 글 없이 조각마다 글이 나와요.
+let previewLoaded: { id: string; context: Promise<WhisperContext> } | null = null;
+
+function previewModelFor(main: SttModel): SttModel | null {
+  if (main.engine !== 'qwen3') return null;
+  return (
+    ['base', 'small']
+      .map((id) => MODELS.find((m) => m.id === id))
+      .find((m): m is SttModel => !!m && isDownloaded(m)) ?? null
+  );
+}
+
+/** main으로 받아쓸 때 회색 글을 맡을 컨텍스트. undefined: main이 같이 해요, null: 회색 글 없어요 */
+function previewContextFor(main: SttModel): Promise<WhisperContext> | null | undefined {
+  if (main.engine !== 'qwen3') return undefined;
+  const model = previewModelFor(main);
+  if (!model) return null;
+  if (previewLoaded?.id === model.id) return previewLoaded.context;
+  const previous = previewLoaded?.context;
+  const context = (async () => {
+    await previous?.then((c) => c.release()).catch(() => {});
+    return openContext(model);
+  })();
+  const entry = { id: model.id, context };
+  previewLoaded = entry;
+  context.catch(() => {
+    if (previewLoaded === entry) previewLoaded = null;
+  });
+  return context;
+}
+
 /**
  * 받아쓰기 화면을 열 때 모델과 말소리 감지를 미리 띄워 둬요. 녹음 버튼을 누르면 바로 받아써요.
  * 안 쓰면 몇 분 뒤 알아서 닫아요. 못 열면 조용히 넘어가고, 녹음할 때 다시 열면서 알려 줘요.
+ * words: 내 단어. Qwen3는 열 때 넣어요.
  */
-export function prewarmStt(model: SttModel): void {
+export function prewarmStt(model: SttModel, words: string[] = []): void {
   if (!isSttAvailable() || !isDownloaded(model)) return;
-  contextFor(model).catch(() => {});
+  contextFor(model, words).catch(() => {});
+  previewContextFor(model)?.catch(() => {});
   prepareVad();
   scheduleIdleRelease();
 }
@@ -321,7 +361,11 @@ function createTranscriber(
   context: Promise<WhisperContext>,
   segments: SttSegment[],
   words: string[] = [],
+  /** 회색 글만 맡는 컨텍스트. undefined면 context가 같이 하고, null이면 회색 글을 안 만들어요. */
+  previewContext?: Promise<WhisperContext> | null,
 ) {
+  // 회색 글을 다른 엔진이 맡으면 조각을 받아쓰는 동안에도 같이 돌아요.
+  const separatePreview = previewContext != null;
   let chain: Promise<void> = Promise.resolve();
   // 미리 받아쓰기는 조각이 없을 때만 돌고, 조각이 오면 멈춰요(모델 하나를 같이 써요).
   let previewJob: { stop(): Promise<void> } | null = null;
@@ -375,8 +419,10 @@ function createTranscriber(
     const chunk = await saved;
     if (!chunk) return; // 말소리가 없는 조각
     const bytes = await chunk.file.bytes();
-    await previewJob?.stop().catch(() => {});
-    await previewDone;
+    if (!separatePreview) {
+      await previewJob?.stop().catch(() => {});
+      await previewDone;
+    }
     let found = await transcribeOnce(chunk, bytes, true);
     if (found === null) return;
     // 문장으로 못 알아들었으면 들은 걸 버리지 않아요.
@@ -430,9 +476,11 @@ function createTranscriber(
      * 받아쓸 조각이 있거나 이미 돌고 있으면 null이에요.
      */
     async preview(pcm: Uint8Array, before: string[]): Promise<PreviewSegment[] | null> {
-      if (queued > done || cancelled || previewJob) return null;
-      const ctx = await context;
-      if (queued > done || cancelled || previewJob) return null;
+      if (previewContext === null) return null;
+      const busy = () => cancelled || previewJob !== null || (!separatePreview && queued > done);
+      if (busy()) return null;
+      const ctx = await (previewContext ?? context);
+      if (busy()) return null;
       try {
         const previous = [...segments.map((s) => s.text), ...before];
         const job = ctx.transcribeData(toArrayBuffer(pcm), {
@@ -531,12 +579,14 @@ export async function startDictation(
   }
   clearSession(); // 이어서 받아쓸 녹음이 있으면 화면에서 먼저 물어봐요.
   // 화면에서 미리 열어 뒀으면 그걸 써요. 아니면 녹음하는 동안 열어요.
-  const contextReady = contextFor(model);
+  const contextReady = contextFor(model, options.words);
   contextReady.catch(() => {});
+  const previewReady = previewContextFor(model);
+  previewReady?.catch(() => {});
   prepareVad();
 
   const segments: SttSegment[] = [];
-  const transcriber = createTranscriber(contextReady, segments, options.words);
+  const transcriber = createTranscriber(contextReady, segments, options.words, previewReady);
   /** 여기(바이트)까지는 조각으로 받아써서 partial에 들어갔어요. */
   let confirmed = 0;
   const chunker = createChunker((chunk) => {
@@ -727,7 +777,11 @@ export async function resumeLeftover(
   const durationMs = (leftoverSeconds() ?? 0) * 1000;
   const release = hold();
   try {
-    const transcriber = createTranscriber(contextFor(model), left.segments, options.words);
+    const transcriber = createTranscriber(
+      contextFor(model, options.words),
+      left.segments,
+      options.words,
+    );
     for (const chunk of left.chunks) transcriber.add(Promise.resolve(chunk));
     await transcriber.idle(onProgress);
     clearSession();
@@ -759,7 +813,11 @@ export async function transcribeRecording(
     clearSession();
     prepareVad();
     const segments: SttSegment[] = [];
-    const transcriber = createTranscriber(contextFor(model), segments, options.words);
+    const transcriber = createTranscriber(
+      contextFor(model, options.words),
+      segments,
+      options.words,
+    );
     const total = Math.max(0, recording.file.size - WAV_HEADER_BYTES);
     let confirmed = 0;
     const chunker = createChunker((chunk) => {
@@ -822,6 +880,9 @@ export async function releaseStt(): Promise<void> {
   cancelIdleRelease();
   await releaseVad();
   const context = loaded?.context;
+  const preview = previewLoaded?.context;
   loaded = null;
+  previewLoaded = null;
   await context?.then((c) => c.release()).catch(() => {});
+  await preview?.then((c) => c.release()).catch(() => {});
 }

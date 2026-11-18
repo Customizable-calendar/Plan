@@ -74,11 +74,6 @@ function SttMain() {
     return (ready.find((r) => r.model.id === picked) ?? ready[0])?.model;
   }, [rows, picked]);
 
-  // 고른 모델을 미리 띄워 둬요. 녹음 버튼을 누르면 바로 받아써요(안 쓰면 몇 분 뒤 닫아요).
-  useEffect(() => {
-    if (model) prewarmStt(model);
-  }, [model]);
-
   const models = (
     <View>
       <Text className="pb-2 text-[13px] font-bold text-muted-foreground">음성 인식 모델</Text>
@@ -202,6 +197,12 @@ function Recorder({ model, models }: { model: SttModel; models: ReactNode }) {
       .then((categories) => setWords(categories.flatMap((c) => [c.name, ...c.tags])))
       .catch(() => {});
   }, []);
+
+  // 고른 모델을 미리 띄워 둬요. 녹음 버튼을 누르면 바로 받아써요(안 쓰면 몇 분 뒤 닫아요).
+  // Qwen3는 내 단어를 열 때 넣어서 단어를 불러온 뒤에 띄워요.
+  useEffect(() => {
+    prewarmStt(model, words);
+  }, [model, words]);
 
   // 녹음 원본 남기기(이 기기 설정). 기본은 꺼져 있어요.
   const [keepAudio, setKeepAudioState] = useState(false);

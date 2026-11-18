@@ -23,8 +23,8 @@ export interface ModelRow {
 }
 
 // Expo Go에서도 파일은 볼 수 있지만, 받아도 못 쓰니 목록만 보여 줘요.
-// SenseVoice는 sherpa-onnx가 든 새 APK에서만 보여요.
-const usable = () => MODELS.filter((m) => m.engine !== 'sensevoice' || hasSherpa());
+// SenseVoice, Qwen3는 sherpa-onnx가 든 APK에서만 보여요.
+const usable = () => MODELS.filter((m) => m.engine === 'whisper' || hasSherpa());
 
 const scan = (): ModelRow[] =>
   usable().map((model) => ({
