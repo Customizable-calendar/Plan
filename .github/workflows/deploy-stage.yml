@@ -72,6 +72,11 @@ jobs:
     if: always() && needs.ready.outputs.app == 'true' && needs.supabase.result != 'failure'
     runs-on: ubuntu-latest
     environment: stage
+    outputs:
+      runtime: ${{ steps.native.outputs.runtime }}
+      needs_build: ${{ steps.native.outputs.needs_build }}
+      build_id: ${{ steps.build.outputs.id || steps.native.outputs.build_id }}
+      artifact_url: ${{ steps.native.outputs.artifact_url }}
     # 새 APK를 빌드하면 머지된 PR에 링크를 남겨요.
     permissions:
       contents: read
@@ -118,12 +123,14 @@ jobs:
           eas build --profile stage --platform android --non-interactive --no-wait --json > build.json
           id=$(node -e "console.log(require('./build.json')[0].id)")
           url="https://expo.dev/accounts/choengs-team/projects/noteapp/builds/$id"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
           echo "url=$url" >> "$GITHUB_OUTPUT"
           {
             echo "### 📦 stage APK를 새로 빌드해요"
-            echo "네이티브 부분이 바뀌어서 예전 APK는 이번 업데이트를 못 받아요. 15~20분 뒤 아래 링크에서 새로 깔아 주세요."
+            echo "네이티브 부분이 바뀌어서 예전 APK는 이번 업데이트를 못 받아요. 15~20분 뒤 아래 고정 링크에서 바로 받아 주세요."
             echo ""
-            echo "$url"
+            echo "- 고정 원탭 다운로드: https://github.com/${{ github.repository }}/releases/download/stage-latest/noteapp-stage.apk"
+            echo "- EAS 빌드 로그: $url"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: 머지된 PR에 새 APK 링크 남기기
         if: steps.native.outputs.needs_build == 'true'
@@ -133,7 +140,9 @@ jobs:
         run: |
           pr=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" -q '.[0].number' || true)
           if [ -n "$pr" ]; then
-            gh pr comment "$pr" -R "${{ github.repository }}" --body "📦 이 PR로 네이티브 부분이 바뀌어서 stage APK를 새로 빌드하고 있어요. 15~20분 뒤 새로 깔아 주세요 (예전 APK는 이 뒤의 업데이트를 못 받아요). $URL"
+            gh pr comment "$pr" -R "${{ github.repository }}" --body "📦 이 PR로 네이티브 부분이 바뀌어서 stage APK를 새로 빌드하고 있어요. 끝나면 고정 링크가 자동 갱신돼요.
+- 고정 원탭 다운로드: https://github.com/${{ github.repository }}/releases/download/stage-latest/noteapp-stage.apk
+- EAS 빌드 진행: $URL"
           fi
       # 아이폰은 이 웹 주소로 봐요(설치·컴퓨터 없이). 받아쓰기처럼 폰 네이티브가 필요한 건 웹에서 안 돼요.
       # 웹이 실패해도 앱 업데이트·APK 빌드는 그대로 가요.
@@ -150,4 +159,85 @@ jobs:
           {
             echo "### 🌐 웹 버전 (아이폰은 사파리로)"
             echo "https://$WEB_DOMAIN.expo.app"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # 고정 원탭 APK 다운로드 링크(GitHub Releases stage-latest)와 stage-latest.json을 최신으로 맞춰요.
+  # OTA·웹 배포가 끝난 뒤 별도 잡으로 돌아서 일반 배포 속도에 영향을 주지 않아요.
+  publish-apk:
+    needs: app
+    if: needs.app.result == 'success' && needs.app.outputs.runtime != ''
+    runs-on: ubuntu-latest
+    environment: stage
+    permissions:
+      contents: write
+    steps:
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: 최신 stage APK를 GitHub Release(stage-latest)에 올리기
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUNTIME: ${{ needs.app.outputs.runtime }}
+          BUILD_ID: ${{ needs.app.outputs.build_id }}
+          ARTIFACT_URL: ${{ needs.app.outputs.artifact_url }}
+        run: |
+          set -euo pipefail
+          # 이미 같은 runtimeVersion의 APK가 stage-latest에 올라가 있으면 건너뛰어요.
+          current=$(curl -fsSL "https://github.com/$REPO/releases/download/stage-latest/stage-latest.json" 2>/dev/null | node -e "const d = JSON.parse(require('fs').readFileSync(0,'utf8')); console.log(d.runtimeVersion || '')" 2>/dev/null || true)
+          if [ "$current" = "$RUNTIME" ]; then
+            echo "stage-latest가 이미 최신 runtimeVersion($RUNTIME)이에요."
+            exit 0
+          fi
+
+          url="$ARTIFACT_URL"
+          if [ -z "$url" ] && [ -n "$BUILD_ID" ]; then
+            echo "EAS 빌드($BUILD_ID)가 끝나길 기다려요..."
+            for i in $(seq 1 70); do
+              json=$(eas build:view "$BUILD_ID" --json --non-interactive)
+              status=$(node -e "console.log(JSON.parse(process.argv[1]).status || '')" "$json")
+              echo "[$i/70] status=$status"
+              if [ "$status" = "FINISHED" ]; then
+                url=$(node -e "console.log(JSON.parse(process.argv[1]).artifacts?.buildUrl || '')" "$json")
+                break
+              fi
+              if [ "$status" = "ERRORED" ] || [ "$status" = "CANCELED" ]; then
+                echo "EAS 빌드가 실패했어요: $status"
+                exit 1
+              fi
+              sleep 30
+            done
+          fi
+
+          if [ -z "$url" ]; then
+            echo "APK 다운로드 주소를 찾지 못했어요."
+            exit 1
+          fi
+
+          curl -fSL "$url" -o noteapp-stage.apk
+          cat > stage-latest.json <<EOF
+          {
+            "runtimeVersion": "$RUNTIME",
+            "buildId": "$BUILD_ID",
+            "updatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "apkUrl": "https://github.com/$REPO/releases/download/stage-latest/noteapp-stage.apk"
+          }
+          EOF
+
+          if ! gh release view stage-latest -R "$REPO" >/dev/null 2>&1; then
+            gh release create stage-latest -R "$REPO" \
+              --title "Stage 최신 APK" \
+              --notes "항상 최신 stage Android APK를 바로 받을 수 있는 고정 릴리스예요." \
+              --prerelease \
+              noteapp-stage.apk stage-latest.json
+          else
+            gh release upload stage-latest -R "$REPO" --clobber noteapp-stage.apk stage-latest.json
+            gh release edit stage-latest -R "$REPO" \
+              --notes "최신 runtimeVersion: \`$RUNTIME\` (갱신: $(date -u +%Y-%m-%dT%H:%M:%SZ)) | 원탭 다운로드: https://github.com/$REPO/releases/download/stage-latest/noteapp-stage.apk"
+          fi
+
+          {
+            echo "### 📦 고정 stage APK 링크가 갱신됐어요"
+            echo "https://github.com/$REPO/releases/download/stage-latest/noteapp-stage.apk"
           } >> "$GITHUB_STEP_SUMMARY"
