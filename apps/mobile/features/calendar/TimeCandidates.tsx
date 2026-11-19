@@ -15,6 +15,7 @@ import {
   timeLabel,
   type TimeSlot,
 } from './model';
+import { useResolvedCalendarTags } from './tagStore';
 
 type RangeScope = 'today' | 'tomorrow' | 'week' | 'target';
 type PickerMode = 'recommend' | 'manual';
@@ -58,6 +59,26 @@ export function TimeCandidates({
     [today],
   );
 
+  const rawTagItems = useMemo(
+    () => [
+      ...events.map((item) => ({ id: item.id, title: item.title })),
+      ...tasks.map((item) => ({ id: item.id, title: item.title })),
+    ],
+    [events, tasks],
+  );
+  const { byId: resolvedTagById } = useResolvedCalendarTags(rawTagItems);
+  const itemTagsById = useMemo(() => {
+    const map = new Map<string, readonly string[]>();
+    for (const [id, entry] of resolvedTagById.entries()) {
+      map.set(id, entry.tags);
+    }
+    return map;
+  }, [resolvedTagById]);
+  const targetTags = useMemo(
+    () => resolvedTagById.get(task.id)?.tags ?? [],
+    [resolvedTagById, task.id],
+  );
+
   const otherTasksAndEvents = useMemo(
     () => tasks.filter((item) => item.id !== task.id),
     [task.id, tasks],
@@ -79,6 +100,9 @@ export function TimeCandidates({
       now: openedAt,
       durationMinutes: 60,
       excludeTaskId: task.id,
+      targetTitle: task.title,
+      targetTags,
+      itemTagsById,
       limit: 1,
     });
     if (initialSlots.length > 0) {
@@ -115,8 +139,23 @@ export function TimeCandidates({
         durationMinutes,
         limit: scope === 'week' ? 6 : 4,
         excludeTaskId: task.id,
+        targetTitle: task.title,
+        targetTags,
+        itemTagsById,
       }),
-    [durationMinutes, events, openedAt, scope, targetDays, task.dueAt, task.id, tasks],
+    [
+      durationMinutes,
+      events,
+      itemTagsById,
+      openedAt,
+      scope,
+      targetDays,
+      targetTags,
+      task.dueAt,
+      task.id,
+      task.title,
+      tasks,
+    ],
   );
 
   const effectiveCandidate = useMemo(() => {
@@ -482,7 +521,16 @@ export function TimeCandidates({
 
             {mode === 'recommend' ? (
               <View className="gap-2">
-                <Text className="text-xs font-semibold text-muted-foreground">추천 시간 후보</Text>
+                <View className="gap-1">
+                  <Text className="text-xs font-semibold text-muted-foreground">
+                    추천 시간 후보
+                  </Text>
+                  {targetTags.length > 0 ? (
+                    <Text className="text-[11px] text-muted-foreground">
+                      분석 기준 태그: {targetTags.slice(0, 4).join(', ')}
+                    </Text>
+                  ) : null}
+                </View>
                 {candidates.length === 0 ? (
                   <View className="gap-2 rounded-xl border border-border bg-muted/40 p-3.5">
                     <Text className="text-sm font-semibold text-foreground">
@@ -501,7 +549,7 @@ export function TimeCandidates({
                           ? `${formatDayPill(slotDay, today, tomorrow)} ${timeLabel(slot.startAt)} ~ ${timeLabel(slot.endAt)}`
                           : `${timeLabel(slot.startAt)} ~ ${timeLabel(slot.endAt)}`;
                       const fit = slot.fit ?? 'ok';
-                      const score = fit === 'good' ? 92 : fit === 'ok' ? 78 : 62;
+                      const score = slot.score ?? (fit === 'good' ? 92 : fit === 'ok' ? 78 : 62);
                       return (
                         <SlotOption
                           key={slot.startAt}

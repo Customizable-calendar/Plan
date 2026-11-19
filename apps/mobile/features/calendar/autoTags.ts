@@ -1,7 +1,59 @@
 // 자연어 일정/할 일 제목에서 #해시태그를 자동으로 추출하는 순수 알고리즘 모듈이에요.
 // React Native나 Node(node --test) 양쪽에서 바로 불러올 수 있도록 런타임 외부 의존성을 두지 않아요.
 
+export type TagExtractionLevel = 1 | 2 | 3 | 4 | 5;
+
+export const DEFAULT_TAG_EXTRACTION_LEVEL: TagExtractionLevel = 3;
+
+export const TAG_LEVEL_CONFIG: Record<
+  TagExtractionLevel,
+  { label: string; shortLabel: string; summary: string; maxTags: number; minScore: number }
+> = {
+  1: {
+    label: '최소',
+    shortLabel: '최소',
+    summary: '가장 핵심인 키워드 1개만 추출해요',
+    maxTags: 1,
+    minScore: 1.8,
+  },
+  2: {
+    label: '적게',
+    shortLabel: '적게',
+    summary: '꼭 필요한 대표 태그 최대 2개만 남겨요',
+    maxTags: 2,
+    minScore: 1.45,
+  },
+  3: {
+    label: '보통',
+    shortLabel: '보통',
+    summary: '핵심 명사와 도메인 태그를 최대 3개 추출해요',
+    maxTags: 3,
+    minScore: 1.15,
+  },
+  4: {
+    label: '풍부하게',
+    shortLabel: '풍부',
+    summary: '세부 주제와 도메인 태그를 최대 5개 추출해요',
+    maxTags: 5,
+    minScore: 0.85,
+  },
+  5: {
+    label: '최대',
+    shortLabel: '최대',
+    summary: '하위 단어와 연관 분류까지 최대 7개 폭넓게 추출해요',
+    maxTags: 7,
+    minScore: 0.5,
+  },
+};
+
+export function normalizeTagExtractionLevel(raw: unknown): TagExtractionLevel {
+  const n = typeof raw === 'number' ? Math.round(raw) : Number(raw);
+  if (n === 1 || n === 2 || n === 3 || n === 4 || n === 5) return n;
+  return DEFAULT_TAG_EXTRACTION_LEVEL;
+}
+
 export interface AutoTagOptions {
+  level?: TagExtractionLevel;
   maxTags?: number;
   corpusFreq?: ReadonlyMap<string, number>;
   preferredTags?: readonly string[];
@@ -638,7 +690,9 @@ export function buildCorpusFrequency(
  * 4) 복합 태그 선택 시 중복 하위 토큰 제거
  */
 export function extractAutoHashtags(title: string, options: AutoTagOptions = {}): string[] {
-  const maxTags = Math.max(1, options.maxTags ?? 4);
+  const level = normalizeTagExtractionLevel(options.level ?? DEFAULT_TAG_EXTRACTION_LEVEL);
+  const cfg = TAG_LEVEL_CONFIG[level];
+  const maxTags = Math.max(1, options.maxTags ?? cfg.maxTags);
   const { cleanTitle, tags: explicitTags } = stripInlineHashtags(title);
 
   // 제목 전체가 `#태그`만으로 구성된 경우에는 명시적 태그만 돌려줘요.
@@ -720,20 +774,23 @@ export function extractAutoHashtags(title: string, options: AutoTagOptions = {})
     bumpScore(compound.tag, compoundScore);
   }
 
-  // 도메인 패싯 추론을 적용해 상위 분류 태그도 자연스럽게 연결해요.
+  // 추출 강도에 따라 도메인 패싯 추론 적용 폭을 조절해요 (1단계는 원문 키워드만 유지).
   const tokenSet = new Set([...allTokens, ...compounds.map((c) => c.tag)]);
-  for (const rule of DOMAIN_FACET_RULES) {
-    let hits = 0;
-    for (const kw of rule.keywords) {
-      if (tokenSet.has(kw)) hits += 1;
-    }
-    if (hits > 0) {
-      let facetScore = rule.minScore + (hits - 1) * 0.7;
-      const asTag = `#${rule.tag}`;
-      if (preferredSet.has(asTag)) facetScore += 1.5;
-      const corpusCount = options.corpusFreq?.get(asTag) ?? 0;
-      if (corpusCount > 1) facetScore += Math.min(1.2, Math.log1p(corpusCount) * 0.5);
-      bumpScore(rule.tag, facetScore);
+  if (level >= 2) {
+    for (const rule of DOMAIN_FACET_RULES) {
+      let hits = 0;
+      for (const kw of rule.keywords) {
+        if (tokenSet.has(kw)) hits += 1;
+      }
+      const allowFacet = level === 2 ? hits >= 2 || allTokens.length <= 1 : hits > 0;
+      if (allowFacet) {
+        let facetScore = rule.minScore + (hits - 1) * 0.7 + (level >= 4 ? 0.35 : 0);
+        const asTag = `#${rule.tag}`;
+        if (preferredSet.has(asTag)) facetScore += 1.5;
+        const corpusCount = options.corpusFreq?.get(asTag) ?? 0;
+        if (corpusCount > 1) facetScore += Math.min(1.2, Math.log1p(corpusCount) * 0.5);
+        bumpScore(rule.tag, facetScore);
+      }
     }
   }
 
@@ -746,56 +803,71 @@ export function extractAutoHashtags(title: string, options: AutoTagOptions = {})
     }
   }
 
-  const ranked = [...candidateScores.entries()]
-    .sort((a, b) => {
-      if (b[1] !== a[1]) return b[1] - a[1];
-      return a[0].localeCompare(b[0], 'ko');
-    })
-    .map(([key]) => key);
+  const rankedEntries = [...candidateScores.entries()].sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    return a[0].localeCompare(b[0], 'ko');
+  });
+  const ranked = rankedEntries.map(([key]) => key);
 
   const result: string[] = [];
   const usedTags = new Set<string>();
   const suppressedTokens = new Set<string>();
+  const suppressSubTokens = level < 5;
 
   for (const explicit of explicitTags) {
+    if (result.length >= maxTags) break;
     if (!usedTags.has(explicit)) {
       usedTags.add(explicit);
       result.push(explicit);
-      const parts = compoundPartsByTag.get(explicit.slice(1));
-      if (parts) {
-        suppressedTokens.add(parts[0]);
-        suppressedTokens.add(parts[1]);
+      if (suppressSubTokens) {
+        const parts = compoundPartsByTag.get(explicit.slice(1));
+        if (parts) {
+          suppressedTokens.add(parts[0]);
+          suppressedTokens.add(parts[1]);
+        }
       }
     }
   }
 
-  // 먼저 복합어 선택으로 가려질 하위 토큰 집합을 고득점 순서로 결정해요.
+  // 먼저 복합어 선택으로 가려질 하위 토큰 집합을 고득점 순서로 결정해요 (5단계에서는 하위 단어도 보존).
   const chosenCompoundParts = new Set<string>();
-  for (const key of ranked) {
-    if (result.length + chosenCompoundParts.size / 2 >= maxTags + 2) break;
-    const parts = compoundPartsByTag.get(key);
-    if (parts) {
-      chosenCompoundParts.add(parts[0]);
-      chosenCompoundParts.add(parts[1]);
+  if (suppressSubTokens) {
+    for (const key of ranked) {
+      if (result.length + chosenCompoundParts.size / 2 >= maxTags + 2) break;
+      const parts = compoundPartsByTag.get(key);
+      if (parts) {
+        chosenCompoundParts.add(parts[0]);
+        chosenCompoundParts.add(parts[1]);
+      }
     }
   }
 
-  for (const key of ranked) {
+  for (const [key, score] of rankedEntries) {
     if (result.length >= maxTags) break;
     const tag = normalizeHashtag(key);
     if (!tag || usedTags.has(tag)) continue;
 
     // 이미 선택되거나 상위 복합어에 흡수된 단일 하위 토큰은 중복을 줄이기 위해 건너뛰어요.
-    if (suppressedTokens.has(key) || (chosenCompoundParts.has(key) && !preferredSet.has(tag))) {
+    if (
+      suppressSubTokens &&
+      (suppressedTokens.has(key) || (chosenCompoundParts.has(key) && !preferredSet.has(tag)))
+    ) {
+      continue;
+    }
+
+    // 설정된 추출 강도 기준 점수 미만은 제외하되, 0개가 되지 않게 최상위 1개는 허용해요.
+    if (score < cfg.minScore && result.length > 0) {
       continue;
     }
 
     usedTags.add(tag);
     result.push(tag);
-    const parts = compoundPartsByTag.get(key);
-    if (parts) {
-      suppressedTokens.add(parts[0]);
-      suppressedTokens.add(parts[1]);
+    if (suppressSubTokens) {
+      const parts = compoundPartsByTag.get(key);
+      if (parts) {
+        suppressedTokens.add(parts[0]);
+        suppressedTokens.add(parts[1]);
+      }
     }
   }
 
