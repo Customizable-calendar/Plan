@@ -4,12 +4,11 @@ import { SttError } from './errors';
 
 // 받아쓰기 모델은 앱에 넣지 않고 처음 쓸 때 기기에 받아요. 크기로 다 받았는지 확인해요.
 // 모델을 바꾸면 bytes도 같이 바꿔요.
-// - Qwen3-ASR 0.6B(sherpa-onnx, Apache-2.0): 기본. 로컬 모델 중 한국어가 제일 정확해요(LocalSTT 벤치마크).
-//   느려서 말하는 중 회색 글은 whisper base가 따로 보여 줘요. Qwen3를 받으면 base도 같이 받아요.
-// - whisper base(whisper.cpp ggml, MIT): 가벼워요. Qwen3의 회색 글을 맡고, 오래된 폰에서는 이걸로 받아써요.
-// 예전에 있던 whisper small, SenseVoice는 뺐어요(Qwen3보다 덜 정확하고, SenseVoice는 Qwen3와 같이 못 띄워요).
-// 받아 둔 파일은 RETIRED로 지워요.
-export type SttModelId = 'qwen3' | 'base';
+// - whisper-large-v3-turbo 한국어 파인튜닝(whisper.cpp ggml q5_0, Apache-2.0): 기본.
+//   whisper.rn으로 바로 돌아가고(추가 네이티브 엔진 불필요) 한국어 회의·소음 환경에서도 정확해요.
+// - whisper base(whisper.cpp ggml, MIT): 가벼워요. 오래된 폰에서 빠르게 받아쓸 때 써요.
+// 예전에 있던 whisper small, SenseVoice, Qwen3-ASR 파일은 RETIRED로 지워서 공간을 돌려줘요.
+export type SttModelId = 'turbo-ko' | 'base';
 
 /** 받을 파일 하나 */
 export interface ModelFile {
@@ -33,38 +32,28 @@ export interface SttModel extends ModelPack {
 
 const WHISPER_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/';
 // 고친 모델이 올라와도 받는 파일이 바뀌지 않게 커밋으로 고정해요.
-const QWEN3_URL =
-  'https://huggingface.co/csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25/resolve/68818b2313fe77bd06f6a7c5068ff3ef59d02b8a/';
+const WHISPER_TURBO_KO_URL =
+  'https://huggingface.co/JoaoZaokk/whisper-large-v3-turbo-korean-ggml/resolve/c4f74b15c9d4e7889871c5450327b5fd1f13f059/';
 
 export const MODELS: SttModel[] = [
   {
-    id: 'qwen3',
-    engine: 'qwen3',
-    label: '가장 정확하게 (Qwen3)',
-    note: '한국어 제일 정확, 회의에 추천, 940MB',
-    dir: 'qwen3-asr-0.6b-int8',
+    id: 'turbo-ko',
+    engine: 'whisper',
+    label: '가장 정확하게 (whisper turbo 한국어)',
+    note: '한국어 특화, 회의에 추천, 547MB',
     files: [
-      { name: 'conv_frontend.onnx', url: `${QWEN3_URL}conv_frontend.onnx`, bytes: 44_148_281 },
-      { name: 'encoder.int8.onnx', url: `${QWEN3_URL}encoder.int8.onnx`, bytes: 182_491_662 },
-      { name: 'decoder.int8.onnx', url: `${QWEN3_URL}decoder.int8.onnx`, bytes: 755_914_231 },
       {
-        name: 'tokenizer/merges.txt',
-        url: `${QWEN3_URL}tokenizer/merges.txt`,
-        bytes: 1_671_853,
+        name: 'ggml-whisper-large-v3-turbo-korean-q5_0.bin',
+        url: `${WHISPER_TURBO_KO_URL}ggml-whisper-large-v3-turbo-korean-q5_0.bin`,
+        bytes: 574_041_195,
       },
-      {
-        name: 'tokenizer/tokenizer_config.json',
-        url: `${QWEN3_URL}tokenizer/tokenizer_config.json`,
-        bytes: 12_487,
-      },
-      { name: 'tokenizer/vocab.json', url: `${QWEN3_URL}tokenizer/vocab.json`, bytes: 2_776_833 },
     ],
   },
   {
     id: 'base',
     engine: 'whisper',
     label: '가볍게 (whisper base)',
-    note: '오래된 폰에 적당, Qwen3 회색 글에도 써요, 60MB',
+    note: '오래된 폰에 적당, 60MB',
     files: [
       { name: 'ggml-base-q5_1.bin', url: `${WHISPER_URL}ggml-base-q5_1.bin`, bytes: 59_707_625 },
     ],
@@ -88,6 +77,28 @@ const RETIRED: ModelPack[] = [
     files: [
       { name: 'model.int8.onnx', url: '', bytes: 239_233_841 },
       { name: 'tokens.txt', url: '', bytes: 315_894 },
+    ],
+  },
+  {
+    label: 'Qwen3-ASR 0.6B',
+    note: '',
+    dir: 'qwen3-asr-0.6b-int8',
+    files: [
+      { name: 'conv_frontend.onnx', url: '', bytes: 44_148_281 },
+      { name: 'encoder.int8.onnx', url: '', bytes: 182_491_662 },
+      { name: 'decoder.int8.onnx', url: '', bytes: 755_914_231 },
+      { name: 'tokenizer/merges.txt', url: '', bytes: 1_671_853 },
+      { name: 'tokenizer/tokenizer_config.json', url: '', bytes: 12_487 },
+      { name: 'tokenizer/vocab.json', url: '', bytes: 2_776_833 },
+    ],
+  },
+  {
+    label: 'Qwen3-ASR 1.7B',
+    note: '',
+    dir: 'qwen3-asr-1.7b-q8',
+    files: [
+      { name: 'Qwen3-ASR-1.7B-Q8_0.gguf', url: '', bytes: 2_165_034_944 },
+      { name: 'mmproj-Qwen3-ASR-1.7B-Q8_0.gguf', url: '', bytes: 355_709_344 },
     ],
   },
 ];
