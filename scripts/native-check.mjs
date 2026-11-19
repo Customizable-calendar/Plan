@@ -29,6 +29,8 @@ const needsBuild = !usable;
 const buildUrl = usable
   ? `https://expo.dev/accounts/${usable.project?.ownerAccount?.name ?? 'choengs-team'}/projects/${usable.project?.slug ?? 'noteapp'}/builds/${usable.id}`
   : '';
+const buildId = usable?.id ?? '';
+const artifactUrl = usable?.status === 'FINISHED' ? (usable.artifacts?.buildUrl ?? '') : '';
 
 console.log(`runtime=${runtime}`);
 console.log(`needs_build=${needsBuild}`);
@@ -37,6 +39,6 @@ if (usable) console.log(`build (${usable.status}): ${buildUrl}`);
 if (process.env.GITHUB_OUTPUT) {
   appendFileSync(
     process.env.GITHUB_OUTPUT,
-    `runtime=${runtime}\nneeds_build=${needsBuild}\nbuild_url=${buildUrl}\n`,
+    `runtime=${runtime}\nneeds_build=${needsBuild}\nbuild_url=${buildUrl}\nbuild_id=${buildId}\nartifact_url=${artifactUrl}\n`,
   );
 }

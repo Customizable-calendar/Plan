@@ -1,12 +1,16 @@
 import '../global.css';
 
-import { palette } from '@noteapp/ui';
+import { Icon, palette, Text } from '@noteapp/ui';
 import { Stack } from 'expo-router';
 import { DefaultTheme, ThemeProvider } from 'expo-router/react-navigation';
 import { StatusBar } from 'expo-status-bar';
+import { XIcon } from 'lucide-react-native';
+import { useState } from 'react';
+import { Linking, Pressable, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { stackScreens } from '@/features/registry';
-import { useLatestUpdate } from '@/lib/updates';
+import { useLatestUpdate, useNewApkNotice } from '@/lib/updates';
 import { Lnb } from '@/shell/Lnb';
 import { LnbProvider } from '@/shell/LnbContext';
 
@@ -34,6 +38,39 @@ const navTheme = {
   },
 };
 
+function NewApkBanner() {
+  const apkUrl = useNewApkNotice();
+  const [hidden, setHidden] = useState(false);
+  const insets = useSafeAreaInsets();
+
+  if (!apkUrl || hidden) return null;
+  return (
+    <View
+      className="flex-row items-center gap-3 bg-primary px-4 pb-2.5"
+      style={{ paddingTop: Math.max(insets.top, 10) }}
+    >
+      <Text className="flex-1 text-sm font-semibold text-primary-foreground">
+        새 APK가 나왔어요
+      </Text>
+      <Pressable
+        onPress={() => void Linking.openURL(apkUrl)}
+        accessibilityRole="button"
+        className="rounded-full bg-background px-3 py-1"
+      >
+        <Text className="text-xs font-bold text-primary">받기</Text>
+      </Pressable>
+      <Pressable
+        onPress={() => setHidden(true)}
+        accessibilityRole="button"
+        accessibilityLabel="안내 닫기"
+        hitSlop={8}
+      >
+        <Icon as={XIcon} size={18} className="text-primary-foreground" />
+      </Pressable>
+    </View>
+  );
+}
+
 // 로그인 없이도 앱을 써요. 로그인 전에는 메모·일정·카드가 이 기기에만, 로그인하면 계정에도 저장돼요(lib/local-first.ts).
 // 로그인은 설정의 계정 칸에서 열어요. 개발일지·퀴즈처럼 계정이 꼭 필요한 화면은 그 화면에서 로그인을 안내해요.
 export default function RootLayout() {
@@ -43,6 +80,7 @@ export default function RootLayout() {
     <ThemeProvider value={navTheme}>
       <LnbProvider>
         <StatusBar style="dark" />
+        <NewApkBanner />
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           {stackScreens.map((s) => (
