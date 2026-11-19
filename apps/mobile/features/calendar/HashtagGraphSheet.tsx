@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { HashtagLevelBar } from './HashtagLevelBar';
 import { HiddenTagDisclosure } from './HiddenTagDisclosure';
 import {
   buildHashtagGraph,
@@ -189,6 +190,8 @@ export function HashtagGraphSheet({
                   </View>
                 ))}
               </View>
+
+              <HashtagLevelBar compact />
 
               <TagCategoryPanel tags={graph.map((n) => n.tag)} onSelectTag={setSelectedTag} />
 

@@ -5,12 +5,16 @@ import { listTagCategories } from '@/lib/tag-categories';
 
 import {
   buildCorpusFrequency,
+  DEFAULT_TAG_EXTRACTION_LEVEL,
   extractAutoHashtags,
   normalizeHashtag,
+  normalizeTagExtractionLevel,
   stripInlineHashtags,
+  type TagExtractionLevel,
 } from './autoTags';
 
 const STORAGE_KEY = 'calendar:hidden-tags:v1';
+const TAG_LEVEL_STORAGE_KEY = 'calendar:tag-level:v1';
 
 type TagOverrides = Record<string, string[]>;
 
@@ -19,6 +23,7 @@ interface StoreSnapshot {
   overrides: TagOverrides;
   preferredTags: string[];
   corpusFreq: Map<string, number>;
+  tagLevel: TagExtractionLevel;
 }
 
 let snapshot: StoreSnapshot = {
@@ -26,8 +31,10 @@ let snapshot: StoreSnapshot = {
   overrides: {},
   preferredTags: [],
   corpusFreq: new Map(),
+  tagLevel: DEFAULT_TAG_EXTRACTION_LEVEL,
 };
 
+let levelModifiedInMemory = false;
 let loadPromise: Promise<void> | undefined;
 const listeners = new Set<() => void>();
 
@@ -66,7 +73,15 @@ async function persistOverrides(overrides: TagOverrides): Promise<void> {
   }
 }
 
-/** 기기 저장소의 수동 태그와 사용자 태그 카테고리 목록을 불러와 내부 태그 스토어를 초기화해요. */
+async function persistTagLevel(level: TagExtractionLevel): Promise<void> {
+  try {
+    await AsyncStorage.setItem(TAG_LEVEL_STORAGE_KEY, String(level));
+  } catch {
+    // 저장소 쓰기가 실패하더라도 메모리 상태는 유지해 UI가 멈추지 않게 해요.
+  }
+}
+
+/** 기기 저장소의 수동 태그, 추출 강도, 사용자 태그 카테고리 목록을 불러와 내부 태그 스토어를 초기화해요. */
 export async function loadHiddenTagStore(): Promise<void> {
   if (snapshot.loaded) return;
   if (loadPromise) return loadPromise;
@@ -74,11 +89,15 @@ export async function loadHiddenTagStore(): Promise<void> {
   loadPromise = (async () => {
     let overrides: TagOverrides = { ...snapshot.overrides };
     let preferredTags: string[] = [...snapshot.preferredTags];
+    let tagLevel: TagExtractionLevel = snapshot.tagLevel;
 
     try {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as unknown;
+      const [rawOverrides, rawLevel] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_KEY),
+        AsyncStorage.getItem(TAG_LEVEL_STORAGE_KEY),
+      ]);
+      if (rawOverrides) {
+        const parsed = JSON.parse(rawOverrides) as unknown;
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
           const nextOverrides: TagOverrides = {};
           for (const [id, list] of Object.entries(parsed as Record<string, unknown>)) {
@@ -91,6 +110,11 @@ export async function loadHiddenTagStore(): Promise<void> {
           // 로드 중 먼저 기록된 인메모리 변경분을 우선 보존해요.
           overrides = { ...nextOverrides, ...snapshot.overrides };
         }
+      }
+      if (rawLevel !== null && !levelModifiedInMemory) {
+        tagLevel = normalizeTagExtractionLevel(rawLevel);
+      } else if (levelModifiedInMemory) {
+        tagLevel = snapshot.tagLevel;
       }
     } catch {
       // 손상된 로컬 JSON이나 테스트 환경에서도 기본값으로 안전하게 진행해요.
@@ -108,6 +132,7 @@ export async function loadHiddenTagStore(): Promise<void> {
       overrides,
       preferredTags,
       corpusFreq: snapshot.corpusFreq,
+      tagLevel,
     });
   })().finally(() => {
     loadPromise = undefined;
@@ -175,12 +200,44 @@ export async function clearItemManualTags(itemId: string): Promise<void> {
   await persistOverrides(nextOverrides);
 }
 
+/** 현재 설정된 해시태그 자동 추출 강도(1~5단계)를 반환해요. */
+export function getTagExtractionLevel(): TagExtractionLevel {
+  return snapshot.tagLevel;
+}
+
+/** 해시태그 자동 추출 강도(1~5단계)를 변경하고 기기에 저장해요. */
+export async function setTagExtractionLevel(level: TagExtractionLevel): Promise<void> {
+  const normalized = normalizeTagExtractionLevel(level);
+  levelModifiedInMemory = true;
+  emit({ ...snapshot, tagLevel: normalized });
+  await persistTagLevel(normalized);
+}
+
+/** 해시태그 자동 추출 강도(1~5단계)를 구독하고 바로 변경할 수 있는 React 훅이에요. */
+export function useTagExtractionLevel(): [
+  TagExtractionLevel,
+  (nextLevel: TagExtractionLevel) => Promise<void>,
+] {
+  const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+
+  useEffect(() => {
+    void loadHiddenTagStore();
+  }, []);
+
+  const updateLevel = useCallback(async (nextLevel: TagExtractionLevel) => {
+    await setTagExtractionLevel(nextLevel);
+  }, []);
+
+  return [state.tagLevel, updateLevel];
+}
+
 /** 일정/할 일 하나에 대해 최종 표시 제목(태그 제거)과 내부 해시태그 목록을 계산해요. */
 export function resolveItemTags(
   itemId: string,
   title: string,
   options?: {
     corpusFreq?: ReadonlyMap<string, number>;
+    level?: TagExtractionLevel;
     maxTags?: number;
     overrides?: TagOverrides;
     preferredTags?: readonly string[];
@@ -190,6 +247,7 @@ export function resolveItemTags(
   const overrides = options?.overrides ?? snapshot.overrides;
   const preferredTags = options?.preferredTags ?? snapshot.preferredTags;
   const corpusFreq = options?.corpusFreq ?? snapshot.corpusFreq;
+  const level = options?.level ?? snapshot.tagLevel;
 
   if (itemId && Object.prototype.hasOwnProperty.call(overrides, itemId)) {
     return {
@@ -200,7 +258,8 @@ export function resolveItemTags(
   }
 
   const tags = extractAutoHashtags(title, {
-    maxTags: options?.maxTags ?? 4,
+    level,
+    maxTags: options?.maxTags,
     corpusFreq,
     preferredTags,
   });
@@ -234,6 +293,7 @@ export function useItemTags(
     () =>
       resolveItemTags(itemId, title, {
         corpusFreq: corpusFreq ?? state.corpusFreq,
+        level: state.tagLevel,
         overrides: state.overrides,
         preferredTags: state.preferredTags,
       }),
@@ -287,6 +347,7 @@ export function useResolvedCalendarTags<T extends { id: string; title: string }>
     const itemsWithTags = items.map((item) => {
       const resolved = resolveItemTags(item.id, item.title, {
         corpusFreq,
+        level: state.tagLevel,
         overrides: state.overrides,
         preferredTags: state.preferredTags,
       });

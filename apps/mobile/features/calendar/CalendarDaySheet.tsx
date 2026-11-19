@@ -18,10 +18,12 @@ import {
   overlaps,
   shiftDay,
   splitTitleAndTags,
+  suggestSlotsAcrossDays,
   timeLabel,
   TIMEZONE,
   type TimeSlot,
 } from './model';
+import { useResolvedCalendarTags, useTagExtractionLevel } from './tagStore';
 
 type SheetTab = 'agenda' | 'add';
 const WEEKDAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'] as const;
@@ -171,10 +173,41 @@ export function CalendarDaySheet({
     return entries.sort((a, b) => a.sortAt.localeCompare(b.sortAt));
   }, [dayEvents, dayTasks]);
 
-  const autoPreviewTags = useMemo(
-    () => (title.trim().length > 0 ? extractAutoHashtags(title) : []),
-    [title],
+  const [tagLevel] = useTagExtractionLevel();
+  const rawTagItems = useMemo(
+    () => [
+      ...events.map((item) => ({ id: item.id, title: item.title })),
+      ...tasks.map((item) => ({ id: item.id, title: item.title })),
+    ],
+    [events, tasks],
   );
+  const { byId: resolvedTagById } = useResolvedCalendarTags(rawTagItems);
+  const itemTagsById = useMemo(() => {
+    const map = new Map<string, readonly string[]>();
+    for (const [id, entry] of resolvedTagById.entries()) {
+      map.set(id, entry.tags);
+    }
+    return map;
+  }, [resolvedTagById]);
+
+  const autoPreviewTags = useMemo(
+    () => (title.trim().length > 0 ? extractAutoHashtags(title, { level: tagLevel }) : []),
+    [tagLevel, title],
+  );
+
+  const addEventRecommendations = useMemo(() => {
+    if (allDay || title.trim().length < 2) return [];
+    const dayStartMs = Date.parse(`${day}T00:00:00+09:00`);
+    const scanStart = Number.isFinite(dayStartMs) ? Math.min(openedAt, dayStartMs) : openedAt;
+    return suggestSlotsAcrossDays([day], events, tasks, {
+      targetTitle: title,
+      targetTags: autoPreviewTags,
+      itemTagsById,
+      durationMinutes,
+      limit: 3,
+      now: scanStart,
+    });
+  }, [allDay, autoPreviewTags, day, durationMinutes, events, itemTagsById, openedAt, tasks, title]);
 
   async function handleConfirm(taskId: string) {
     setBusyId(taskId);
@@ -683,6 +716,36 @@ export function CalendarDaySheet({
 
                 {!allDay && (
                   <>
+                    {addEventRecommendations.length > 0 && (
+                      <View className="gap-1.5 rounded-xl border border-primary/25 bg-primary-soft/50 p-3">
+                        <Text className="text-xs font-bold text-primary-soft-foreground">
+                          해시태그 맥락 기반 맞춤 시간 추천
+                        </Text>
+                        <View className="flex-row flex-wrap gap-1.5">
+                          {addEventRecommendations.map((slot) => {
+                            const startLabel = timeLabel(slot.startAt);
+                            const recHour = Number(startLabel.slice(0, 2));
+                            const selected = Number.isFinite(recHour) && selectedHour === recHour;
+                            return (
+                              <SheetButton
+                                key={slot.startAt}
+                                label={`${startLabel} 추천`}
+                                selected={selected}
+                                onPress={() => {
+                                  if (Number.isFinite(recHour)) {
+                                    setSelectedHour(recHour);
+                                  }
+                                }}
+                              />
+                            );
+                          })}
+                        </View>
+                        <Text className="text-[11px] text-muted-foreground">
+                          {addEventRecommendations[0].reason}
+                        </Text>
+                      </View>
+                    )}
+
                     <View className="gap-1.5">
                       <View className="flex-row items-center justify-between">
                         <Text className="text-xs font-bold text-muted-foreground">시작 시각</Text>

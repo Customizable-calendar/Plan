@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { CalendarDaySheet } from './CalendarDaySheet';
+import { CalendarSettingsSheet } from './CalendarSettingsSheet';
 import { CalendarTimeline } from './CalendarTimeline';
 import { HashtagGraphSheet } from './HashtagGraphSheet';
 import { HiddenTagDisclosure } from './HiddenTagDisclosure';
@@ -81,6 +82,7 @@ export function CalendarScreen() {
   const [sheetTarget, setSheetTarget] = useState<{ day: string; initialHour?: number }>();
   const [candidateTask, setCandidateTask] = useState<Card>();
   const [showHashtags, setShowHashtags] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [graphFocusTag, setGraphFocusTag] = useState<string>();
 
   const month = day.slice(0, 7);
@@ -157,6 +159,7 @@ export function CalendarScreen() {
   const openDaySheet = useCallback(
     (targetDay: string, initialHour?: number) => {
       syncDay(targetDay);
+      setShowSettings(false);
       setSheetTarget({ day: targetDay, initialHour });
     },
     [syncDay],
@@ -165,8 +168,16 @@ export function CalendarScreen() {
   const openTagGraph = useCallback((tag?: string) => {
     setCandidateTask(undefined);
     setSheetTarget(undefined);
+    setShowSettings(false);
     setGraphFocusTag(tag);
     setShowHashtags(true);
+  }, []);
+
+  const openSettings = useCallback(() => {
+    setCandidateTask(undefined);
+    setSheetTarget(undefined);
+    setShowHashtags(false);
+    setShowSettings(true);
   }, []);
 
   const toggleDrawer = () => {
@@ -235,6 +246,7 @@ export function CalendarScreen() {
         )}
         <View className="flex-row flex-wrap gap-2">
           {day !== today && <ActionButton label="오늘" onPress={() => syncDay(today)} />}
+          <ActionButton label="해시태그 설정" onPress={openSettings} />
           <ActionButton label="해시태그 연결망" onPress={() => openTagGraph()} />
         </View>
       </View>
@@ -437,6 +449,8 @@ export function CalendarScreen() {
             setGraphFocusTag(undefined);
           }}
         />
+      ) : showSettings ? (
+        <CalendarSettingsSheet onClose={() => setShowSettings(false)} />
       ) : null}
     </ScrollView>
   );

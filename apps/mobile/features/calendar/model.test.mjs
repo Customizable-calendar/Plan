@@ -362,3 +362,88 @@ test('suggestSlotsAcrossDays와 busyHoursOnDay는 여러 날 빈 시간과 08~21
     },
   );
 });
+
+test('extractAutoHashtags는 1~5단계 강도에 따라 추출 개수를 점진적으로 조절해요', () => {
+  const sample = '주간 백엔드 API 코드 리뷰 및 배포 점검';
+  const level1 = extractAutoHashtags(sample, { level: 1 });
+  const level3 = extractAutoHashtags(sample, { level: 3 });
+  const level5 = extractAutoHashtags(sample, { level: 5 });
+
+  assert.equal(level1.length, 1);
+  assert(level1.length <= level3.length, `${level1.length} <= ${level3.length}`);
+  assert(level3.length <= level5.length, `${level3.length} <= ${level5.length}`);
+  assert(level5.length >= 4, `expected richer tags at level 5, got ${level5}`);
+});
+
+test('suggestSlotsAcrossDays는 다른 일정의 해시태그 일치도와 유사 시간대를 우선 추천해요', () => {
+  const now = Date.parse('2026-10-27T23:00:00Z'); // 2026-10-28 08:00 KST
+  const events = [
+    {
+      id: 'ev-run',
+      title: '한강 조깅',
+      startAt: '2026-10-27T10:00:00Z', // 19:00 KST
+      endAt: '2026-10-27T11:00:00Z', // 20:00 KST
+    },
+    {
+      id: 'ev-api',
+      title: 'API 설계 미팅',
+      startAt: '2026-10-27T01:00:00Z', // 10:00 KST
+      endAt: '2026-10-27T02:00:00Z', // 11:00 KST
+    },
+  ];
+  const itemTagsById = new Map([
+    ['ev-run', ['#러닝', '#운동']],
+    ['ev-api', ['#백엔드', '#회의']],
+  ]);
+
+  const workoutSlots = suggestSlotsAcrossDays(['2026-10-28'], events, [], {
+    now,
+    durationMinutes: 60,
+    targetTitle: '컨디션 회복 운동하기',
+    targetTags: ['#러닝', '#운동'],
+    itemTagsById,
+    limit: 3,
+  });
+  assert(workoutSlots.length > 0);
+  const workoutHourKst = new Date(Date.parse(workoutSlots[0].startAt) + 9 * 3600000).getUTCHours();
+  assert(
+    workoutHourKst >= 18 && workoutHourKst <= 21,
+    `expected evening slot matching 19시 #러닝/#운동, got ${workoutHourKst}시 (${workoutSlots[0].reason})`,
+  );
+  assert(
+    workoutSlots[0].matchedTags?.includes('#운동') ||
+      workoutSlots[0].matchedTags?.includes('#러닝'),
+  );
+
+  const backendSlots = suggestSlotsAcrossDays(['2026-10-28'], events, [], {
+    now,
+    durationMinutes: 60,
+    targetTitle: 'API 리뷰 반영',
+    targetTags: ['#백엔드', '#회의'],
+    itemTagsById,
+    limit: 3,
+  });
+  assert(backendSlots.length > 0);
+  const backendHourKst = new Date(Date.parse(backendSlots[0].startAt) + 9 * 3600000).getUTCHours();
+  assert(
+    backendHourKst >= 9 && backendHourKst <= 11,
+    `expected morning slot matching 10시 #백엔드/#회의, got ${backendHourKst}시 (${backendSlots[0].reason})`,
+  );
+});
+
+test('suggestSlotsAcrossDays는 제목의 시간 단서(예: 저녁)를 우선 반영해요', () => {
+  const now = Date.parse('2026-10-27T23:00:00Z'); // 2026-10-28 08:00 KST
+  const slots = suggestSlotsAcrossDays(['2026-10-28'], [], [], {
+    now,
+    durationMinutes: 60,
+    targetTitle: '저녁 독서 정리',
+    limit: 3,
+  });
+  assert(slots.length > 0);
+  const topHourKst = new Date(Date.parse(slots[0].startAt) + 9 * 3600000).getUTCHours();
+  assert(
+    topHourKst >= 18,
+    `expected evening slot >= 18시, got ${topHourKst}시 (${slots[0].reason})`,
+  );
+  assert(slots[0].reason.includes('저녁'));
+});
