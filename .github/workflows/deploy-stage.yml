@@ -140,9 +140,7 @@ jobs:
         run: |
           pr=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" -q '.[0].number' || true)
           if [ -n "$pr" ]; then
-            gh pr comment "$pr" -R "${{ github.repository }}" --body "📦 이 PR로 네이티브 부분이 바뀌어서 stage APK를 새로 빌드하고 있어요. 끝나면 고정 링크가 자동 갱신돼요.
-- 고정 원탭 다운로드: https://github.com/${{ github.repository }}/releases/download/stage-latest/noteapp-stage.apk
-- EAS 빌드 진행: $URL"
+            gh pr comment "$pr" -R "${{ github.repository }}" --body "📦 이 PR로 네이티브 부분이 바뀌어서 stage APK를 새로 빌드하고 있어요. 끝나면 고정 링크가 자동 갱신돼요. (원탭 다운로드: https://github.com/${{ github.repository }}/releases/download/stage-latest/noteapp-stage.apk / 빌드 진행: $URL)"
           fi
       # 아이폰은 이 웹 주소로 봐요(설치·컴퓨터 없이). 받아쓰기처럼 폰 네이티브가 필요한 건 웹에서 안 돼요.
       # 웹이 실패해도 앱 업데이트·APK 빌드는 그대로 가요.
