@@ -5,16 +5,20 @@
 export const SAMPLE_RATE = 16_000;
 export const BYTES_PER_SECOND = SAMPLE_RATE * 2; // 16비트 모노
 
-/** 이만큼 모이면 쉬는 곳을 찾기 시작해요. */
-const MIN_BYTES = 20 * BYTES_PER_SECOND;
+/** 이만큼 모이면 짧은 쉼(0.4초)에서 자르기 시작해요. */
+const MIN_BYTES = 12 * BYTES_PER_SECOND;
+/** 이만큼 모인 뒤 길게 쉬면(1.2초) 바로 잘라서 첫 글이 빨리 나오게 해요(VAC 방식). */
+const EARLY_MIN_BYTES = 6 * BYTES_PER_SECOND;
 /** 이만큼 모이면 쉬는 곳이 없어도 제일 조용한 곳에서 잘라요. */
 const MAX_BYTES = 30 * BYTES_PER_SECOND;
 /** 말소리 감지가 늦어져도 이만큼 넘으면 바로 잘라요. */
 const HARD_BYTES = 40 * BYTES_PER_SECOND;
 /** 이만큼 조용하면 말이 쉰 거로 봐요. */
 const PAUSE_BYTES = 0.4 * BYTES_PER_SECOND;
+/** 이만큼 길게 조용하면 한 문단이 끝난 거로 봐요. */
+const LONG_PAUSE_BYTES = 1.2 * BYTES_PER_SECOND;
 /** 조각 전체에서 제일 큰 소리가 이보다 작으면 말이 없는 조각이에요. (16비트 최대 32767) */
-const SILENT_RMS = 300;
+export const SILENT_RMS = 300;
 
 interface Piece {
   bytes: Uint8Array;
@@ -71,12 +75,36 @@ function concat(pieces: Piece[]): Uint8Array {
   return out;
 }
 
+/** 모델 속도에 따라 조각 분할 간격을 조절할 때 넘기는 옵션(초 단위) */
+export interface ChunkerOptions {
+  /** 이만큼 모이면 짧은 쉼(0.4초)에서 자르기 시작해요. */
+  minSeconds?: number;
+  /** 이만큼 모인 뒤 길게 쉬면 바로 잘라서 첫 글이 빨리 나오게 해요. */
+  earlyMinSeconds?: number;
+  /** 길게 쉰 거로 볼 무음 길이(초). */
+  longPauseSeconds?: number;
+}
+
 /**
  * 녹음 데이터를 받아서 조각이 되면 onChunk로 넘겨요.
  * push()는 녹음 데이터가 올 때마다, flush()는 녹음을 끝낼 때 불러요.
  * findGap을 주면 30초가 되도록 쉬는 곳을 못 찾았을 때 말소리 감지로 말이 끊기지 않는 곳을 찾아요.
  */
-export function createChunker(onChunk: (chunk: Chunk) => void, findGap?: FindGap) {
+export function createChunker(
+  onChunk: (chunk: Chunk) => void,
+  findGap?: FindGap,
+  options?: ChunkerOptions,
+) {
+  const minBytes = Math.round(
+    (options?.minSeconds ?? MIN_BYTES / BYTES_PER_SECOND) * BYTES_PER_SECOND,
+  );
+  const earlyMinBytes = Math.round(
+    (options?.earlyMinSeconds ?? EARLY_MIN_BYTES / BYTES_PER_SECOND) * BYTES_PER_SECOND,
+  );
+  const longPauseBytes = Math.round(
+    (options?.longPauseSeconds ?? LONG_PAUSE_BYTES / BYTES_PER_SECOND) * BYTES_PER_SECOND,
+  );
+
   let pieces: Piece[] = [];
   let pending = 0;
   let emitted = 0; // 지금까지 넘긴 바이트
@@ -93,15 +121,15 @@ export function createChunker(onChunk: (chunk: Chunk) => void, findGap?: FindGap
     if (pcm.length > 0) onChunk({ pcm, offsetMs, silent: loudest < SILENT_RMS });
   };
 
-  /** 끝에서 PAUSE_BYTES만큼이 조각 평소 소리보다 확실히 작으면 쉬는 곳이에요. */
-  const endsWithPause = () => {
+  /** 끝에서 pauseBytes만큼이 조각 평소 소리보다 확실히 작으면 쉬는 곳이에요. */
+  const endsWithPause = (pauseBytes = PAUSE_BYTES) => {
     const level = median(pieces.map((p) => p.rms));
     let quiet = 0;
     for (let i = pieces.length - 1; i >= 0; i--) {
       const p = pieces[i]!;
       if (p.rms > Math.max(level * 0.35, SILENT_RMS * 0.5)) break;
       quiet += p.bytes.length;
-      if (quiet >= PAUSE_BYTES) return true;
+      if (quiet >= pauseBytes) return true;
     }
     return false;
   };
@@ -113,7 +141,7 @@ export function createChunker(onChunk: (chunk: Chunk) => void, findGap?: FindGap
     let bestRms = Infinity;
     for (let i = 0; i < pieces.length; i++) {
       at += pieces[i]!.bytes.length;
-      if (at < MIN_BYTES) continue;
+      if (at < minBytes) continue;
       if (pieces[i]!.rms <= bestRms) {
         bestRms = pieces[i]!.rms;
         best = i + 1;
@@ -137,7 +165,7 @@ export function createChunker(onChunk: (chunk: Chunk) => void, findGap?: FindGap
   const searchGap = (find: FindGap) => {
     searching = true;
     const from = emitted;
-    find(concat(pieces), MIN_BYTES)
+    find(concat(pieces), minBytes)
       .catch(() => null)
       .then((cut) => {
         searching = false;
@@ -150,7 +178,11 @@ export function createChunker(onChunk: (chunk: Chunk) => void, findGap?: FindGap
     push(bytes: Uint8Array) {
       pieces.push({ bytes, rms: rmsOf(bytes) });
       pending += bytes.length;
-      if (pending < MIN_BYTES) return;
+      if (pending < earlyMinBytes) return;
+      if (pending < minBytes) {
+        if (endsWithPause(longPauseBytes)) emit(pieces.length);
+        return;
+      }
       if (endsWithPause()) emit(pieces.length);
       else if (pending >= HARD_BYTES || (pending >= MAX_BYTES && !findGap)) emit(quietestCut());
       else if (pending >= MAX_BYTES && !searching) searchGap(findGap!);

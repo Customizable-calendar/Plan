@@ -5,10 +5,9 @@ import { packDir, type SttModel } from './models';
 import { wavHeader } from './recordings';
 import { sherpa } from './sherpa';
 
-// sherpa-onnx 받아쓰기(@siteed/sherpa-onnx.rn): Qwen3-ASR 0.6B. (담당: B)
+// sherpa-onnx 받아쓰기(@siteed/sherpa-onnx.rn): SenseVoice int8 · Qwen3-ASR 0.6B. (담당: B)
 // 엔진(engine.ts)이 whisper와 똑같이 쓰게, whisper.rn 컨텍스트와 같은 모양(transcribeData, release)으로 감쌌어요.
-// - Qwen3-ASR 0.6B: 로컬 모델 중 한국어가 제일 정확해요(LocalSTT 벤치마크: 1.7B CER 5.6%, Whisper turbo 7.8%).
-//   내 단어는 hotwords로 줘요. 한 번에 28초까지 넣어서(LocalSTT와 같아요) 긴 조각은 나눠서 받아써요.
+// - SenseVoice int8: 비자기회귀(CTC) 방식이라 CPU에서도 실시간에 가깝게 빨라요.
 // - 문장마다 시각을 안 줘서, 조각(또는 나눈 조각) 하나를 한 덩어리로 돌려줘요.
 // - sherpa-onnx는 받아쓰기 모델을 한 번에 하나만 띄워요.
 // 네이티브 모듈이라 쓸 때 불러와요(sherpa.ts).
@@ -72,8 +71,9 @@ async function openSherpa(
   const init = await asr().initialize(config);
   if (!init.success) throw new SttError(init.error ?? `${name} 모델을 열지 못했어요.`);
 
+  let seq = 0;
   const recognize = async (bytes: Uint8Array): Promise<string> => {
-    const file = new File(Paths.cache, `stt-sherpa-${Date.now()}.wav`);
+    const file = new File(Paths.cache, `stt-sherpa-${Date.now()}-${seq++}.wav`);
     try {
       const wav = new Uint8Array(44 + bytes.length);
       wav.set(wavHeader(bytes.length), 0);
@@ -121,11 +121,31 @@ async function openSherpa(
       };
     },
     async release() {
+      await queue;
       await asr()
         .release()
         .catch(() => {});
     },
   };
+}
+
+/** SenseVoice 한 번에 넣는 소리 길이(초). 30초 넘는 조각은 나눠서 받아써요. */
+const SENSE_VOICE_MAX_SECONDS = 30;
+
+/** SenseVoice int8. 비자기회귀(CTC) 방식이라 Android CPU에서도 매우 빠르게 받아써요. */
+export function openSenseVoice(model: SttModel): Promise<SherpaContext> {
+  return openSherpa(
+    {
+      modelDir: packDir(model).uri,
+      modelType: 'sense_voice',
+      modelFiles: { model: model.files[0]!.name, tokens: model.files[1]!.name },
+      language: 'ko',
+      useItn: true,
+      numThreads: 4,
+    },
+    'SenseVoice',
+    SENSE_VOICE_MAX_SECONDS,
+  );
 }
 
 /** Qwen3-ASR 한 번에 넣는 소리 길이(초). LocalSTT도 28초까지 넣어요. */
