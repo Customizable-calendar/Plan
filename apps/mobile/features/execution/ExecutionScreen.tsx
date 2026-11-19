@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 
-import { dayKey, splitTitleAndTags, timeLabel } from '@/features/calendar';
+import { dayKey, HiddenTagDisclosure, splitTitleAndTags, timeLabel } from '@/features/calendar';
 
 import { loadExecution, saveExecutionRecords } from './data';
 
@@ -187,6 +187,9 @@ export function ExecutionScreen() {
                         onToggle={() => toggleQuickDone(task.id)}
                       />
                     </Pressable>
+                    <View className="pb-2">
+                      <HiddenTagDisclosure itemId={task.id} title={task.title} compact />
+                    </View>
                     {expanded ? (
                       <View className="pb-3 pt-1">
                         <StatusPicker

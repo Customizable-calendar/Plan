@@ -2,6 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  buildCorpusFrequency,
+  extractAutoHashtags,
+  normalizeHashtag,
+  stripInlineHashtags,
+} from './autoTags.ts';
+import {
   buildHashtagEdges,
   buildHashtagGraph,
   computeHopDistances,
@@ -9,6 +15,7 @@ import {
   layoutHashtagGraph,
 } from './hashtags.ts';
 import {
+  busyHoursOnDay,
   dayKey,
   eventsOnDay,
   groupEventsByDay,
@@ -16,6 +23,7 @@ import {
   shiftDay,
   splitTitleAndTags,
   suggestSlots as calculateSlots,
+  suggestSlotsAcrossDays,
   weekDays,
 } from './model.ts';
 
@@ -244,10 +252,113 @@ test('groupEventsByDay는 여러 날에 걸친 일정과 경계 배타성을 eve
   ];
   const days = ['2026-10-26', '2026-10-27', '2026-10-28'];
   const grouped = groupEventsByDay(events, days);
-  assert.deepEqual(grouped.get('2026-10-26')?.map((e) => e.id), ['multi']);
-  assert.deepEqual(grouped.get('2026-10-27')?.map((e) => e.id), ['multi', 'late']);
+  assert.deepEqual(
+    grouped.get('2026-10-26')?.map((e) => e.id),
+    ['multi'],
+  );
+  assert.deepEqual(
+    grouped.get('2026-10-27')?.map((e) => e.id),
+    ['multi', 'late'],
+  );
   assert.deepEqual(grouped.get('2026-10-28'), []);
   for (const day of days) {
     assert.deepEqual(grouped.get(day), eventsOnDay(events, day));
   }
+});
+
+test('stripInlineHashtags는 본문과 정규화된 태그를 분리해요', () => {
+  const res = stripInlineHashtags('팀 스탠드업 미팅 #회의 #React_Native #회의');
+  assert.equal(res.cleanTitle, '팀 스탠드업 미팅');
+  assert.deepEqual(res.tags, ['#회의', '#react_native']);
+  assert.equal(normalizeHashtag('  ##Sprint_Plan  '), '#sprint_plan');
+  assert.equal(normalizeHashtag('123'), '');
+});
+
+test('extractAutoHashtags는 조사 분리·보호어·불용어 제거·복합어 결합으로 자동 추출해요', () => {
+  const meetingTags = extractAutoHashtags('주간 회의에서 스터디와 회고 정리');
+  assert(meetingTags.includes('#회의'), `expected #회의 in ${meetingTags}`);
+  assert(meetingTags.includes('#스터디'), `expected #스터디 in ${meetingTags}`);
+  assert(meetingTags.includes('#회고'), `expected #회고 in ${meetingTags}`);
+  assert(!meetingTags.includes('#회'));
+
+  const runTags = extractAutoHashtags('한강 저녁 5km 러닝 및 스트레칭');
+  assert(!runTags.includes('#5km'));
+  assert(!runTags.includes('#저녁'));
+  assert(runTags.includes('#러닝') || runTags.includes('#운동'));
+
+  const devTags = extractAutoHashtags('PR 코드 리뷰 및 React Native UI 수정', { maxTags: 5 });
+  assert(devTags.includes('#코드리뷰'), `expected #코드리뷰 in ${devTags}`);
+  assert(devTags.includes('#react_native'), `expected #react_native in ${devTags}`);
+  assert(!devTags.includes('#코드'));
+  assert(!devTags.includes('#react'));
+
+  const corpusFreq = buildCorpusFrequency([
+    '아키텍처 세미나 준비',
+    '아키텍처 문서 초안',
+    '아키텍처 점검',
+  ]);
+  const boostedTags = extractAutoHashtags('시스템 아키텍처 발표', {
+    preferredTags: ['#세미나'],
+    corpusFreq,
+  });
+  assert(boostedTags.includes('#아키텍처'));
+});
+
+test('buildHashtagGraph는 # 기호가 없는 제목에서도 item.tags로 노드와 간선을 만들어요', () => {
+  const graph = buildHashtagGraph([
+    { id: '1', title: '백엔드 설계', tags: ['#개발', '#백엔드'] },
+    { id: '2', title: 'API 리뷰', tags: ['#백엔드', '#코드리뷰'] },
+  ]);
+  const backend = graph.find((node) => node.tag === '#백엔드');
+  assert(backend);
+  assert.equal(backend.items.length, 2);
+  assert.equal(backend.links.get('#개발'), 1);
+  assert.equal(backend.links.get('#코드리뷰'), 1);
+});
+
+test('suggestSlotsAcrossDays와 busyHoursOnDay는 여러 날 빈 시간과 08~21시 점유 현황을 계산해요', () => {
+  // 2026-10-27 11:30Z == 20:30 KST (오늘 21시까지 30분만 남아 60분 슬롯은 내일로 넘어가요)
+  const now = Date.parse('2026-10-27T11:30:00Z');
+  const events = [
+    {
+      startAt: '2026-10-28T01:00:00Z', // 10:00 KST
+      endAt: '2026-10-28T02:00:00Z', // 11:00 KST
+    },
+  ];
+  const tasks = [
+    {
+      id: 't-1',
+      status: 'confirmed',
+      startAt: '2026-10-28T06:00:00Z', // 15:00 KST
+      endAt: '2026-10-28T07:00:00Z', // 16:00 KST
+    },
+  ];
+
+  const multiSlots = suggestSlotsAcrossDays(['2026-10-27', '2026-10-28'], events, tasks, {
+    now,
+    durationMinutes: 60,
+    limit: 3,
+  });
+  assert(multiSlots.length > 0);
+  assert.equal(dayKey(multiSlots[0].startAt), '2026-10-28');
+
+  const hours = busyHoursOnDay('2026-10-28', events, tasks);
+  assert.equal(hours.length, 14);
+  const hour10 = hours.find((h) => h.hour === 10);
+  const hour15 = hours.find((h) => h.hour === 15);
+  const hour12 = hours.find((h) => h.hour === 12);
+  assert.deepEqual(hour10, { hour: 10, busy: true, eventCount: 1, taskCount: 0 });
+  assert.deepEqual(hour15, { hour: 15, busy: true, eventCount: 0, taskCount: 1 });
+  assert.deepEqual(hour12, { hour: 12, busy: false, eventCount: 0, taskCount: 0 });
+
+  const excludingTask = busyHoursOnDay('2026-10-28', events, tasks, { excludeTaskId: 't-1' });
+  assert.deepEqual(
+    excludingTask.find((h) => h.hour === 15),
+    {
+      hour: 15,
+      busy: false,
+      eventCount: 0,
+      taskCount: 0,
+    },
+  );
 });

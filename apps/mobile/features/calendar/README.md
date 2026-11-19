@@ -33,10 +33,20 @@
 - UI 진입점은 기존 탭과 오늘 섹션을 그대로 사용해요. 다른 기능은 `index.ts`의 공개 API만 사용해요.
 - 미확인: 실제 Android/iOS 기기 실행. 웹에서 동작을 확인했어요.
 
+## 최근 개선 사항 (내부 해시태그 · 자동 추출 · 직관적 시간 배정)
+
+- **내부 해시태그 관리 (`tagStore.ts`, `HiddenTagDisclosure.tsx`)**: 일정·할 일 제목에서 `#태그`가 드러나지 않도록 분리해 내부적으로만 보관하고, 사용자가 `태그 N` 배지를 눌렀을 때만 태그 목록 확인, 추가/삭제, 자동 추출 복원 기능을 펼쳐 보여줘요. 수동 변경 이력은 기기 `AsyncStorage`(`calendar:hidden-tags:v1`)에 저장돼요.
+- **자동 해시태그 추출 (`autoTags.ts`)**: 자연어 제목만 입력해도 한국어 어말 조사 분리(고유 명사 보호), 시간·수량 불용어 제거, 복합 키워드 결합, RAKE 공동 출현 점수, 사용자 카테고리 선호 태그(`@/lib/tag-categories`) 및 코퍼스 빈도 가중치를 조합해 내부 해시태그를 자동 추천·연결해요.
+- **직관적 할 일 시간 배정 (`TimeCandidates.tsx`, `CalendarDaySheet.tsx`, `CalendarTimeline.tsx`, `CalendarScreen.tsx`)**:
+  - `CalendarScreen` 상단 접힘형 `TaskQuickBar`에서 시간 미배정 할 일을 1탭으로 시간 배정 화면에 연결해요.
+  - `CalendarTimeline`과 `EventListView`에서 배정된 할 일을 일정과 동일한 충돌 레인으로 함께 표시하고 눌러서 바로 시간을 바꿀 수 있어요.
+  - `TimeCandidates`와 `CalendarDaySheet`에서 `08시 ~ 21시` 빈 시간 시각화, 다중 날짜 추천(`오늘`/`내일`/`이번 주 추천`), 소요 시간(`30분`/`1시간`/`2시간`), 직접 시간 선택과 배정 시간 비우기를 지원해요.
+- **디자인 시스템**: 모든 컴포넌트는 공용 `@noteapp/ui`와 NativeWind 시맨틱 토큰(`className`)만을 사용해요.
+
 ### 검증
 
 저장소 루트에서 `pnpm lint`, `pnpm typecheck`, `pnpm test`를 실행해요.
-날짜 경계·일정 충돌 테스트는 `node --test apps/mobile/features/calendar/model.test.mjs`로 실행해요.
+날짜 경계·일정 충돌·해시태그 자동 추출·시간대 추천 테스트는 `node --test apps/mobile/features/calendar/model.test.mjs`로 실행해요.
 
 ### 이 컴퓨터에서 발생한 설치 문제
 

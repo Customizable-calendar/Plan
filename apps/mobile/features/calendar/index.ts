@@ -5,6 +5,7 @@ import { HomeSchedule } from './HomeSchedule';
 import { TodayEventsSection } from './TodayEventsSection';
 
 export { CalendarScreen } from './CalendarScreen';
+export { HiddenTagDisclosure } from './HiddenTagDisclosure';
 export { TodayEventsSection };
 export { listCalendarTasks } from './data';
 export { dayKey, splitTitleAndTags, timeLabel } from './model';
