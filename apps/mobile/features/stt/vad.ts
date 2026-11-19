@@ -32,6 +32,16 @@ const OPTIONS = {
 };
 
 let opening: Promise<VadContext | null> | null = null;
+// whisper.rn의 VAD 컨텍스트는 내부 ggml 스케줄러가 스레드 안전하지 않아서,
+// detectSpeechData가 동시에 두 번 돌면 WSP_GGML_ASSERT(!sched->is_alloc)로 앱이 꺼져요.
+// 그래서 열고 감지하고 닫는 일을 한 줄로 차례대로 돌려요.
+let queue: Promise<unknown> = Promise.resolve();
+
+function serialized<T>(task: () => Promise<T>): Promise<T> {
+  const next = queue.then(task, task);
+  queue = next.catch(() => {});
+  return next;
+}
 
 function open(): Promise<VadContext | null> {
   opening ??= (async () => {
@@ -50,25 +60,36 @@ function open(): Promise<VadContext | null> {
 
 /** 녹음을 시작할 때 미리 열어 둬요. */
 export function prepareVad(): void {
-  void open();
+  void serialized(async () => {
+    await open();
+  });
 }
 
 /** 말소리가 있는 곳(ms). VAD를 못 쓰면 null이에요. */
-export async function speechIn(pcm: Uint8Array): Promise<Span[] | null> {
-  const vad = await open();
-  if (!vad) return null;
-  try {
-    const buffer = pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength) as ArrayBuffer;
-    const found = await vad.detectSpeechData(buffer, OPTIONS);
-    // whisper.cpp VAD 시간 단위는 10ms예요.
-    return found.map((s) => ({ startMs: Math.round(s.t0 * 10), endMs: Math.round(s.t1 * 10) }));
-  } catch {
-    return null;
-  }
+export function speechIn(pcm: Uint8Array): Promise<Span[] | null> {
+  if (pcm.length < 2) return Promise.resolve(null);
+  return serialized(async () => {
+    const vad = await open();
+    if (!vad) return null;
+    try {
+      const buffer = pcm.buffer.slice(
+        pcm.byteOffset,
+        pcm.byteOffset + pcm.byteLength,
+      ) as ArrayBuffer;
+      const found = await vad.detectSpeechData(buffer, OPTIONS);
+      // whisper.cpp VAD 시간 단위는 10ms예요.
+      return found.map((s) => ({ startMs: Math.round(s.t0 * 10), endMs: Math.round(s.t1 * 10) }));
+    } catch {
+      return null;
+    }
+  });
 }
 
-export async function releaseVad(): Promise<void> {
-  const vad = await opening;
-  opening = null;
-  await vad?.release().catch(() => {});
+export function releaseVad(): Promise<void> {
+  return serialized(async () => {
+    const pending = opening;
+    opening = null;
+    const vad = await pending;
+    await vad?.release().catch(() => {});
+  });
 }

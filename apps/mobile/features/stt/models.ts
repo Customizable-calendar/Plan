@@ -4,11 +4,12 @@ import { SttError } from './errors';
 
 // 받아쓰기 모델은 앱에 넣지 않고 처음 쓸 때 기기에 받아요. 크기로 다 받았는지 확인해요.
 // 모델을 바꾸면 bytes도 같이 바꿔요.
-// - whisper-large-v3-turbo 한국어 파인튜닝(whisper.cpp ggml q5_0, Apache-2.0): 기본.
-//   whisper.rn으로 바로 돌아가고(추가 네이티브 엔진 불필요) 한국어 회의·소음 환경에서도 정확해요.
+// - SenseVoice int8(sherpa-onnx, FunASR 모델 라이선스 1.1): 기본 추천. 비자기회귀 방식이라
+//   CPU에서도 실시간에 가깝게 빨라요. 내 단어 예시(prompt)는 못 쓰지만 긴 회의 실시간 받아쓰기에 유리해요.
+// - whisper-large-v3-turbo 한국어 파인튜닝(whisper.cpp ggml q5_0, Apache-2.0): 한국어 정확도 우선.
 // - whisper base(whisper.cpp ggml, MIT): 가벼워요. 오래된 폰에서 빠르게 받아쓸 때 써요.
-// 예전에 있던 whisper small, SenseVoice, Qwen3-ASR 파일은 RETIRED로 지워서 공간을 돌려줘요.
-export type SttModelId = 'turbo-ko' | 'base';
+// 예전에 있던 whisper small, Qwen3-ASR 파일은 RETIRED로 지워서 공간을 돌려줘요.
+export type SttModelId = 'sensevoice' | 'turbo-ko' | 'base';
 
 /** 받을 파일 하나 */
 export interface ModelFile {
@@ -27,20 +28,33 @@ export interface ModelPack {
 
 export interface SttModel extends ModelPack {
   id: SttModelId;
-  engine: 'whisper' | 'qwen3';
+  engine: 'whisper' | 'sensevoice' | 'qwen3';
 }
 
 const WHISPER_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/';
 // 고친 모델이 올라와도 받는 파일이 바뀌지 않게 커밋으로 고정해요.
 const WHISPER_TURBO_KO_URL =
   'https://huggingface.co/JoaoZaokk/whisper-large-v3-turbo-korean-ggml/resolve/c4f74b15c9d4e7889871c5450327b5fd1f13f059/';
+const SENSE_VOICE_URL =
+  'https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/';
 
 export const MODELS: SttModel[] = [
+  {
+    id: 'sensevoice',
+    engine: 'sensevoice',
+    label: '아주 빠르게 (SenseVoice)',
+    note: '실시간에 가까운 속도, 기본 추천, 240MB',
+    dir: 'sense-voice-int8',
+    files: [
+      { name: 'model.int8.onnx', url: `${SENSE_VOICE_URL}model.int8.onnx`, bytes: 239_233_841 },
+      { name: 'tokens.txt', url: `${SENSE_VOICE_URL}tokens.txt`, bytes: 315_894 },
+    ],
+  },
   {
     id: 'turbo-ko',
     engine: 'whisper',
     label: '가장 정확하게 (whisper turbo 한국어)',
-    note: '한국어 특화, 회의에 추천, 547MB',
+    note: '한국어 특화, 정확도 우선, 547MB',
     files: [
       {
         name: 'ggml-whisper-large-v3-turbo-korean-q5_0.bin',
@@ -69,15 +83,6 @@ const RETIRED: ModelPack[] = [
     label: 'whisper small',
     note: '',
     files: [{ name: 'ggml-small-q5_1.bin', url: '', bytes: 190_085_487 }],
-  },
-  {
-    label: 'SenseVoice',
-    note: '',
-    dir: 'sense-voice-int8',
-    files: [
-      { name: 'model.int8.onnx', url: '', bytes: 239_233_841 },
-      { name: 'tokens.txt', url: '', bytes: 315_894 },
-    ],
   },
   {
     label: 'Qwen3-ASR 0.6B',

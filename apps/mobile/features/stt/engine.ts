@@ -6,10 +6,12 @@ import { FileMode } from 'expo-file-system';
 import {
   BYTES_PER_SECOND,
   type Chunk,
+  type ChunkerOptions,
   createChunker,
   levelOf,
   rmsOf,
   SAMPLE_RATE,
+  SILENT_RMS,
 } from './chunker';
 import { SttError } from './errors';
 import { isDownloaded, modelFile, PREVIEW_MODEL, type SttModel } from './models';
@@ -22,7 +24,7 @@ import {
 import { clearSession, leftover, type SavedChunk, saveChunk, saveSegments } from './session';
 import { cutAtGap, keepSpeech } from './speech';
 import { cleanSegment, type PreviewSegment, promptFor, settledCount, UNCLEAR } from './text';
-import { openQwen3 } from './sensevoice';
+import { openQwen3, openSenseVoice } from './sensevoice';
 import { prepareVad, releaseVad, speechIn } from './vad';
 import { startKeepAlive, stopKeepAlive, updateKeepAlive } from '@/modules/stt-native';
 
@@ -32,9 +34,18 @@ import { startKeepAlive, stopKeepAlive, updateKeepAlive } from '@/modules/stt-na
 
 /** 밀린 조각이 이만큼 이하면 후보 여러 개를 비교해서(beam search) 더 정확하게 받아써요. */
 const BEAM_BACKLOG = 1;
-const BEAM_SIZE = 5;
+/** whisper.cpp 기본 best_of(5)·beam(5)는 CPU에서 느려요. 2로 낮춰 정확도와 속도를 맞춰요. */
+const BEAM_SIZE = 2;
 /** 미리 받아쓰기(회색 글) 사이에 쉬는 시간. 폰이 쉴 틈을 줘요. */
-const PREVIEW_EVERY_MS = 1500;
+const PREVIEW_EVERY_MS = 2000;
+/** SenseVoice는 들어온 길이만큼만 빠르게 계산해서 회색 글을 더 자주 갱신해도 부담이 적어요. */
+const FAST_PREVIEW_EVERY_MS = 800;
+
+/** SenseVoice는 30초 패딩 없이 들어온 만큼만 계산해서 더 짧은 조각으로 바로 확정해요. */
+const chunkerOptionsFor = (model: SttModel): ChunkerOptions | undefined =>
+  model.engine === 'sensevoice'
+    ? { minSeconds: 8, earlyMinSeconds: 3, longPauseSeconds: 0.8 }
+    : undefined;
 
 /**
  * 한 번에 녹음할 수 있는 최대 길이. 녹음 형식은 whisper가 받는 16kHz 모노 16비트 PCM이에요.
@@ -71,6 +82,7 @@ interface WhisperContext {
       prompt?: string;
       beamSize?: number;
       bestOf?: number;
+      temperatureInc?: number;
       onProgress?: (percent: number) => void;
     },
   ): { stop(): Promise<void>; promise: Promise<WhisperResult> };
@@ -175,10 +187,12 @@ function hold(): () => void {
 }
 
 async function openContext(model: SttModel, words: string[] = []): Promise<WhisperContext> {
-  // Qwen3는 whisper.rn 컨텍스트와 같은 모양으로 감싸서 나머지는 똑같이 써요(sensevoice.ts).
+  // sherpa-onnx 모델(SenseVoice, Qwen3)은 whisper.rn 컨텍스트와 같은 모양으로 감싸서 나머지는 똑같이 써요(sensevoice.ts).
   if (model.engine !== 'whisper') {
     try {
-      return await openQwen3(model, words);
+      return model.engine === 'sensevoice'
+        ? await openSenseVoice(model)
+        : await openQwen3(model, words);
     } catch (e) {
       if (e instanceof SttError) throw e;
       throw new SttError(`${model.label} 모델을 열지 못했어요. 모델을 지우고 다시 받아 주세요.`, e);
@@ -226,18 +240,22 @@ function contextFor(model: SttModel, words: string[] = []): Promise<WhisperConte
 }
 
 // ── 미리 받아쓰기(회색 글)만 하는 모델 ──
-// Qwen3는 정확하지만 느려서 말하는 중 회색 글은 whisper base로 따로 보여 줘요(Qwen3를 받을 때 같이 받아요).
-// sherpa-onnx(Qwen3)와 whisper.rn은 엔진이 달라서 같이 띄울 수 있어요. 받아 둔 whisper가 없으면 회색 글 없이 조각마다 글이 나와요.
+// 무거운 모델(turbo-ko, Qwen3)로 2초마다 회색 글까지 돌리면 매번 30초 인코더가 돌아 CPU가 밀려요.
+// 그래서 회색 글은 가벼운 whisper base(60MB)가 따로 맡고, base가 없으면 회색 글을 생략해요.
 let previewLoaded: { id: string; context: Promise<WhisperContext> } | null = null;
 
+/** turbo-ko·Qwen3처럼 무거운 모델은 미리 받아쓰기에 직접 쓰지 않고 가벼운 모델로 분리해요. */
+const isHeavyModel = (model: SttModel) =>
+  model.id !== PREVIEW_MODEL.id && model.engine !== 'sensevoice';
+
 function previewModelFor(main: SttModel): SttModel | null {
-  if (main.engine !== 'qwen3') return null;
+  if (!isHeavyModel(main)) return null;
   return isDownloaded(PREVIEW_MODEL) ? PREVIEW_MODEL : null;
 }
 
 /** main으로 받아쓸 때 회색 글을 맡을 컨텍스트. undefined: main이 같이 해요, null: 회색 글 없어요 */
 function previewContextFor(main: SttModel): Promise<WhisperContext> | null | undefined {
-  if (main.engine !== 'qwen3') return undefined;
+  if (!isHeavyModel(main)) return undefined;
   const model = previewModelFor(main);
   if (!model) return null;
   if (previewLoaded?.id === model.id) return previewLoaded.context;
@@ -293,6 +311,15 @@ function decodeBase64(base64: string): Uint8Array {
 
 const toArrayBuffer = (bytes: Uint8Array) =>
   bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+
+/** 새로 들어온 구간에 말소리 수준의 음량이 한 프레임(약 0.13초)이라도 있는지 확인해요. */
+function hasAudibleSpeech(bytes: Uint8Array): boolean {
+  const step = 4096;
+  for (let at = 0; at < bytes.length; at += step) {
+    if (rmsOf(bytes.subarray(at, Math.min(bytes.length, at + step))) >= SILENT_RMS) return true;
+  }
+  return false;
+}
 
 /** whisper 조각들을 다듬어요. 앞 글(previous)과 같은 문장은 빼요. 끝 시각은 받은 소리 안으로 맞춰요. */
 function previewSegments(
@@ -359,11 +386,12 @@ function createTranscriber(
   words: string[] = [],
   /** 회색 글만 맡는 컨텍스트. undefined면 context가 같이 하고, null이면 회색 글을 안 만들어요. */
   previewContext?: Promise<WhisperContext> | null,
+  /** 회색 글이 다른 네이티브 엔진(sherpa vs whisper)인지. 같은 CPU 엔진이면 조각 처리 중엔 쉬어요. */
+  concurrentPreview = false,
 ) {
-  // 회색 글을 다른 엔진이 맡으면 조각을 받아쓰는 동안에도 같이 돌아요.
-  const separatePreview = previewContext != null;
+  const separatePreview = concurrentPreview && previewContext != null;
   let chain: Promise<void> = Promise.resolve();
-  // 미리 받아쓰기는 조각이 없을 때만 돌고, 조각이 오면 멈춰요(모델 하나를 같이 써요).
+  // 미리 받아쓰기는 조각이 없을 때만 돌고, 조각이 오면 멈춰요(CPU 경합을 막아요).
   let previewJob: { stop(): Promise<void> } | null = null;
   let previewDone: Promise<unknown> = Promise.resolve();
   let queued = 0;
@@ -380,6 +408,7 @@ function createTranscriber(
     withPrompt: boolean,
   ): Promise<SttSegment[] | null> => {
     // 밀린 게 적으면 후보 여러 개를 비교해서 더 정확하게, 많으면 빠르게 받아써요.
+    // whisper.cpp 기본 best_of(5)·temperature_inc(0.2)는 CPU에서 여러 번 재시도해 크게 느려져요.
     const careful = queued - done <= BEAM_BACKLOG;
     const job = (await context).transcribeData(toArrayBuffer(bytes), {
       language: 'ko',
@@ -392,7 +421,9 @@ function createTranscriber(
             ),
           }
         : {}),
-      ...(careful ? { beamSize: BEAM_SIZE } : { bestOf: 2 }),
+      bestOf: 1,
+      temperatureInc: 0,
+      ...(careful ? { beamSize: BEAM_SIZE } : {}),
       onProgress: (p) => (inChunk = p / 100),
     });
     running = job;
@@ -482,6 +513,9 @@ function createTranscriber(
         const job = ctx.transcribeData(toArrayBuffer(pcm), {
           language: 'ko',
           prompt: promptFor(previous, words),
+          // 미리보기는 후보 1개(greedy), 온도 재시도 없음으로 가장 빠르게 돌려요.
+          bestOf: 1,
+          temperatureInc: 0,
         });
         previewJob = job;
         previewDone = job.promise.catch(() => {});
@@ -582,28 +616,38 @@ export async function startDictation(
   prepareVad();
 
   const segments: SttSegment[] = [];
-  const transcriber = createTranscriber(contextReady, segments, options.words, previewReady);
+  const transcriber = createTranscriber(
+    contextReady,
+    segments,
+    options.words,
+    previewReady,
+    model.engine !== PREVIEW_MODEL.engine,
+  );
   /** 여기(바이트)까지는 조각으로 받아써서 partial에 들어갔어요. */
   let confirmed = 0;
-  const chunker = createChunker((chunk) => {
-    const end = Math.round((chunk.offsetMs / 1000) * BYTES_PER_SECOND) + chunk.pcm.length;
-    // 이 조각을 녹음하는 동안 미리 받아써서 보여 준 글(회색 글). 못 알아들으면 이걸 남겨요.
-    const start = chunker.emittedBytes() - chunk.pcm.length;
-    const hint = preview.base === start ? previewText(preview) : '';
-    let sure = true;
-    // 조용한 조각은 받아쓰지 않아요(없는 말을 지어내지 않게).
-    const saved = speechOnly(chunk).then((kept) => {
-      if (!kept) return null;
-      sure = kept.sure;
-      return saveChunk(kept.offsetMs, kept.pcm);
-    });
-    transcriber.add(saved, () => (confirmed = Math.max(confirmed, end)), {
-      hint,
-      get sure() {
-        return sure;
-      },
-    });
-  }, findGap);
+  const chunker = createChunker(
+    (chunk) => {
+      const end = Math.round((chunk.offsetMs / 1000) * BYTES_PER_SECOND) + chunk.pcm.length;
+      // 이 조각을 녹음하는 동안 미리 받아써서 보여 준 글(회색 글). 못 알아들으면 이걸 남겨요.
+      const start = chunker.emittedBytes() - chunk.pcm.length;
+      const hint = preview.base === start ? previewText(preview) : '';
+      let sure = true;
+      // 조용한 조각은 받아쓰지 않아요(없는 말을 지어내지 않게).
+      const saved = speechOnly(chunk).then((kept) => {
+        if (!kept) return null;
+        sure = kept.sure;
+        return saveChunk(kept.offsetMs, kept.pcm);
+      });
+      transcriber.add(saved, () => (confirmed = Math.max(confirmed, end)), {
+        hint,
+        get sure() {
+          return sure;
+        },
+      });
+    },
+    findGap,
+    chunkerOptionsFor(model),
+  );
 
   let total = 0;
   let stopped = false;
@@ -644,24 +688,40 @@ export async function startDictation(
   };
 
   // 말하는 동안 아직 조각이 안 된 말을 계속 미리 받아써요(회색 글).
-  // 조각을 받아쓰는 동안에는 쉬어요. 조각이 먼저예요.
+  // 조각을 받아쓰는 동안에는 쉬고, 새로 들어온 소리가 조용하면 건너뛰어요(VAC 방식).
   // 두 번 연속 똑같이 나온 앞 문장은 고정하고(settledCount), 다음부터는 그 뒤 소리만 받아써요.
-  // 그래서 글이 덜 바뀌고, 받아쓸 소리가 짧아져서 폰이 덜 일해요.
   let preview = emptyPreview(0);
-  void (async () => {
-    while (!stopped) {
-      await new Promise((r) => setTimeout(r, PREVIEW_EVERY_MS));
-      const base = chunker.emittedBytes();
-      // 새 조각이 나갔으면 그 조각이 받아써서 partial에 들어가요. 미리 받아쓰기는 처음부터 다시예요.
-      if (base !== preview.base) preview = emptyPreview(base);
-      const window = chunker.pendingPcm().subarray(preview.frozenBytes);
-      if (stopped || window.length < BYTES_PER_SECOND) continue;
-      const at = preview;
-      const found = await transcriber.preview(window, at.frozen);
-      if (found === null || stopped) continue;
-      preview = advancePreview(at, found, (window.length / BYTES_PER_SECOND) * 1000);
-    }
-  })();
+  let lastPreviewLen = 0;
+  const previewEveryMs = model.engine === 'sensevoice' ? FAST_PREVIEW_EVERY_MS : PREVIEW_EVERY_MS;
+  if (previewReady !== null) {
+    void (async () => {
+      while (!stopped) {
+        await new Promise((r) => setTimeout(r, previewEveryMs));
+        if (stopped || paused) continue;
+        const base = chunker.emittedBytes();
+        // 새 조각이 나갔으면 그 조각이 받아써서 partial에 들어가요. 미리 받아쓰기는 처음부터 다시예요.
+        if (base !== preview.base) {
+          preview = emptyPreview(base);
+          lastPreviewLen = 0;
+        }
+        const window = chunker.pendingPcm().subarray(preview.frozenBytes);
+        if (window.length < BYTES_PER_SECOND || window.length <= lastPreviewLen) continue;
+        const added = window.subarray(lastPreviewLen);
+        if (!hasAudibleSpeech(added)) {
+          lastPreviewLen = window.length;
+          continue;
+        }
+        const at = preview;
+        const found = await transcriber.preview(window, at.frozen);
+        if (found === null || stopped) continue;
+        lastPreviewLen = window.length;
+        preview = advancePreview(at, found, (window.length / BYTES_PER_SECOND) * 1000);
+        if (preview.frozenBytes !== at.frozenBytes) {
+          lastPreviewLen = Math.max(0, lastPreviewLen - (preview.frozenBytes - at.frozenBytes));
+        }
+      }
+    })();
+  }
 
   return {
     seconds: () => Math.floor(total / BYTES_PER_SECOND),
@@ -816,20 +876,24 @@ export async function transcribeRecording(
     );
     const total = Math.max(0, recording.file.size - WAV_HEADER_BYTES);
     let confirmed = 0;
-    const chunker = createChunker((chunk) => {
-      const end = Math.round((chunk.offsetMs / 1000) * BYTES_PER_SECOND) + chunk.pcm.length;
-      let sure = true;
-      const saved = speechOnly(chunk).then((kept) => {
-        if (!kept) return null;
-        sure = kept.sure;
-        return saveChunk(kept.offsetMs, kept.pcm);
-      });
-      transcriber.add(saved, () => (confirmed = Math.max(confirmed, end)), {
-        get sure() {
-          return sure;
-        },
-      });
-    }, findGap);
+    const chunker = createChunker(
+      (chunk) => {
+        const end = Math.round((chunk.offsetMs / 1000) * BYTES_PER_SECOND) + chunk.pcm.length;
+        let sure = true;
+        const saved = speechOnly(chunk).then((kept) => {
+          if (!kept) return null;
+          sure = kept.sure;
+          return saveChunk(kept.offsetMs, kept.pcm);
+        });
+        transcriber.add(saved, () => (confirmed = Math.max(confirmed, end)), {
+          get sure() {
+            return sure;
+          },
+        });
+      },
+      findGap,
+      chunkerOptionsFor(model),
+    );
     const report = () => onProgress?.(total === 0 ? 1 : Math.min(0.99, confirmed / total));
     const timer = onProgress ? setInterval(report, 300) : null;
     try {

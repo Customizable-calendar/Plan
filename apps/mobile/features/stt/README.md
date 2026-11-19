@@ -29,10 +29,11 @@
 - **Expo Go에서는 안 돼요.** `whisper.rn`과 녹음(`@fugood/react-native-audio-pcm-stream`)이 네이티브 모듈이에요. EAS 개발 빌드가 있어야 해요(#5). Expo Go에서는 `isSttAvailable()`이 `false`이고 화면에 안내만 나와요. 앱이 죽지는 않아요.
 - **모델은 처음 쓸 때 받아요.** 앱에 넣으면 너무 커서요. 16MB씩 나눠 받아서(HTTP Range) 인터넷이 끊기거나 앱이 꺼지거나 멈춰도 다음에 "이어 받기"로 받은 데부터 받아요(`models.ts`).
 
-  | 모델                                       | 크기  | 쓰임                                |
-  | ------------------------------------------ | ----- | ----------------------------------- |
-  | `qwen3` (Qwen3-ASR 0.6B int8, sherpa-onnx) | 940MB | 기본. 한국어 제일 정확, 회의에 추천 |
-  | `base` (whisper ggml-base-q5_1)            | 60MB  | 짧은 말, 느린 폰                    |
+  | 모델                                            | 크기  | 쓰임                                      |
+  | ----------------------------------------------- | ----- | ----------------------------------------- |
+  | `sensevoice` (SenseVoice int8, sherpa-onnx)     | 240MB | 기본 추천. CPU에서도 실시간에 가까운 속도 |
+  | `turbo-ko` (whisper-large-v3-turbo 한국어 q5_0) | 547MB | 한국어 특화, 정확도 우선·다시 받아쓰기    |
+  | `base` (whisper ggml-base-q5_1)                 | 60MB  | 짧은 말, 오래된 폰, 무거운 모델 회색 글   |
 
 - **긴 녹음**: 최대 3시간. 말이 쉬는 곳에서 20~30초 조각으로 잘라(`chunker.ts`) 녹음하는 동안 뒤에서 차례로 받아써요. 그래서 말하는 동안 글이 조각마다 늘어나고, 메모리는 조각 하나(약 1MB)만큼만 써요. 말이 없는 조각은 받아쓰지 않아요(없는 말을 지어내지 않게).
 - **앱이 꺼져도 이어서**: 조각과 받아쓴 글을 기기 `Documents/stt/session/`에 적어 둬요(`session.ts`). 다음에 화면을 열면 "이어서 받아쓰기"가 나와요. 끝내거나 버리면 지워요. 기기 밖으로는 안 나가요.
@@ -52,9 +53,11 @@
 - **화면이 꺼져도 녹음 (Android)**: 녹음하는 동안 "받아쓰는 중" 알림을 띄워요(포그라운드 서비스, 마이크 종류, `modules/stt-native`). 화면이 꺼지거나 앱을 나가도 녹음과 받아쓰기를 이어 가요. 녹음을 끝내도 남은 부분을 다 받아쓸 때까지 알림이 남아요. Android 13부터는 처음에 알림 권한을 물어봐요(안 줘도 녹음은 돼요). 화면을 켜 두는 것(`expo-keep-awake`)도 그대로예요. iOS 앱은 아직 안 만들어서 iOS 백그라운드 녹음은 안 해요.
 - **음성 파일 가져오기 (Android)**: "음성 파일 가져와서 받아쓰기"로 m4a·mp3·aac·ogg·mp4 등을 골라요. OS 디코더(MediaCodec)로 16kHz 모노 WAV로 바꿔서 남긴 녹음 목록에 넣고 바로 받아써요(`importAudioFile`, `decodeToWav`). 원래 파일은 그대로예요.
 - **파일로 내보내기**: "시각 붙여 공유"는 `.txt`, "자막(SRT) 공유"는 `.srt` 파일로, 남긴 녹음은 `.wav`로 공유해요(`expo-sharing`, `share.ts`). 파일 공유가 안 되는 곳에서는 글로 공유해요.
-- **Whisper large-v3-turbo 한국어 파인튜닝 (기본 추천, whisper.rn)**: 추가 네이티브 엔진(`llama.rn`) 없이 기존 `whisper.rn`으로 바로 돌아가요. `JoaoZaokk/whisper-large-v3-turbo-korean-ggml` `q5_0`(약 547MB, Apache-2.0, 커밋 고정)을 기본 모델로 써요.
-  - 예전 whisper small, SenseVoice, Qwen3-ASR 파일은 처음 모델 목록을 볼 때 지워서 공간을 돌려줘요(`removeRetiredModels`).
-  - 가볍게 쓰고 싶은 오래된 폰용으로 `whisper base`(60MB)를 같이 둬요.
+- **SenseVoice int8 (기본 추천, sherpa-onnx)** + **Whisper large-v3-turbo 한국어 파인튜닝 (`q5_0`)**:
+  - 기본 모델은 `SenseVoice int8`(240MB, sherpa-onnx)로, 비자기회귀(CTC) 방식이라 Android CPU에서도 실시간에 가깝게 받아쓰고 짧은 조각(3~8초)과 빠른 회색 미리보기(0.8초)로 바로 반응해요.
+  - 한국어 정확도가 우선일 때는 `JoaoZaokk/whisper-large-v3-turbo-korean-ggml` `q5_0`(547MB, 커밋 고정)을 선택할 수 있어요. 회색 미리보기는 가벼운 `whisper base`(60MB)가 맡아요.
+  - 예전 whisper small, Qwen3-ASR 파일은 처음 모델 목록을 볼 때 지워서 공간을 돌려줘요(`removeRetiredModels`).
+  - Silero VAD(`vad.ts`)는 내부 ggml 스케줄러 동시 접근 충돌을 막기 위해 모든 호출을 직렬화해요.
 - **받아쓴 글 다듬기**: 기본 양식에 "받아쓴 글 다듬기"를 넣었어요. 받아쓴 글만 팀 AI로 보내서 잘못 알아들은 글자, 띄어쓰기, 부호만 고쳐요(LocalSTT도 LLM 후보정을 권해요).
 - **화자 구분 (새 APK, Android)**: 받아쓴 뒤 "화자 나누기"를 누르면 녹음 원본으로 누가 말했는지 나눠서 "화자 1: …" 줄로 보여 줘요(`speakers.ts`, `SpeakerSplit.tsx`). pyannote 분할 3.0(MIT) + 3D-Speaker ERes2Net(Apache-2.0) 모델(45MB)을 처음 쓸 때 받아요. 사람 수는 알아서·2·3·4명 중에 골라요. 녹음 원본이 있어야 하고(원본 남기기·파일 가져오기), 30분 이하 녹음만 돼요. "화자 1"은 목소리로 나눈 것이라 실제 이름은 몰라요. 시각 붙은 글·자막·AI 정리에도 화자가 들어가요.
 - sherpa-onnx는 불러오는 순간 네이티브 모듈을 찾아서, `sherpa.ts`로만 불러요(없는 빌드에서는 안 불러요). 웹은 `sherpa.web.ts`가 대신해서 웹 묶음에 안 들어가요.
