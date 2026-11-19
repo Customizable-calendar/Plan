@@ -11,6 +11,7 @@ import {
   type TagNode,
 } from './hashtags';
 import { dayKey, timeLabel } from './model';
+import { TagCategoryPanel } from './TagCategoryPanel';
 import { useResolvedCalendarTags } from './tagStore';
 
 const BASE_GRAPH_HEIGHT = 480;
@@ -188,6 +189,8 @@ export function HashtagGraphSheet({
                   </View>
                 ))}
               </View>
+
+              <TagCategoryPanel tags={graph.map((n) => n.tag)} onSelectTag={setSelectedTag} />
 
               <View className="gap-3 rounded-xl border border-border bg-card p-4">
                 <View className="flex-row flex-wrap items-center justify-between gap-2">
