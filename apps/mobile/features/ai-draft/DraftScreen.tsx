@@ -1,16 +1,28 @@
 import type { AiRequest } from '@noteapp/ai-client';
 import { templates } from '@noteapp/shared';
-import { colors, fontSize, screen, space } from '@noteapp/ui';
-import { type ReactNode, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  AiNotice,
+  Button,
+  cn,
+  DaySectionTitle,
+  Icon,
+  palette,
+  RailCard,
+  ScrollChips,
+  Text,
+} from '@noteapp/ui';
+import { CheckIcon } from 'lucide-react-native';
+import { useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 
-import { cardDetail, typeLabel, useCards } from '@/features/cards';
+import { cardDetail, useCards } from '@/features/cards';
 
 import { getProvider } from './data';
 import { buildRequest } from './prompt';
 
 type Result = { text: string; request: AiRequest };
 
+// AI 초안 화면. 디자인 시스템 개편안(양식 칩, 상자 없는 카드 줄, 주 버튼 하나)을 따라요.
 export function DraftScreen() {
   const { cards, loading } = useCards();
   const [templateId, setTemplateId] = useState(templates[0].id);
@@ -50,85 +62,95 @@ export function DraftScreen() {
   const blocked = busy || selected.length === 0;
 
   return (
-    <ScrollView style={screen.container} contentContainerStyle={screen.content}>
-      <Section title="양식">
-        <View style={styles.row}>
-          {templates.map((t) => (
-            <Chip
-              key={t.id}
-              label={t.name}
-              on={t.id === templateId}
-              onPress={() => setTemplateId(t.id)}
-            />
-          ))}
+    <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-6 pb-16 pt-4">
+      <View className="gap-2">
+        <View className="px-5">
+          <DaySectionTitle label="양식" />
         </View>
-        <Text style={styles.muted}>{template.description}</Text>
-      </Section>
+        <ScrollChips
+          items={templates.map((t) => ({ key: t.id, label: t.name }))}
+          active={templateId}
+          onChange={setTemplateId}
+        />
+        <Text className="px-5 text-xs text-muted-foreground">{template.description}</Text>
+      </View>
 
-      <Section title={`보낼 카드 ${selected.length}/${confirmed.length}`}>
-        {loading && <Text style={styles.muted}>불러오는 중</Text>}
-        {!loading && confirmed.length === 0 && (
-          <Text style={styles.muted}>확인한 카드가 없어요. 카드 탭에서 먼저 확인해 주세요.</Text>
-        )}
-        {confirmed.map((c) => {
+      <View className="px-5">
+        <DaySectionTitle label={`보낼 카드 ${selected.length}/${confirmed.length}`} />
+        {loading ? <Text className="py-3 text-sm text-muted-foreground">불러오는 중</Text> : null}
+        {!loading && confirmed.length === 0 ? (
+          <Text className="py-3 text-sm text-muted-foreground">
+            확인한 카드가 없어요. 카드 탭에서 먼저 확인해 주세요.
+          </Text>
+        ) : null}
+        {confirmed.map((c, index) => {
           const on = !excluded.has(c.id);
           const detail = cardDetail(c);
           return (
-            <Pressable
-              key={c.id}
-              onPress={() => toggle(c.id)}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: on }}
-              style={[styles.pick, on && styles.pickOn]}
-            >
-              <View style={[styles.check, on && styles.checkOn]}>
-                {on && <Text style={styles.checkMark}>✓</Text>}
-              </View>
-              <View style={styles.pickBody}>
-                <Text style={styles.type}>{typeLabel[c.type]}</Text>
-                <Text style={styles.pickTitle}>{c.title}</Text>
-                {detail && <Text style={styles.muted}>{detail}</Text>}
-              </View>
-            </Pressable>
+            <View key={c.id}>
+              {index > 0 ? <View className="h-px bg-border" /> : null}
+              <Pressable
+                onPress={() => toggle(c.id)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: on }}
+                className={cn(!on && 'opacity-50')}
+              >
+                <RailCard
+                  type={c.type}
+                  title={c.title}
+                  meta={detail ?? undefined}
+                  right={
+                    <View
+                      className={cn(
+                        'h-6 w-6 items-center justify-center rounded-full border-2',
+                        on ? 'border-primary bg-primary' : 'border-input bg-background',
+                      )}
+                    >
+                      {on ? (
+                        <Icon as={CheckIcon} size={13} className="text-primary-foreground" />
+                      ) : null}
+                    </View>
+                  }
+                />
+              </Pressable>
+            </View>
           );
         })}
-      </Section>
+      </View>
 
-      <Pressable
-        onPress={generate}
-        disabled={blocked}
-        accessibilityRole="button"
-        style={[styles.primary, blocked && styles.disabled]}
-      >
-        {busy ? (
-          <ActivityIndicator color={colors.surface} />
-        ) : (
-          <Text style={styles.primaryText}>{result ? '다시 만들기' : '초안 만들기'}</Text>
-        )}
-      </Pressable>
-      {error && <Text style={styles.error}>{error}</Text>}
+      <View className="gap-2 px-5">
+        <Button size="lg" disabled={blocked} onPress={() => void generate()}>
+          {busy ? (
+            <ActivityIndicator color={palette.primaryForeground} />
+          ) : (
+            <Text>{result ? '다시 만들기' : '초안 만들기'}</Text>
+          )}
+        </Button>
+        {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+      </View>
 
-      {result && (
-        <Section title="초안 미리보기">
-          <View style={styles.doc}>
+      {result ? (
+        <View className="gap-3 px-5">
+          <DaySectionTitle label="초안 미리보기" />
+          <View className="border-t border-border pt-3">
             <Markdown text={result.text} />
           </View>
+          <AiNotice />
           <Pressable onPress={() => setShowRequest((v) => !v)} accessibilityRole="button">
-            <Text style={styles.link}>
-              {showRequest ? '보낸 내용 닫기' : '보낸 내용 보기'} ·{' '}
+            <Text className="text-xs font-semibold text-primary">
+              {showRequest ? '보낸 내용 닫기' : '보낸 내용 보기'},{' '}
               {(result.request.system?.length ?? 0) + result.request.prompt.length}자
             </Text>
           </Pressable>
-          {showRequest && (
-            <Text style={styles.request}>
+          {showRequest ? (
+            <Text className="border-t border-border pt-3 text-xs leading-5 text-muted-foreground">
               {result.request.system}
               {'\n\n'}
               {result.request.prompt}
             </Text>
-          )}
-          {/* TODO(B, M2): 편집기(A)가 열리면 Document로 넘겨요. */}
-        </Section>
-      )}
+          ) : null}
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
@@ -136,123 +158,27 @@ export function DraftScreen() {
 /** 초안 미리보기용 최소 마크다운: ## 제목, - 목록, 나머지는 문단 */
 function Markdown({ text }: { text: string }) {
   return (
-    <>
+    <View className="gap-1.5">
       {text.split('\n').map((line, i) => {
         if (line.startsWith('## '))
           return (
-            <Text key={i} style={[styles.h2, i > 0 && styles.h2Gap]}>
+            <Text key={i} className={cn('text-base font-bold text-foreground', i > 0 && 'mt-3')}>
               {line.slice(3)}
             </Text>
           );
         if (line.startsWith('- '))
           return (
-            <Text key={i} style={styles.body}>
-              {'• '}
-              {line.slice(2)}
-            </Text>
+            <View key={i} className="flex-row gap-2 pl-1">
+              <View className="mt-2 h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+              <Text className="flex-1 text-sm leading-6 text-foreground">{line.slice(2)}</Text>
+            </View>
           );
         return line.trim() ? (
-          <Text key={i} style={styles.body}>
+          <Text key={i} className="text-sm leading-6 text-foreground">
             {line}
           </Text>
         ) : null;
       })}
-    </>
-  );
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {children}
     </View>
   );
 }
-
-function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected: on }}
-      style={[styles.chip, on && styles.chipOn]}
-    >
-      <Text style={[styles.chipText, on && styles.chipTextOn]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-const styles = StyleSheet.create({
-  section: { gap: space.sm },
-  sectionTitle: { fontSize: fontSize.caption, fontWeight: '700', color: colors.muted },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  muted: { fontSize: fontSize.caption, color: colors.muted },
-  chip: {
-    minHeight: 36,
-    justifyContent: 'center',
-    paddingHorizontal: space.md,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.surface,
-  },
-  chipOn: { backgroundColor: colors.ink, borderColor: colors.ink },
-  chipText: { fontSize: fontSize.caption, color: colors.ink },
-  chipTextOn: { color: colors.surface, fontWeight: '700' },
-  pick: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    padding: space.md,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    backgroundColor: colors.surface,
-  },
-  pickOn: { borderColor: colors.accent },
-  check: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: colors.line,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkOn: { backgroundColor: colors.accent, borderColor: colors.accent },
-  checkMark: { fontSize: 14, fontWeight: '700', color: colors.surface },
-  pickBody: { flex: 1, gap: 2 },
-  type: { fontSize: fontSize.caption, fontWeight: '700', color: colors.accent },
-  pickTitle: { fontSize: fontSize.body, fontWeight: '600', color: colors.ink },
-  primary: {
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: colors.accent,
-  },
-  disabled: { opacity: 0.4 },
-  primaryText: { fontSize: fontSize.body, fontWeight: '700', color: colors.surface },
-  error: { fontSize: fontSize.caption, color: '#C0392B' },
-  doc: {
-    gap: space.xs,
-    padding: space.md,
-    borderRadius: 12,
-    backgroundColor: colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  h2: { fontSize: fontSize.body, fontWeight: '700', color: colors.ink },
-  h2Gap: { marginTop: space.sm },
-  body: { fontSize: fontSize.body, lineHeight: 24, color: colors.ink },
-  link: { fontSize: fontSize.caption, fontWeight: '600', color: colors.accent },
-  request: {
-    fontSize: 12,
-    lineHeight: 18,
-    color: colors.muted,
-    padding: space.sm,
-    borderRadius: 8,
-    backgroundColor: colors.surface,
-  },
-});

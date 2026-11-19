@@ -1,176 +1,199 @@
-import type { CardType } from '@noteapp/shared';
-import { colors, fontSize, screen, space } from '@noteapp/ui';
+import type { Card, CardType } from '@noteapp/shared';
+import {
+  ActionRow,
+  BottomSheet,
+  CardListRow,
+  DaySectionTitle,
+  Scrim,
+  ScrollChips,
+  SwipeRow,
+  Text,
+} from '@noteapp/ui';
 import { Link } from 'expo-router';
+import { CheckIcon, RotateCcwIcon, Trash2Icon } from 'lucide-react-native';
 import { type ReactNode, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 
-import { CardItem } from './CardItem';
-import { typeLabel } from './format';
-import { confirmCards, restoreCard, useCards } from './store';
-import { SwipeRow } from './SwipeRow';
-import { CardDeck } from './CardDeck';
-import { useDragging } from './dragging';
+import { cardDetail, typeLabel } from './format';
+import { confirmCard, confirmCards, dismissCard, restoreCard, useCards } from './store';
 import { TryMemo } from './TryMemo';
 import { UndoBar } from './UndoBar';
 
-const filters: (CardType | 'all')[] = ['all', 'event', 'task', 'person', 'idea'];
+const TYPE_KEYS: (CardType | 'all')[] = ['all', 'event', 'task', 'person', 'idea'];
+const TYPE_DOT: Record<CardType, string> = {
+  event: 'bg-event',
+  task: 'bg-task',
+  person: 'bg-person',
+  idea: 'bg-idea',
+};
 
-/** memo: 맨 위에 둘 막 쓰기 칸. 라우트가 notes 기능의 입력을 넣어 줘요. 없으면 예전 TryMemo를 써요. */
+/** memo: 맨 위에 둘 막 쓰기 칸. 라우트가 notes 기능의 입력을 넣어 줘요. 없으면 TryMemo를 써요. */
 export function CardsScreen({ memo }: { memo?: ReactNode }) {
   const { cards, loading } = useCards();
   const [filter, setFilter] = useState<CardType | 'all'>('all');
-  // 한 장씩(틴더처럼) 넘기기가 기본, 목록으로도 볼 수 있어요.
-  const [deck, setDeck] = useState(true);
-  const dragging = useDragging();
+  const [moreId, setMoreId] = useState<string | null>(null);
 
+  const live = cards.filter((c) => c.status !== 'dismissed');
   const shown = cards.filter((c) => filter === 'all' || c.type === filter);
   const waiting = shown.filter((c) => c.status === 'suggested');
   const confirmed = shown.filter((c) => c.status === 'confirmed');
   const dismissed = shown.filter((c) => c.status === 'dismissed');
+  const picked = cards.find((c) => c.id === moreId) ?? null;
+
+  const chips = TYPE_KEYS.map((key) => ({
+    key,
+    label: key === 'all' ? '전체' : typeLabel[key],
+    count: key === 'all' ? live.length : live.filter((c) => c.type === key).length,
+    dot: key === 'all' ? undefined : TYPE_DOT[key],
+  }));
+
+  const renderRows = (items: Card[]) =>
+    items.map((c, index) => (
+      <View key={c.id}>
+        {index > 0 ? <View className="h-px bg-border" /> : null}
+        <SwipeRow
+          onConfirm={c.status === 'suggested' ? () => void confirmCard(c.id) : undefined}
+          onDismiss={() => void dismissCard(c.id)}
+        >
+          <CardListRow
+            type={c.type}
+            title={c.title}
+            meta={cardDetail(c) ?? undefined}
+            state={c.status}
+            selected={c.id === moreId}
+            onConfirm={() => void confirmCard(c.id)}
+            onMore={() => setMoreId(c.id)}
+          />
+        </SwipeRow>
+      </View>
+    ));
 
   return (
-    <View style={screen.container}>
+    <View className="flex-1 bg-background">
       <ScrollView
-        style={screen.container}
-        contentContainerStyle={[screen.content, styles.bottomRoom]}
+        className="flex-1"
+        contentContainerClassName="gap-5 pb-28 pt-4"
         keyboardShouldPersistTaps="handled"
-        scrollEnabled={!dragging}
       >
-        {memo ?? <TryMemo />}
+        <View className="px-5">{memo ?? <TryMemo />}</View>
 
-        <View style={styles.filters}>
-          {filters.map((f) => (
-            <Pressable
-              key={f}
-              onPress={() => setFilter(f)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: filter === f }}
-              style={[styles.chip, filter === f && styles.chipOn]}
-            >
-              <Text style={[styles.chipText, filter === f && styles.chipTextOn]}>
-                {f === 'all' ? '전체' : typeLabel[f]}
-              </Text>
-            </Pressable>
-          ))}
+        <ScrollChips
+          items={chips}
+          active={filter}
+          onChange={(k) => setFilter(k as CardType | 'all')}
+        />
+
+        {loading ? <Text className="px-5 text-sm text-muted-foreground">불러오는 중</Text> : null}
+
+        <View className="px-5">
+          <View className="flex-row items-center justify-between">
+            <View className="flex-1">
+              <DaySectionTitle label="확인 기다리는 카드" count={waiting.length} />
+            </View>
+            {waiting.length > 1 ? (
+              <Pressable
+                onPress={() => void confirmCards(waiting.map((c) => c.id))}
+                accessibilityRole="button"
+                hitSlop={8}
+                className="h-9 justify-center pl-3"
+              >
+                <Text className="text-[13px] font-bold text-primary">모두 확인</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          {waiting.length === 0 && !loading ? (
+            <Text className="py-3 text-sm text-muted-foreground">모두 확인했어요.</Text>
+          ) : (
+            renderRows(waiting)
+          )}
         </View>
 
-        {loading && <Text style={styles.empty}>불러오는 중</Text>}
-
-        <Section
-          title={`확인 기다리는 카드 ${waiting.length}`}
-          action={
-            <View style={styles.actions}>
-              {waiting.length > 1 && (
-                <Pressable
-                  onPress={() => setDeck((d) => !d)}
-                  accessibilityRole="button"
-                  hitSlop={8}
-                >
-                  <Text style={styles.undo}>{deck ? '목록으로' : '한 장씩'}</Text>
-                </Pressable>
-              )}
-              {waiting.length > 1 && (
-                <Pressable
-                  onPress={() => confirmCards(waiting.map((c) => c.id))}
-                  accessibilityRole="button"
-                  hitSlop={8}
-                >
-                  <Text style={styles.undo}>모두 확인</Text>
-                </Pressable>
-              )}
-            </View>
-          }
-        >
-          {waiting.length === 0 && !loading && <Text style={styles.empty}>모두 확인했어요.</Text>}
-          {waiting.length > 0 && (
-            <Text style={styles.empty}>오른쪽으로 밀면 확인, 왼쪽으로 밀면 버려요.</Text>
-          )}
-          {deck ? (
-            <CardDeck cards={waiting} />
-          ) : (
-            waiting.map((c) => (
-              <SwipeRow key={c.id} cardId={c.id}>
-                <CardItem card={c} />
-              </SwipeRow>
-            ))
-          )}
-        </Section>
-
-        {confirmed.length > 0 && (
-          <Section title={`확인한 카드 ${confirmed.length}`}>
-            {confirmed.map((c) => (
-              <CardItem key={c.id} card={c} />
-            ))}
-            <Link href="/draft" style={styles.draft}>
+        {confirmed.length > 0 ? (
+          <View className="px-5">
+            <DaySectionTitle label="확인한 카드" count={confirmed.length} />
+            {renderRows(confirmed)}
+            <View className="h-px bg-border" />
+            <Link href="/draft" className="py-3.5 text-[15px] font-bold text-primary">
               확인한 카드로 초안 만들기
             </Link>
-          </Section>
-        )}
+          </View>
+        ) : null}
 
-        {dismissed.length > 0 && (
-          <Section title={`버린 카드 ${dismissed.length}`}>
-            {dismissed.map((c) => (
-              <Pressable key={c.id} onPress={() => restoreCard(c.id)} accessibilityRole="button">
-                <Text style={styles.dismissed}>
-                  {typeLabel[c.type]} · {c.title} <Text style={styles.undo}>되살리기</Text>
-                </Text>
-              </Pressable>
+        {dismissed.length > 0 ? (
+          <View className="px-5">
+            <DaySectionTitle label="버린 카드" count={dismissed.length} />
+            {dismissed.map((c, index) => (
+              <View key={c.id}>
+                {index > 0 ? <View className="h-px bg-border" /> : null}
+                <Pressable
+                  onPress={() => void restoreCard(c.id)}
+                  accessibilityRole="button"
+                  className="min-h-12 flex-row items-center justify-between gap-3 py-2.5"
+                >
+                  <Text
+                    className="flex-1 text-sm text-muted-foreground line-through"
+                    numberOfLines={1}
+                  >
+                    {typeLabel[c.type]}, {c.title}
+                  </Text>
+                  <Text className="text-[13px] font-bold text-primary">되살리기</Text>
+                </Pressable>
+              </View>
             ))}
-          </Section>
-        )}
+          </View>
+        ) : null}
       </ScrollView>
+
+      {picked ? (
+        <>
+          <Pressable
+            onPress={() => setMoreId(null)}
+            className="absolute inset-0"
+            accessibilityRole="button"
+            accessibilityLabel="닫기"
+          >
+            <Scrim />
+          </Pressable>
+          <View className="absolute bottom-0 left-0 right-0">
+            <BottomSheet title={picked.title}>
+              {picked.status === 'suggested' ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    void confirmCard(picked.id);
+                    setMoreId(null);
+                  }}
+                >
+                  <ActionRow icon={CheckIcon} label="확인해서 저장" />
+                </Pressable>
+              ) : null}
+              {picked.status === 'dismissed' ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    void restoreCard(picked.id);
+                    setMoreId(null);
+                  }}
+                >
+                  <ActionRow icon={RotateCcwIcon} label="되살리기" />
+                </Pressable>
+              ) : (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    void dismissCard(picked.id);
+                    setMoreId(null);
+                  }}
+                >
+                  <ActionRow icon={Trash2Icon} label="버리기" />
+                </Pressable>
+              )}
+            </BottomSheet>
+          </View>
+        </>
+      ) : null}
+
       <UndoBar floating />
     </View>
   );
 }
-
-function Section({
-  title,
-  action,
-  children,
-}: {
-  title: string;
-  action?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        {action}
-      </View>
-      {children}
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  chip: {
-    minHeight: 36,
-    justifyContent: 'center',
-    paddingHorizontal: space.md,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.surface,
-  },
-  chipOn: { backgroundColor: colors.ink, borderColor: colors.ink },
-  chipText: { fontSize: fontSize.caption, color: colors.ink },
-  chipTextOn: { color: colors.surface, fontWeight: '700' },
-  section: { gap: space.sm },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  bottomRoom: { paddingBottom: 80 },
-  actions: { flexDirection: 'row', gap: space.md },
-  sectionTitle: { fontSize: fontSize.caption, fontWeight: '700', color: colors.muted },
-  empty: { fontSize: fontSize.caption, color: colors.muted },
-  dismissed: { fontSize: fontSize.caption, color: colors.muted, paddingVertical: space.xs },
-  undo: { color: colors.accent, fontWeight: '600' },
-  draft: {
-    paddingVertical: space.sm,
-    textAlign: 'center',
-    fontSize: fontSize.caption,
-    fontWeight: '700',
-    color: colors.accent,
-  },
-});

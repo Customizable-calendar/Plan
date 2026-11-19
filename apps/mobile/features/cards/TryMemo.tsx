@@ -1,12 +1,10 @@
-import { colors, fontSize, space } from '@noteapp/ui';
+import { Button, palette, Text } from '@noteapp/ui';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TextInput, View } from 'react-native';
 
 import { addFromText } from './store';
-import { look } from './look';
 
-// 메모 편집기(A)가 붙기 전까지 카드 탭에서 바로 메모를 넣어 보는 칸이에요.
-// TODO(B, M2): 편집기가 저장할 때 추출하게 되면 이 칸은 지워요.
+// 카드 탭에서 바로 메모를 넣어 보는 상자 없는 빠른 입력 칸이에요. (디자인 시스템 redesign 빠른 입력)
 export function TryMemo() {
   const [text, setText] = useState('');
   const [message, setMessage] = useState<string | null>(null);
@@ -24,56 +22,23 @@ export function TryMemo() {
   };
 
   return (
-    <View style={styles.box}>
+    <View className="gap-2 border-b border-border pb-3">
       <TextInput
         value={text}
         onChangeText={setText}
         multiline
         placeholder={'메모를 써 보세요\n예: 내일 3시 민수랑 회의. 견적서 보내야 함'}
-        placeholderTextColor={colors.muted}
+        placeholderTextColor={palette.mutedForeground}
         accessibilityLabel="메모"
-        style={styles.input}
+        className="min-h-[64px] text-base leading-6 text-foreground"
+        textAlignVertical="top"
       />
-      <View style={styles.row}>
-        <Text style={styles.message}>{message}</Text>
-        <Pressable
-          onPress={submit}
-          disabled={!text.trim()}
-          accessibilityRole="button"
-          style={[styles.button, !text.trim() && styles.disabled]}
-        >
-          <Text style={styles.buttonText}>카드 찾기</Text>
-        </Pressable>
+      <View className="flex-row items-center gap-2">
+        <Text className="flex-1 text-xs text-muted-foreground">{message ?? ''}</Text>
+        <Button size="sm" disabled={!text.trim()} onPress={() => void submit()}>
+          <Text>카드 찾기</Text>
+        </Button>
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  box: {
-    gap: space.sm,
-    padding: space.md,
-    borderRadius: look.radius,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    backgroundColor: colors.surface,
-  },
-  input: {
-    minHeight: 72,
-    fontSize: fontSize.body,
-    lineHeight: 22,
-    color: colors.ink,
-    textAlignVertical: 'top',
-  },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  message: { flex: 1, fontSize: fontSize.caption, color: colors.muted },
-  button: {
-    minHeight: 36,
-    justifyContent: 'center',
-    paddingHorizontal: space.md,
-    borderRadius: 18,
-    backgroundColor: look.primary,
-  },
-  disabled: { opacity: 0.4 },
-  buttonText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.surface },
-});

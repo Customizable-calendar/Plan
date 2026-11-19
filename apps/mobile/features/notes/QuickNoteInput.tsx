@@ -34,7 +34,7 @@ export function QuickNoteInput({ onSaved, autoFocus }: Props) {
   };
 
   return (
-    <View className="gap-2 rounded-lg border border-border bg-card p-4 pb-2">
+    <View className="gap-2 border-b border-border pb-3">
       <TextInput
         value={text}
         onChangeText={setText}
@@ -44,10 +44,10 @@ export function QuickNoteInput({ onSaved, autoFocus }: Props) {
         placeholderTextColor={palette.mutedForeground}
         accessibilityLabel="메모 입력"
         textAlignVertical="top"
-        className="min-h-24 text-base leading-6 text-foreground"
+        className="min-h-20 text-lg leading-7 text-foreground"
       />
 
-      <View className="flex-row items-center gap-2 border-t border-border pt-2">
+      <View className="flex-row items-center gap-2">
         <Text
           className={`flex-1 text-[13px] ${error ? 'text-destructive' : 'text-muted-foreground'}`}
         >

@@ -1,9 +1,17 @@
 import type { Session, Template, TemplateCategory } from '@noteapp/shared';
-import { palette } from '@noteapp/ui';
+import { DaySectionTitle, Icon, palette, ScrollChips, Text, TreeRow } from '@noteapp/ui';
 import { router, Stack, useFocusEffect } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  FileTextIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  PlusIcon,
+  SearchIcon,
+  Trash2Icon,
+  XIcon,
+} from 'lucide-react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ConfirmDialog } from './ConfirmDialog';
@@ -16,18 +24,17 @@ import {
   removeDraftSession,
 } from './data';
 import { shortDate } from './format';
-import { templateIcon } from './icons';
-import { TagBadge, TemplatePickerModal } from './TemplatePickerModal';
+import { TemplatePickerModal } from './TemplatePickerModal';
 
-const CATEGORIES: { value: TemplateCategory | undefined; label: string }[] = [
-  { value: undefined, label: '전체' },
-  { value: 'work', label: '업무일지' },
-  { value: 'blog', label: '블로그' },
-  { value: 'meeting', label: '회의록' },
-  { value: 'research', label: '연구논문' },
+const CATEGORIES: { key: string; value: TemplateCategory | undefined; label: string }[] = [
+  { key: 'all', value: undefined, label: '전체' },
+  { key: 'work', value: 'work', label: '업무일지' },
+  { key: 'blog', value: 'blog', label: '블로그' },
+  { key: 'meeting', value: 'meeting', label: '회의록' },
+  { key: 'research', value: 'research', label: '연구논문' },
 ];
 
-/** 세션 목록: 칩 필터 + 검색 + 작성한 문서 카드 + 새 세션 작성 버튼 */
+/** 세션 자료함: 검색 + 분류 칩 + 양식 폴더 트리(TreeRow) + 새 세션 버튼 */
 export function SessionsListScreen() {
   const insets = useSafeAreaInsets();
   const [category, setCategory] = useState<TemplateCategory>();
@@ -35,23 +42,19 @@ export function SessionsListScreen() {
   const [items, setItems] = useState<DocumentItem[] | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [picking, setPicking] = useState(false);
-  // 미완성 세션 목록과, 양식을 고르는 중인 미완성 세션
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Session[]>([]);
   const [completing, setCompleting] = useState<Session | null>(null);
   const [removingDraft, setRemovingDraft] = useState<Session | null>(null);
-  // 삭제 확인창에 띄울 문서. null이면 확인창이 닫혀 있어요.
   const [deleting, setDeleting] = useState<DocumentItem | null>(null);
-  // 편집기에서 돌아올 때마다 1씩 올려서 목록을 다시 불러와요.
   const [reload, setReload] = useState(0);
 
-  // useFocusEffect: 이 화면이 다시 보일 때(편집기에서 뒤로 왔을 때) 실행돼요.
   useFocusEffect(useCallback(() => setReload((n) => n + 1), []));
 
   useEffect(() => {
     listTemplates().then(setTemplates);
   }, []);
 
-  // 막 쓰기에서 넘긴 미완성 세션. 화면에 돌아올 때마다 다시 불러와요.
   useEffect(() => {
     listDraftSessions()
       .then(setDrafts)
@@ -59,7 +62,7 @@ export function SessionsListScreen() {
   }, [reload]);
 
   useEffect(() => {
-    let alive = true; // 필터를 빨리 바꿨을 때 늦게 온 옛 결과는 버려요
+    let alive = true;
     listDocuments({ category, query })
       .then((list) => alive && setItems(list))
       .catch(() => alive && setItems([]));
@@ -68,11 +71,28 @@ export function SessionsListScreen() {
     };
   }, [category, query, reload]);
 
+  // 양식별로 문서를 묶어 폴더 트리로 보여 줘요.
+  const groups = useMemo(() => {
+    if (!items) return [];
+    const map = new Map<
+      string,
+      { id: string; name: string; template?: Template; docs: DocumentItem[] }
+    >();
+    for (const item of items) {
+      const id = item.template?.id ?? 'other';
+      const name = item.template?.name ?? '기타 문서';
+      const group = map.get(id) ?? { id, name, template: item.template, docs: [] };
+      group.docs.push(item);
+      map.set(id, group);
+    }
+    return [...map.values()];
+  }, [items]);
+
   const confirmDelete = async () => {
     if (!deleting) return;
     await deleteDocument(deleting.document.id);
     setDeleting(null);
-    setReload((n) => n + 1); // 목록을 다시 불러와요
+    setReload((n) => n + 1);
   };
 
   const startNew = (t: Template) => {
@@ -80,7 +100,6 @@ export function SessionsListScreen() {
     router.push({ pathname: '/editor/[id]', params: { id: 'new', templateId: t.id } });
   };
 
-  // 미완성 세션에 양식을 고르면: 메모 원문을 맨 위에 넣은 새 문서를 열고, 미완성 목록에서 빼요.
   const completeDraft = async (t: Template) => {
     if (!completing) return;
     const seed = completing.source?.text ?? completing.title;
@@ -100,13 +119,9 @@ export function SessionsListScreen() {
     <View className="flex-1 bg-background">
       <Stack.Screen options={{ title: '세션' }} />
 
-      <View className="gap-3 border-b border-border px-4 pb-3 pt-3">
-        <View className="h-11 flex-row items-center gap-2 rounded-md bg-muted px-3">
-          <SymbolView
-            name={{ ios: 'magnifyingglass', android: 'search', web: 'search' }}
-            size={18}
-            tintColor={palette.mutedForeground}
-          />
+      <View className="gap-3 border-b border-border pb-3 pt-3">
+        <View className="mx-5 h-11 flex-row items-center gap-2 rounded-lg bg-muted px-3">
+          <Icon as={SearchIcon} size={18} className="text-muted-foreground" />
           <TextInput
             value={query}
             onChangeText={setQuery}
@@ -118,94 +133,94 @@ export function SessionsListScreen() {
           />
           {query ? (
             <Pressable onPress={() => setQuery('')} accessibilityLabel="검색어 지우기" hitSlop={8}>
-              <SymbolView
-                name={{ ios: 'xmark.circle.fill', android: 'cancel', web: 'cancel' }}
-                size={18}
-                tintColor={palette.mutedForeground}
-              />
+              <Icon as={XIcon} size={18} className="text-muted-foreground" />
             </Pressable>
           ) : null}
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerClassName="gap-2"
-        >
-          {CATEGORIES.map((c) => {
-            const on = category === c.value;
-            return (
-              <Pressable
-                key={c.label}
-                accessibilityRole="button"
-                accessibilityState={{ selected: on }}
-                onPress={() => setCategory(c.value)}
-                className={`h-8 justify-center rounded-full border px-3.5 ${
-                  on ? 'border-primary bg-primary' : 'border-border bg-card'
-                }`}
-              >
-                <Text
-                  className={`text-[13px] font-semibold ${
-                    on ? 'text-primary-foreground' : 'text-foreground'
-                  }`}
-                >
-                  {c.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <ScrollChips
+          items={CATEGORIES.map((c) => ({ key: c.key, label: c.label }))}
+          active={category ?? 'all'}
+          onChange={(k) => setCategory(CATEGORIES.find((c) => c.key === k)?.value)}
+        />
       </View>
 
       <ScrollView
-        contentContainerClassName="gap-3 p-4"
-        contentContainerStyle={{ paddingBottom: insets.bottom + 96 }} // FAB에 가리지 않게
+        contentContainerClassName="gap-4 px-5 pt-4"
+        contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
         keyboardShouldPersistTaps="handled"
       >
-        {/* 미완성 세션: 분류나 검색으로 거르지 않을 때만 맨 위에 보여요. */}
         {!category && !query && drafts.length ? (
-          <View className="gap-2">
-            <Text className="text-[13px] font-semibold text-muted-foreground">미완성 세션</Text>
-            {drafts.map((d) => (
-              <DraftCard
-                key={d.id}
-                session={d}
-                onPick={() => setCompleting(d)}
-                onRemove={() => setRemovingDraft(d)}
-              />
+          <View>
+            <DaySectionTitle label="미완성 세션" count={drafts.length} />
+            {drafts.map((d, index) => (
+              <View key={d.id}>
+                {index > 0 ? <View className="h-px bg-border" /> : null}
+                <DraftRow
+                  session={d}
+                  onPick={() => setCompleting(d)}
+                  onRemove={() => setRemovingDraft(d)}
+                />
+              </View>
             ))}
-            <Text className="pt-2 text-[13px] font-semibold text-muted-foreground">
-              작성한 문서
-            </Text>
           </View>
         ) : null}
 
         {items === null ? (
           <Text className="py-6 text-center text-sm text-muted-foreground">불러오는 중</Text>
-        ) : items.length === 0 ? (
+        ) : groups.length === 0 ? (
           <Text className="py-6 text-center text-sm text-muted-foreground">
             {query || category ? '조건에 맞는 문서가 없어요.' : '아직 쓴 문서가 없어요.'}
           </Text>
         ) : (
-          items.map((item) => (
-            <DocumentCard key={item.document.id} item={item} onDelete={() => setDeleting(item)} />
-          ))
+          <View>
+            <DaySectionTitle label="자료함" count={items.length} />
+            {groups.map((group) => {
+              const expanded = !collapsed[group.id];
+              return (
+                <View key={group.id}>
+                  <TreeRow
+                    icon={expanded ? FolderOpenIcon : FolderIcon}
+                    label={group.name}
+                    strong
+                    count={group.docs.length}
+                    expanded={expanded}
+                    onPress={() => setCollapsed((c) => ({ ...c, [group.id]: !c[group.id] }))}
+                    onAdd={group.template ? () => startNew(group.template!) : undefined}
+                  />
+                  {expanded
+                    ? group.docs.map((item) => (
+                        <TreeRow
+                          key={item.document.id}
+                          icon={FileTextIcon}
+                          label={item.document.title}
+                          depth={1}
+                          meta={shortDate(item.document.updatedAt)}
+                          onPress={() =>
+                            router.push({
+                              pathname: '/editor/[id]',
+                              params: { id: item.document.id },
+                            })
+                          }
+                          onLongPress={() => setDeleting(item)}
+                        />
+                      ))
+                    : null}
+                </View>
+              );
+            })}
+          </View>
         )}
       </ScrollView>
 
-      {/* FAB(떠 있는 버튼): 목록을 스크롤해도 오른쪽 아래에 그대로 있어요. */}
       <Pressable
         accessibilityRole="button"
         onPress={() => setPicking(true)}
-        className="absolute right-4 h-14 flex-row items-center gap-2 rounded-full bg-primary px-5 shadow-lg active:opacity-80"
+        className="absolute right-5 h-14 flex-row items-center gap-2 rounded-full bg-primary px-5 shadow-lg active:opacity-80"
         style={{ bottom: insets.bottom + 16 }}
       >
-        <SymbolView
-          name={{ ios: 'plus', android: 'add', web: 'add' }}
-          size={20}
-          tintColor={palette.primaryForeground}
-        />
-        <Text className="text-base font-bold text-primary-foreground">새 세션 작성</Text>
+        <Icon as={PlusIcon} size={20} className="text-primary-foreground" />
+        <Text className="text-base font-bold text-primary-foreground">새 세션</Text>
       </Pressable>
 
       <TemplatePickerModal
@@ -214,7 +229,6 @@ export function SessionsListScreen() {
         onPick={startNew}
         onClose={() => setPicking(false)}
       />
-      {/* 미완성 세션의 양식 고르기. 같은 시트를 써요. */}
       <TemplatePickerModal
         visible={completing !== null}
         templates={templates}
@@ -242,8 +256,7 @@ export function SessionsListScreen() {
   );
 }
 
-/** 미완성 세션 한 장: 양식을 아직 안 골랐다는 표시 + 메모 원문 + 양식 고르기 */
-function DraftCard({
+function DraftRow({
   session,
   onPick,
   onRemove,
@@ -253,107 +266,28 @@ function DraftCard({
   onRemove: () => void;
 }) {
   return (
-    <View className="gap-2 rounded-lg border border-dashed border-primary bg-card p-4">
-      <View className="flex-row items-center gap-2">
-        <View className="rounded-full bg-primary-soft px-2 py-0.5">
-          <Text className="text-[11px] font-bold text-primary-soft-foreground">미완성</Text>
-        </View>
-        <Text className="flex-1 text-xs text-muted-foreground">
-          막 쓰기에서 {shortDate(session.createdAt)}
+    <View className="flex-row items-center gap-3 py-3">
+      <View className="w-1 self-stretch rounded-full bg-primary" />
+      <View className="flex-1 gap-0.5">
+        <Text className="text-[15px] font-semibold text-foreground" numberOfLines={2}>
+          {session.source?.text ?? session.title}
         </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="미완성 세션 지우기"
-          onPress={onRemove}
-          hitSlop={8}
-          className="h-8 w-8 items-center justify-center rounded-md active:bg-muted"
-        >
-          <SymbolView
-            name={{ ios: 'trash', android: 'delete', web: 'delete' }}
-            size={16}
-            tintColor={palette.mutedForeground}
-          />
-        </Pressable>
+        <Text className="text-xs text-muted-foreground">
+          막 쓰기에서, {shortDate(session.createdAt)}
+        </Text>
       </View>
-      <Text className="text-[15px] leading-6 text-card-foreground" numberOfLines={4}>
-        {session.source?.text ?? session.title}
-      </Text>
-      <Pressable
-        accessibilityRole="button"
-        onPress={onPick}
-        className="h-9 justify-center self-end rounded-md bg-primary px-4 active:opacity-80"
-      >
-        <Text className="text-sm font-semibold text-primary-foreground">양식 고르기</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-function DocumentCard({
-  item: { document, template },
-  onDelete,
-}: {
-  item: DocumentItem;
-  onDelete: () => void;
-}) {
-  return (
-    // 삭제 버튼을 카드 버튼 "안"에 넣으면 웹에서 <button> 안에 <button>이 되어 오류가 나요.
-    // 그래서 카드와 삭제 버튼을 나란히 두고, 삭제 버튼을 오른쪽 위에 겹쳐 올려요(absolute).
-    <View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${document.title} 열기`}
-        // 편집기에는 id만 넘기고, 편집기가 자기 data.ts로 내용을 불러와요.
-        onPress={() => router.push({ pathname: '/editor/[id]', params: { id: document.id } })}
-        className="flex-row gap-3 rounded-lg border border-border bg-card p-4 active:bg-muted"
-      >
-        <View className="h-10 w-10 items-center justify-center rounded-md bg-primary-soft">
-          <SymbolView name={templateIcon(template?.icon)} size={20} tintColor={palette.primary} />
-        </View>
-        <View className="flex-1 gap-1.5">
-          {/* pr-8: 오른쪽 위 삭제 버튼 자리를 비워 둬요. */}
-          <View className="flex-row items-baseline gap-2 pr-8">
-            <Text className="flex-1 text-base font-bold text-card-foreground" numberOfLines={1}>
-              {document.title}
-            </Text>
-            <Text className="text-xs text-muted-foreground">{shortDate(document.updatedAt)}</Text>
-          </View>
-          <Text className="text-[13px] leading-5 text-muted-foreground" numberOfLines={2}>
-            {preview(document.body) || '아직 내용이 없어요.'}
-          </Text>
-          {template?.tags?.length ? (
-            <View className="flex-row flex-wrap gap-1">
-              {template.tags.map((tag) => (
-                <TagBadge key={tag} tag={tag} />
-              ))}
-            </View>
-          ) : null}
-        </View>
+      <Pressable accessibilityRole="button" onPress={onPick} className="h-9 justify-center px-2">
+        <Text className="text-sm font-bold text-primary">양식 고르기</Text>
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${document.title} 삭제`}
-        onPress={onDelete}
+        accessibilityLabel="미완성 세션 지우기"
+        onPress={onRemove}
         hitSlop={8}
-        className="absolute right-2.5 top-3 h-8 w-8 items-center justify-center rounded-md active:bg-muted"
+        className="h-9 w-9 items-center justify-center"
       >
-        <SymbolView
-          name={{ ios: 'trash', android: 'delete', web: 'delete' }}
-          size={16}
-          tintColor={palette.mutedForeground}
-        />
+        <Icon as={Trash2Icon} size={16} className="text-muted-foreground" />
       </Pressable>
     </View>
   );
-}
-
-/** 본문 미리보기: 제목 줄(#)과 빈 항목은 빼고, 마크다운 머리를 떼서 한 줄로 이어요. */
-function preview(body: string): string {
-  return body
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l && !l.startsWith('#'))
-    .map((l) => l.replace(/^(- \[[ x]\] |- |> |\d+\. )/, '').trim())
-    .filter(Boolean)
-    .join('  ');
 }
