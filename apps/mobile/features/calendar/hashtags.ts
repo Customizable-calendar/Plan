@@ -9,7 +9,29 @@ export type CalendarTagItem = {
   kind?: 'event' | 'task';
   startAt?: string;
   endAt?: string;
+  /** 내부 태그 저장소나 자동 추출 알고리즘이 계산한 해시태그 목록이에요. */
+  tags?: readonly string[];
 };
+
+function normalizeProvidedTags(rawTags: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const raw of rawTags) {
+    const clean = raw
+      .trim()
+      .replace(/^#+/, '')
+      .replace(/#+$/g, '')
+      .replace(/\s+/g, '_')
+      .toLowerCase();
+    if (!clean) continue;
+    const tag = `#${clean}`;
+    if (!seen.has(tag)) {
+      seen.add(tag);
+      normalized.push(tag);
+    }
+  }
+  return normalized;
+}
 export type TagNode = {
   tag: string;
   items: CalendarTagItem[];
@@ -100,7 +122,10 @@ function assignClusters(nodes: TagNode[]): void {
 export function buildHashtagGraph(items: readonly CalendarTagItem[]): TagNode[] {
   const graph = new Map<string, TagNode>();
   for (const item of items) {
-    const tags = extractHashtags(item.title);
+    const tags =
+      item.tags && item.tags.length > 0
+        ? normalizeProvidedTags(item.tags)
+        : extractHashtags(item.title);
     for (const tag of tags) {
       const node = graph.get(tag) ?? {
         tag,

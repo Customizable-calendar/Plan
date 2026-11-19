@@ -1,4 +1,4 @@
-import type { CalendarEvent } from '@noteapp/shared';
+import type { CalendarEvent, Card } from '@noteapp/shared';
 import { useMemo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
@@ -23,17 +23,21 @@ function currentSeoulHour(): number {
 export function CalendarTimeline({
   days,
   events,
+  tasks,
   compact = false,
   fullDay = false,
   onSelectDayHeader,
   onSelectSlot,
+  onSelectTask,
 }: {
   days: string[];
   events: CalendarEvent[];
+  tasks?: readonly Card[];
   compact?: boolean;
   fullDay?: boolean;
   onSelectDayHeader?: (day: string) => void;
   onSelectSlot?: (day: string, hour?: number) => void;
+  onSelectTask?: (task: Card) => void;
 }) {
   const today = dayKey(new Date());
   const nowHour = currentSeoulHour();
@@ -59,15 +63,32 @@ export function CalendarTimeline({
       items: parsedAllDay.filter((e) => e.startMs < endMs && e.endMs > startMs),
     }));
 
-    const parsedTimed = events
-      .filter((e) => !e.allDay)
-      .map((e) => ({
-        id: e.id,
-        cleanTitle: splitTitleAndTags(e.title).cleanTitle,
-        range: `${timeLabel(e.startAt)} ~ ${timeLabel(e.endAt)}`,
-        startMs: Date.parse(e.startAt),
-        endMs: Date.parse(e.endAt),
-      }));
+    const parsedTimed = [
+      ...events
+        .filter((e) => !e.allDay)
+        .map((e) => ({
+          id: e.id,
+          kind: 'event' as const,
+          cleanTitle: splitTitleAndTags(e.title).cleanTitle,
+          range: `${timeLabel(e.startAt)} ~ ${timeLabel(e.endAt)}`,
+          startMs: Date.parse(e.startAt),
+          endMs: Date.parse(e.endAt),
+          taskRef: undefined as Card | undefined,
+        })),
+      ...(tasks ?? [])
+        .filter((t): t is Card & { startAt: string; endAt: string } =>
+          Boolean(t.status !== 'dismissed' && t.startAt && t.endAt),
+        )
+        .map((t) => ({
+          id: `task:${t.id}`,
+          kind: 'task' as const,
+          cleanTitle: splitTitleAndTags(t.title).cleanTitle,
+          range: `${timeLabel(t.startAt)} ~ ${timeLabel(t.endAt)}`,
+          startMs: Date.parse(t.startAt),
+          endMs: Date.parse(t.endAt),
+          taskRef: t as Card | undefined,
+        })),
+    ];
 
     const nextColumns = dayBounds.map(({ day, startMs, endMs }) => {
       const items = parsedTimed
@@ -99,7 +120,7 @@ export function CalendarTimeline({
       earliest: allStarts.length ? Math.min(7, ...allStarts) : 7,
       latest: allEnds.length ? Math.max(22, ...allEnds) : 22,
     };
-  }, [days, events]);
+  }, [days, events, tasks]);
 
   const from = fullDay ? 0 : Math.max(0, Math.min(7, Math.floor(earliest)));
   const to = fullDay ? 24 : Math.min(24, Math.max(22, Math.ceil(latest)));
@@ -193,6 +214,7 @@ export function CalendarTimeline({
               })}
 
               {positioned.map((event) => {
+                const isTask = event.kind === 'task';
                 const blockHeight = Math.max(
                   compact ? 22 : 28,
                   (event.to - event.from) * height - 4,
@@ -207,9 +229,19 @@ export function CalendarTimeline({
                   <Pressable
                     key={event.id}
                     accessibilityRole="button"
-                    accessibilityLabel={`${event.cleanTitle}, ${event.range}, 눌러서 상세 보기`}
-                    onPress={() => onSelectSlot?.(day)}
-                    className={`absolute overflow-hidden rounded-md border-l-[3px] border-l-cal-1 bg-cal-1-soft ${compact ? 'px-1 py-0.5' : 'px-2.5 py-1'}`}
+                    accessibilityLabel={
+                      isTask
+                        ? `${event.cleanTitle}, 할 일 ${event.range}, 눌러서 시간 변경`
+                        : `${event.cleanTitle}, ${event.range}, 눌러서 상세 보기`
+                    }
+                    onPress={() =>
+                      isTask && event.taskRef && onSelectTask
+                        ? onSelectTask(event.taskRef)
+                        : onSelectSlot?.(day)
+                    }
+                    className={`absolute overflow-hidden rounded-md border-l-[3px] ${
+                      isTask ? 'border-l-task bg-task-soft' : 'border-l-cal-1 bg-cal-1-soft'
+                    } ${compact ? 'px-1 py-0.5' : 'px-2.5 py-1'}`}
                     style={posStyle}
                   >
                     <Text
@@ -219,8 +251,11 @@ export function CalendarTimeline({
                       {event.cleanTitle}
                     </Text>
                     {!compact && blockHeight >= 38 && (
-                      <Text numberOfLines={1} className="text-[11px] text-cal-1">
-                        {event.range} (캘린더)
+                      <Text
+                        numberOfLines={1}
+                        className={`text-[11px] ${isTask ? 'font-semibold text-task' : 'text-cal-1'}`}
+                      >
+                        {isTask ? `${event.range} (할 일)` : `${event.range} (캘린더)`}
                       </Text>
                     )}
                   </Pressable>

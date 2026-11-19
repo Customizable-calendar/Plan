@@ -1,11 +1,19 @@
-import { palette } from '@noteapp/ui';
 import type { CalendarEvent, Card } from '@noteapp/shared';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
-import { confirmTask, deleteCalendarEvent, saveCalendarEvent, saveTimeSlot } from './data';
+import { HiddenTagDisclosure } from './HiddenTagDisclosure';
+import { extractAutoHashtags } from './autoTags';
 import {
+  clearTaskTimeSlot,
+  confirmAndSaveTimeSlot,
+  confirmTask,
+  deleteCalendarEvent,
+  saveCalendarEvent,
+} from './data';
+import {
+  busyHoursOnDay,
   dayKey,
   overlaps,
   shiftDay,
@@ -15,7 +23,7 @@ import {
   type TimeSlot,
 } from './model';
 
-type SheetTab = 'events' | 'tasks' | 'add';
+type SheetTab = 'agenda' | 'add';
 const WEEKDAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'] as const;
 const HOUR_CHOICES = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21] as const;
 const DURATION_OPTIONS = [
@@ -38,19 +46,17 @@ function SheetButton({
   label: string;
   selected?: boolean;
   disabled?: boolean;
-  tone?: 'default' | 'danger';
+  tone?: 'default' | 'danger' | 'primary';
   onPress: () => void;
 }) {
-  const cls = selected
-    ? 'border-primary bg-primary'
-    : tone === 'danger'
-      ? 'border-border bg-card'
-      : 'border-border bg-card';
-  const textCls = selected
-    ? 'text-primary-foreground'
-    : tone === 'danger'
-      ? 'text-destructive'
-      : 'text-foreground';
+  const cls =
+    selected || tone === 'primary' ? 'border-primary bg-primary' : 'border-border bg-card';
+  const textCls =
+    selected || tone === 'primary'
+      ? 'text-primary-foreground'
+      : tone === 'danger'
+        ? 'text-destructive'
+        : 'text-foreground';
   return (
     <Pressable
       accessibilityRole="button"
@@ -64,19 +70,6 @@ function SheetButton({
   );
 }
 
-function SheetTagChips({ tags }: { tags: string[] }) {
-  if (!tags.length) return null;
-  return (
-    <View className="flex-row flex-wrap gap-1.5">
-      {tags.map((tag) => (
-        <View key={tag} className="rounded-sm bg-muted px-2 py-0.5">
-          <Text className="text-[11px] font-semibold text-muted-foreground">{tag}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
 export function CalendarDaySheet({
   day,
   initialHour,
@@ -84,6 +77,7 @@ export function CalendarDaySheet({
   tasks,
   onChangeDay,
   onSelectTask,
+  onPressTag,
   onClose,
 }: {
   day: string;
@@ -92,6 +86,7 @@ export function CalendarDaySheet({
   tasks: Card[];
   onChangeDay: (nextDay: string) => void;
   onSelectTask: (task: Card) => void;
+  onPressTag?: (tag: string) => void;
   onClose: () => void;
 }) {
   const dayEvents = events;
@@ -105,9 +100,10 @@ export function CalendarDaySheet({
   }, [day, events, tasks]);
 
   const [tab, setTab] = useState<SheetTab>(() =>
-    initialHour !== undefined && dayEvents.length === 0 ? 'add' : 'events',
+    initialHour !== undefined && unscheduled.length === 0 ? 'add' : 'agenda',
   );
   const [title, setTitle] = useState('');
+  const [previewTagsOpen, setPreviewTagsOpen] = useState(false);
   const [allDay, setAllDay] = useState(false);
   const [selectedHour, setSelectedHour] = useState(() => initialHour ?? 9);
   const [durationMinutes, setDurationMinutes] = useState(60);
@@ -118,32 +114,67 @@ export function CalendarDaySheet({
 
   const weekday = WEEKDAY_NAMES[new Date(`${day}T12:00:00+09:00`).getUTCDay()];
   const dayHeading = `${Number(day.slice(5, 7))}월 ${Number(day.slice(8, 10))}일 (${weekday}요일)`;
+
+  const timelineHours = useMemo(
+    () => busyHoursOnDay(day, events, tasks, { startHour: 8, endHour: 21 }),
+    [day, events, tasks],
+  );
+  const addHourBusySet = useMemo(() => {
+    const map = new Map<number, boolean>();
+    for (const h of busyHoursOnDay(day, events, tasks, { startHour: 7, endHour: 21 })) {
+      map.set(h.hour, h.busy);
+    }
+    return map;
+  }, [day, events, tasks]);
+
   const hourChoices = useMemo(
     () => [...new Set<number>([...HOUR_CHOICES, selectedHour])].sort((a, b) => a - b),
     [selectedHour],
   );
 
-  function buildHourSlot(hour: number, task: Card): TimeSlot | undefined {
-    const startMs = Date.parse(`${day}T${pad2(hour)}:00:00+09:00`);
+  // 타임라인 빈 시간 칸을 눌렀을 때 1시간 빠른 배정이 가능한지 미리 계산해요.
+  const quickHourSlot = useMemo<TimeSlot | undefined>(() => {
+    if (initialHour === undefined) return undefined;
+    const startMs = Date.parse(`${day}T${pad2(initialHour)}:00:00+09:00`);
     const endMs = startMs + 3600000;
     if (!Number.isFinite(startMs) || startMs < openedAt) return undefined;
-    if (task.dueAt && endMs > Date.parse(task.dueAt)) return undefined;
     const startAt = new Date(startMs).toISOString();
     const endAt = new Date(endMs).toISOString();
     const hasConflict = busyItems.some(
-      (item) =>
-        item.id !== task.id &&
-        item.startAt &&
-        item.endAt &&
-        overlaps(startAt, endAt, item.startAt, item.endAt),
+      (item) => item.startAt && item.endAt && overlaps(startAt, endAt, item.startAt, item.endAt),
     );
     if (hasConflict) return undefined;
     return {
       startAt,
       endAt,
-      reason: '선택한 시간대에 바로 배치했어요.',
+      day,
+      fit: 'good',
+      reason: '선택한 빈 시간에 바로 배정했어요.',
     };
-  }
+  }, [busyItems, day, initialHour, openedAt]);
+
+  const timelineItems = useMemo(() => {
+    const entries = [
+      ...dayEvents.map((ev) => ({
+        key: `event:${ev.id}`,
+        kind: 'event' as const,
+        sortAt: ev.allDay ? '0000' : ev.startAt,
+        event: ev,
+      })),
+      ...dayTasks.map((task) => ({
+        key: `task:${task.id}`,
+        kind: 'task' as const,
+        sortAt: task.startAt ?? '',
+        task,
+      })),
+    ];
+    return entries.sort((a, b) => a.sortAt.localeCompare(b.sortAt));
+  }, [dayEvents, dayTasks]);
+
+  const autoPreviewTags = useMemo(
+    () => (title.trim().length > 0 ? extractAutoHashtags(title) : []),
+    [title],
+  );
 
   async function handleConfirm(taskId: string) {
     setBusyId(taskId);
@@ -159,15 +190,29 @@ export function CalendarDaySheet({
     }
   }
 
-  async function handleDirectAssign(task: Card, slot: TimeSlot) {
+  async function handleQuickAssign(task: Card, slot: TimeSlot) {
     setBusyId(task.id);
     setError('');
     setNotice('');
     try {
-      await saveTimeSlot(task.id, slot);
-      setNotice(`${timeLabel(slot.startAt)}에 할 일을 배치했어요.`);
+      await confirmAndSaveTimeSlot(task.id, slot, { allowPastDue: true });
+      setNotice(`${timeLabel(slot.startAt)}에 할 일을 바로 배정했어요.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : '할 일 시간을 저장하지 못했어요.');
+    } finally {
+      setBusyId('');
+    }
+  }
+
+  async function handleClearTaskSlot(taskId: string) {
+    setBusyId(taskId);
+    setError('');
+    setNotice('');
+    try {
+      await clearTaskTimeSlot(taskId);
+      setNotice('배정된 시간을 비웠어요.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '배정된 시간을 비우지 못했어요.');
     } finally {
       setBusyId('');
     }
@@ -214,8 +259,9 @@ export function CalendarDaySheet({
         source: 'google',
       });
       setTitle('');
+      setPreviewTagsOpen(false);
       setNotice('새 일정을 저장했어요.');
-      setTab('events');
+      setTab('agenda');
     } catch (err) {
       setError(err instanceof Error ? err.message : '일정을 저장하지 못했어요.');
     } finally {
@@ -237,7 +283,7 @@ export function CalendarDaySheet({
           onPress={onClose}
           className="absolute inset-0 bg-foreground/30"
         />
-        <View className="max-h-[88%] w-full max-w-[560px] overflow-hidden rounded-2xl border border-border bg-card">
+        <View className="max-h-[90%] w-full max-w-[560px] overflow-hidden rounded-2xl border border-border bg-card">
           <View className="flex-row flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-4">
             <View className="gap-0.5">
               <Text accessibilityRole="header" className="text-lg font-bold text-foreground">
@@ -259,9 +305,8 @@ export function CalendarDaySheet({
           <View className="flex-row gap-1 border-b border-border bg-muted px-5 py-2">
             {(
               [
-                { key: 'events', label: `일정 (${dayEvents.length})` },
-                { key: 'tasks', label: `할 일 (${dayTasks.length})` },
-                { key: 'add', label: '일정 추가' },
+                { key: 'agenda', label: `일정과 할 일 (${dayEvents.length + dayTasks.length})` },
+                { key: 'add', label: '새 일정 추가' },
               ] as const
             ).map((item) => {
               const active = tab === item.key;
@@ -287,121 +332,219 @@ export function CalendarDaySheet({
             })}
           </View>
 
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            contentContainerClassName="gap-3.5 p-5"
-          >
-            {!!notice && (
-              <View className="rounded-lg bg-primary-soft px-3 py-2">
-                <Text className="text-xs font-semibold text-primary-soft-foreground">
-                  {notice}
-                </Text>
-              </View>
-            )}
+          <ScrollView contentContainerClassName="gap-4 p-5">
             {!!error && (
-              <View className="rounded-lg bg-secondary-soft px-3 py-2">
+              <View className="rounded-lg border border-destructive/40 bg-destructive/10 px-3.5 py-2.5">
                 <Text accessibilityRole="alert" className="text-xs font-semibold text-destructive">
                   {error}
                 </Text>
               </View>
             )}
-
-            {tab === 'events' && (
-              <View className="gap-2.5">
-                {dayEvents.length === 0 ? (
-                  <View className="gap-3 rounded-xl border border-border bg-background p-4">
-                    <Text className="text-sm text-muted-foreground">
-                      이 날 등록된 캘린더 일정이 없어요.
-                    </Text>
-                    <View className="flex-row flex-wrap gap-2">
-                      <SheetButton
-                        label="새 일정 추가"
-                        selected
-                        onPress={() => setTab('add')}
-                      />
-                      <SheetButton
-                        label={`할 일 보기 (${unscheduled.length}개 대기)`}
-                        onPress={() => setTab('tasks')}
-                      />
-                    </View>
-                  </View>
-                ) : (
-                  dayEvents.map((ev) => {
-                    const { cleanTitle, tags } = splitTitleAndTags(ev.title);
-                    const range = ev.allDay
-                      ? '종일'
-                      : `${timeLabel(ev.startAt)} ~ ${timeLabel(ev.endAt)}`;
-                    return (
-                      <View
-                        key={ev.id}
-                        className="flex-row items-center gap-3 rounded-lg border-l-[3px] border-l-cal-1 bg-cal-1-soft px-3 py-2.5"
-                      >
-                        <Text className="w-24 text-xs font-bold text-muted-foreground">
-                          {range}
-                        </Text>
-                        <View className="flex-1 gap-1">
-                          <Text className="text-sm font-bold text-foreground">{cleanTitle}</Text>
-                          <SheetTagChips tags={tags} />
-                        </View>
-                        <View className="items-end gap-1.5">
-                          <View className="rounded-sm bg-card px-2 py-0.5">
-                            <Text className="text-[11px] font-bold text-cal-1">캘린더</Text>
-                          </View>
-                          <SheetButton
-                            label={busyId === ev.id ? '삭제 중' : '삭제'}
-                            tone="danger"
-                            disabled={busyId === ev.id}
-                            onPress={() => void handleDeleteEvent(ev.id)}
-                          />
-                        </View>
-                      </View>
-                    );
-                  })
-                )}
+            {!!notice && (
+              <View className="rounded-lg border border-task/40 bg-task-soft px-3.5 py-2.5">
+                <Text className="text-xs font-semibold text-task">{notice}</Text>
               </View>
             )}
 
-            {tab === 'tasks' && (
+            {tab === 'agenda' && (
               <View className="gap-4">
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={goExecution}
-                  className="items-center justify-center rounded-lg border border-primary bg-primary px-4 py-2.5"
-                >
-                  <Text className="text-sm font-bold text-primary-foreground">
-                    이 날 수행 확인하기
-                  </Text>
-                </Pressable>
+                {initialHour !== undefined && (
+                  <View className="gap-2.5 rounded-xl border border-primary/30 bg-primary-soft/60 p-3.5">
+                    <View className="flex-row flex-wrap items-center justify-between gap-2">
+                      <View className="flex-1">
+                        <Text className="text-xs font-bold text-primary-soft-foreground">
+                          {pad2(initialHour)}:00{' '}
+                          {quickHourSlot ? '빈 시간 빠른 배정' : '선택한 시간대'}
+                        </Text>
+                        <Text className="text-[11px] text-muted-foreground">
+                          {quickHourSlot
+                            ? '할 일을 바로 끼워 넣거나 새 일정을 추가할 수 있어요.'
+                            : '이미 지나갔거나 다른 일정과 겹치는 시간대예요.'}
+                        </Text>
+                      </View>
+                      <SheetButton
+                        label={`${pad2(initialHour)}:00 새 일정 추가`}
+                        tone="primary"
+                        onPress={() => {
+                          setSelectedHour(initialHour);
+                          setAllDay(false);
+                          setTab('add');
+                        }}
+                      />
+                    </View>
+
+                    {quickHourSlot && unscheduled.length > 0 && (
+                      <View className="gap-1.5">
+                        {unscheduled.slice(0, 3).map((task) => {
+                          const { cleanTitle } = splitTitleAndTags(task.title);
+                          const isBusy = busyId === task.id;
+                          return (
+                            <View
+                              key={task.id}
+                              className="flex-row items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2"
+                            >
+                              <Text
+                                numberOfLines={1}
+                                className="flex-1 text-xs font-semibold text-foreground"
+                              >
+                                {cleanTitle}
+                              </Text>
+                              <SheetButton
+                                label={isBusy ? '배정 중' : '바로 배정'}
+                                disabled={isBusy}
+                                onPress={() => void handleQuickAssign(task, quickHourSlot)}
+                              />
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                <View className="gap-2 rounded-xl border border-border bg-muted/40 p-3">
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-xs font-bold text-foreground">
+                      시간대 한눈에 보기 (08시 ~ 21시)
+                    </Text>
+                    <Text className="text-[11px] text-muted-foreground">
+                      빈 칸 누르면 일정 추가
+                    </Text>
+                  </View>
+                  <View className="flex-row gap-1">
+                    {timelineHours.map((slot) => {
+                      const highlighted = initialHour === slot.hour;
+                      return (
+                        <Pressable
+                          key={slot.hour}
+                          onPress={() => {
+                            setSelectedHour(slot.hour);
+                            setAllDay(false);
+                            setTab('add');
+                          }}
+                          className="flex-1 items-center gap-1"
+                        >
+                          <View
+                            className={`h-5 w-full rounded border ${
+                              highlighted
+                                ? 'border-primary bg-primary'
+                                : slot.busy
+                                  ? 'border-secondary/35 bg-secondary-soft'
+                                  : 'border-task/35 bg-task-soft'
+                            }`}
+                          />
+                          <Text className="text-[10px] font-medium text-muted-foreground">
+                            {String(slot.hour).padStart(2, '0')}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
 
                 <View className="gap-2">
-                  <Text className="text-sm font-bold text-foreground">
-                    이 날 배정된 할 일 ({dayTasks.length}개)
-                  </Text>
-                  {dayTasks.length === 0 ? (
-                    <Text className="text-xs text-muted-foreground">
-                      이 날에 배정된 할 일이 없어요.
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-xs font-bold text-muted-foreground">
+                      오늘 일정 및 배정된 할 일
                     </Text>
+                    <Pressable onPress={() => setTab('add')}>
+                      <Text className="text-xs font-semibold text-primary">새 일정 추가</Text>
+                    </Pressable>
+                  </View>
+
+                  {timelineItems.length === 0 ? (
+                    <View className="gap-2 rounded-xl border border-border bg-muted/40 p-3.5">
+                      <Text className="text-sm font-semibold text-foreground">
+                        이 날은 아직 비어 있어요.
+                      </Text>
+                      <Text className="text-xs text-muted-foreground">
+                        새 일정을 추가하거나 아래 할 일에서 시간을 바로 잡아 보세요.
+                      </Text>
+                    </View>
                   ) : (
-                    dayTasks.map((task) => {
-                      const { cleanTitle, tags } = splitTitleAndTags(task.title);
-                      const range = `${timeLabel(task.startAt!)} ~ ${timeLabel(task.endAt!)}`;
+                    timelineItems.map((entry) => {
+                      if (entry.kind === 'event') {
+                        const ev = entry.event;
+                        const { cleanTitle } = splitTitleAndTags(ev.title);
+                        const canDelete = !ev.id.startsWith('card-event:');
+                        return (
+                          <View
+                            key={entry.key}
+                            className="gap-1.5 rounded-xl border border-border border-l-4 border-l-cal-1 bg-background p-3.5"
+                          >
+                            <View className="flex-row items-center justify-between gap-2">
+                              <Text className="text-xs font-bold text-cal-1">
+                                {ev.allDay
+                                  ? '종일'
+                                  : `${timeLabel(ev.startAt)} ~ ${timeLabel(ev.endAt)}`}
+                              </Text>
+                              <View className="flex-row items-center gap-2">
+                                <View className="rounded-sm bg-cal-1-soft px-2 py-0.5">
+                                  <Text className="text-[11px] font-semibold text-cal-1">
+                                    {ev.calendarId || '캘린더'}
+                                  </Text>
+                                </View>
+                                {canDelete && (
+                                  <Pressable
+                                    disabled={busyId === ev.id}
+                                    onPress={() => void handleDeleteEvent(ev.id)}
+                                  >
+                                    <Text className="text-xs font-semibold text-destructive">
+                                      삭제
+                                    </Text>
+                                  </Pressable>
+                                )}
+                              </View>
+                            </View>
+                            <Text className="text-sm font-bold text-foreground">{cleanTitle}</Text>
+                            <HiddenTagDisclosure
+                              itemId={ev.id}
+                              title={ev.title}
+                              editable
+                              compact
+                              onPressTag={onPressTag}
+                            />
+                          </View>
+                        );
+                      }
+
+                      const task = entry.task;
+                      const { cleanTitle } = splitTitleAndTags(task.title);
+                      const isBusy = busyId === task.id;
                       return (
                         <View
-                          key={task.id}
-                          className="flex-row items-center gap-3 rounded-lg border-l-[3px] border-l-task bg-task-soft px-3 py-2.5"
+                          key={entry.key}
+                          className="gap-2 rounded-xl border border-border border-l-4 border-l-task bg-task-soft/45 p-3.5"
                         >
-                          <Text className="w-24 text-xs font-bold text-muted-foreground">
-                            {range}
-                          </Text>
-                          <View className="flex-1 gap-1">
-                            <Text className="text-sm font-bold text-foreground">{cleanTitle}</Text>
-                            <SheetTagChips tags={tags} />
-                          </View>
-                          <View className="items-end gap-1.5">
-                            <View className="rounded-sm bg-card px-2 py-0.5">
-                              <Text className="text-[11px] font-bold text-task">할 일</Text>
+                          <View className="flex-row items-center justify-between gap-2">
+                            <Text className="text-xs font-bold text-task">
+                              {task.startAt && task.endAt
+                                ? `${timeLabel(task.startAt)} ~ ${timeLabel(task.endAt)}`
+                                : '시간 미정'}
+                            </Text>
+                            <View className="rounded-sm bg-task-soft px-2 py-0.5">
+                              <Text className="text-[11px] font-semibold text-task">할 일</Text>
                             </View>
-                            <SheetButton label="시간 변경" onPress={() => onSelectTask(task)} />
+                          </View>
+                          <Text className="text-sm font-bold text-foreground">{cleanTitle}</Text>
+                          <HiddenTagDisclosure
+                            itemId={task.id}
+                            title={task.title}
+                            editable
+                            compact
+                            onPressTag={onPressTag}
+                          />
+                          <View className="flex-row flex-wrap gap-2 pt-0.5">
+                            <SheetButton
+                              label="시간 변경"
+                              disabled={isBusy}
+                              onPress={() => onSelectTask(task)}
+                            />
+                            <SheetButton
+                              label="비우기"
+                              disabled={isBusy}
+                              onPress={() => void handleClearTaskSlot(task.id)}
+                            />
                           </View>
                         </View>
                       );
@@ -409,78 +552,68 @@ export function CalendarDaySheet({
                   )}
                 </View>
 
-                <View className="gap-2 border-t border-border pt-3">
-                  <Text className="text-sm font-bold text-foreground">
-                    미배정 할 일 이 날에 배치 ({unscheduled.length}개)
-                  </Text>
+                <View className="gap-2">
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-xs font-bold text-muted-foreground">
+                      시간 안 잡은 할 일 ({unscheduled.length}개)
+                    </Text>
+                    <SheetButton label="수행 기록 열기" onPress={goExecution} />
+                  </View>
+
                   {unscheduled.length === 0 ? (
                     <Text className="text-xs text-muted-foreground">
-                      시간을 잡을 미배정 할 일이 모두 정리되었어요.
+                      모든 할 일에 시간이 잡혀 있어요.
                     </Text>
                   ) : (
                     unscheduled.map((task) => {
-                      const { cleanTitle, tags } = splitTitleAndTags(task.title);
-                      const meta = task.dueAt
-                        ? `마감 ${dayKey(task.dueAt)} ${timeLabel(task.dueAt)}`
-                        : '마감 없음';
-                      const directSlot =
-                        task.status === 'confirmed' && initialHour !== undefined
-                          ? buildHourSlot(initialHour, task)
-                          : undefined;
-                      const busy = busyId === task.id;
+                      const { cleanTitle } = splitTitleAndTags(task.title);
+                      const isBusy = busyId === task.id;
+                      const dueText = task.dueAt
+                        ? `마감 ${dayKey(task.dueAt).slice(5)} ${timeLabel(task.dueAt)}`
+                        : undefined;
                       return (
                         <View
                           key={task.id}
                           className="gap-2 rounded-xl border border-border bg-background p-3.5"
                         >
                           <View className="flex-row items-start justify-between gap-2">
-                            <View className="flex-1 gap-1">
+                            <View className="flex-1 gap-0.5">
                               <Text className="text-sm font-bold text-foreground">
                                 {cleanTitle}
                               </Text>
-                              <Text className="text-xs text-muted-foreground">
-                                {meta}, {task.status === 'confirmed' ? '확인됨' : '확인 전 제안'}
-                              </Text>
-                              <SheetTagChips tags={tags} />
+                              {dueText ? (
+                                <Text className="text-[11px] text-muted-foreground">{dueText}</Text>
+                              ) : null}
                             </View>
-                            <View className="rounded-sm bg-task-soft px-2 py-0.5">
-                              <Text className="text-[11px] font-bold text-task">할 일</Text>
+                            <View className="rounded-sm bg-muted px-2 py-0.5">
+                              <Text className="text-[11px] font-semibold text-muted-foreground">
+                                {task.status === 'confirmed' ? '미배정' : '확인 대기'}
+                              </Text>
                             </View>
                           </View>
-                          <View className="flex-row flex-wrap gap-2">
-                            {task.status === 'suggested' ? (
+
+                          <HiddenTagDisclosure
+                            itemId={task.id}
+                            title={task.title}
+                            editable
+                            compact
+                            onPressTag={onPressTag}
+                          />
+
+                          <View className="flex-row flex-wrap gap-2 pt-0.5">
+                            {task.status === 'suggested' && (
                               <SheetButton
-                                label={busy ? '확인 중' : '할 일 확인'}
-                                selected
-                                disabled={busy}
+                                label={isBusy ? '확인 중' : '확인'}
+                                disabled={isBusy}
                                 onPress={() => void handleConfirm(task.id)}
                               />
-                            ) : directSlot ? (
-                              <>
-                                <SheetButton
-                                  label={
-                                    busy
-                                      ? '배치 중'
-                                      : `${pad2(initialHour!)}:00에 바로 배치`
-                                  }
-                                  selected
-                                  disabled={busy}
-                                  onPress={() => void handleDirectAssign(task, directSlot)}
-                                />
-                                <SheetButton
-                                  label="추천 시간 보기"
-                                  disabled={busy}
-                                  onPress={() => onSelectTask(task)}
-                                />
-                              </>
-                            ) : (
-                              <SheetButton
-                                label="이 날 빈 시간 잡기"
-                                selected
-                                disabled={busy}
-                                onPress={() => onSelectTask(task)}
-                              />
                             )}
+                            <SheetButton
+                              label="시간 잡기"
+                              tone="primary"
+                              disabled={isBusy}
+                              onPress={() => onSelectTask(task)}
+                            />
                           </View>
                         </View>
                       );
@@ -500,10 +633,43 @@ export function CalendarDaySheet({
                       setTitle(text);
                       if (error) setError('');
                     }}
-                    placeholder="예: 주간 팀 미팅 #기획 #팀회의"
-                    placeholderTextColor={palette.mutedForeground}
-                    className="rounded-lg border border-input bg-background px-3.5 py-2.5 text-sm text-foreground"
+                    placeholder="예: 주간 백엔드 API 명세 회의"
+                    className="rounded-lg border border-input bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground"
                   />
+                  {title.trim().length > 0 && (
+                    <View className="gap-1.5 pt-1">
+                      <Pressable
+                        onPress={() => setPreviewTagsOpen((prev) => !prev)}
+                        className="self-start rounded-full border border-border bg-muted px-2.5 py-1"
+                      >
+                        <Text className="text-[11px] font-semibold text-muted-foreground">
+                          {previewTagsOpen
+                            ? '자동 추출 태그 닫기'
+                            : `자동 추출 태그 ${autoPreviewTags.length}개 미리보기`}
+                        </Text>
+                      </Pressable>
+                      {previewTagsOpen && (
+                        <View className="flex-row flex-wrap gap-1.5 rounded-lg border border-border bg-muted/50 p-2.5">
+                          {autoPreviewTags.length > 0 ? (
+                            autoPreviewTags.map((tag) => (
+                              <View
+                                key={tag}
+                                className="rounded-full border border-primary/25 bg-primary-soft px-2.5 py-1"
+                              >
+                                <Text className="text-[11px] font-semibold text-primary-soft-foreground">
+                                  {tag}
+                                </Text>
+                              </View>
+                            ))
+                          ) : (
+                            <Text className="text-xs text-muted-foreground">
+                              제목을 조금 더 자세히 입력하면 태그를 추천해 드려요.
+                            </Text>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  )}
                 </View>
 
                 <View className="flex-row gap-2">
@@ -512,26 +678,31 @@ export function CalendarDaySheet({
                     selected={!allDay}
                     onPress={() => setAllDay(false)}
                   />
-                  <SheetButton
-                    label="종일"
-                    selected={allDay}
-                    onPress={() => setAllDay(true)}
-                  />
+                  <SheetButton label="종일" selected={allDay} onPress={() => setAllDay(true)} />
                 </View>
 
                 {!allDay && (
                   <>
                     <View className="gap-1.5">
-                      <Text className="text-xs font-bold text-muted-foreground">시작 시각</Text>
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-xs font-bold text-muted-foreground">시작 시각</Text>
+                        <Text className="text-[11px] text-muted-foreground">
+                          * 표시 시간은 기존 일정과 겹칠 수 있어요
+                        </Text>
+                      </View>
                       <View className="flex-row flex-wrap gap-1.5">
-                        {hourChoices.map((hour) => (
-                          <SheetButton
-                            key={hour}
-                            label={`${pad2(hour)}:00`}
-                            selected={selectedHour === hour}
-                            onPress={() => setSelectedHour(hour)}
-                          />
-                        ))}
+                        {hourChoices.map((hour) => {
+                          const isBusyHour = addHourBusySet.get(hour) ?? false;
+                          const label = isBusyHour ? `${pad2(hour)}:00 *` : `${pad2(hour)}:00`;
+                          return (
+                            <SheetButton
+                              key={hour}
+                              label={label}
+                              selected={selectedHour === hour}
+                              onPress={() => setSelectedHour(hour)}
+                            />
+                          );
+                        })}
                       </View>
                     </View>
 

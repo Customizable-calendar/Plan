@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-nati
 import { CalendarDaySheet } from './CalendarDaySheet';
 import { CalendarTimeline } from './CalendarTimeline';
 import { HashtagGraphSheet } from './HashtagGraphSheet';
+import { HiddenTagDisclosure } from './HiddenTagDisclosure';
 import { TimeCandidates } from './TimeCandidates';
 import { loadCalendar, useCalendar } from './data';
 import {
@@ -80,6 +81,7 @@ export function CalendarScreen() {
   const [sheetTarget, setSheetTarget] = useState<{ day: string; initialHour?: number }>();
   const [candidateTask, setCandidateTask] = useState<Card>();
   const [showHashtags, setShowHashtags] = useState(false);
+  const [graphFocusTag, setGraphFocusTag] = useState<string>();
 
   const month = day.slice(0, 7);
   const monthStart = `${month}-01`;
@@ -101,6 +103,11 @@ export function CalendarScreen() {
           .filter((t) => t.status !== 'dismissed' && Boolean(t.startAt))
           .map((t) => dayKey(t.startAt!)),
       ),
+    [tasks],
+  );
+
+  const unscheduledTasks = useMemo(
+    () => tasks.filter((t) => t.status !== 'dismissed' && !t.startAt),
     [tasks],
   );
 
@@ -154,6 +161,13 @@ export function CalendarScreen() {
     },
     [syncDay],
   );
+
+  const openTagGraph = useCallback((tag?: string) => {
+    setCandidateTask(undefined);
+    setSheetTarget(undefined);
+    setGraphFocusTag(tag);
+    setShowHashtags(true);
+  }, []);
 
   const toggleDrawer = () => {
     if (!drawerOpen) setDrawerMonthStart(monthStart);
@@ -221,7 +235,7 @@ export function CalendarScreen() {
         )}
         <View className="flex-row flex-wrap gap-2">
           {day !== today && <ActionButton label="오늘" onPress={() => syncDay(today)} />}
-          <ActionButton label="해시태그 연결망" onPress={() => setShowHashtags(true)} />
+          <ActionButton label="해시태그 연결망" onPress={() => openTagGraph()} />
         </View>
       </View>
 
@@ -286,6 +300,14 @@ export function CalendarScreen() {
         </View>
       )}
 
+      {!loading && !error && unscheduledTasks.length > 0 && (
+        <TaskQuickBar
+          tasks={unscheduledTasks}
+          onSelectTask={setCandidateTask}
+          onPressTag={openTagGraph}
+        />
+      )}
+
       {!loading && !error && view === 'month' && (
         <MonthCalendarGrid
           month={month}
@@ -304,10 +326,12 @@ export function CalendarScreen() {
         <CalendarTimeline
           days={days}
           events={events}
+          tasks={tasks}
           compact
           fullDay={fullDay}
           onSelectDayHeader={zoomDay}
           onSelectSlot={openDaySheet}
+          onSelectTask={setCandidateTask}
         />
       )}
 
@@ -365,20 +389,30 @@ export function CalendarScreen() {
           <CalendarTimeline
             days={[day]}
             events={events}
+            tasks={tasks}
             fullDay={fullDay}
             onSelectSlot={openDaySheet}
+            onSelectTask={setCandidateTask}
           />
         </View>
       )}
 
       {!loading && !error && view === 'list' && (
-        <EventListView days={days} eventsByDay={weekEventsByDay} onSelectDay={openDaySheet} />
+        <EventListView
+          days={days}
+          eventsByDay={weekEventsByDay}
+          tasks={tasks}
+          onSelectDay={openDaySheet}
+          onSelectTask={setCandidateTask}
+          onPressTag={openTagGraph}
+        />
       )}
 
       {candidateTask ? (
         <TimeCandidates
           task={candidateTask}
           day={sheetTarget?.day ?? day}
+          onPressTag={openTagGraph}
           onClose={() => setCandidateTask(undefined)}
         />
       ) : sheetTarget ? (
@@ -390,10 +424,19 @@ export function CalendarScreen() {
           tasks={tasks}
           onChangeDay={openDaySheet}
           onSelectTask={setCandidateTask}
+          onPressTag={openTagGraph}
           onClose={() => setSheetTarget(undefined)}
         />
       ) : showHashtags ? (
-        <HashtagGraphSheet events={events} tasks={tasks} onClose={() => setShowHashtags(false)} />
+        <HashtagGraphSheet
+          events={events}
+          tasks={tasks}
+          initialTag={graphFocusTag}
+          onClose={() => {
+            setShowHashtags(false);
+            setGraphFocusTag(undefined);
+          }}
+        />
       ) : null}
     </ScrollView>
   );
@@ -623,18 +666,117 @@ function MonthCalendarGrid({
   );
 }
 
+function TaskQuickBar({
+  tasks,
+  onSelectTask,
+  onPressTag,
+}: {
+  tasks: readonly Card[];
+  onSelectTask: (task: Card) => void;
+  onPressTag: (tag: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <View className="gap-2.5 rounded-xl border border-border bg-card p-3.5">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        onPress={() => setExpanded((prev) => !prev)}
+        className="flex-row items-center justify-between gap-2"
+      >
+        <View className="flex-row items-center gap-2">
+          <View className="rounded-md bg-task-soft px-2 py-0.5">
+            <Text className="text-[11px] font-bold text-task">할 일</Text>
+          </View>
+          <Text className="text-sm font-bold text-foreground">
+            시간 안 잡은 할 일 {tasks.length}개
+          </Text>
+        </View>
+        <View className="rounded-md border border-border bg-muted px-2.5 py-1">
+          <Text className="text-xs font-semibold text-foreground">
+            {expanded ? '접기' : '펼치기'}
+          </Text>
+        </View>
+      </Pressable>
+
+      {expanded && (
+        <View className="gap-2 pt-1">
+          {tasks.map((task) => {
+            const { cleanTitle } = splitTitleAndTags(task.title);
+            const dueText = task.dueAt
+              ? `마감 ${dayKey(task.dueAt).slice(5)} ${timeLabel(task.dueAt)}`
+              : undefined;
+            return (
+              <View
+                key={task.id}
+                className="gap-2 rounded-lg border border-border bg-background p-3"
+              >
+                <View className="flex-row items-center justify-between gap-2">
+                  <View className="flex-1 gap-0.5">
+                    <Text className="text-sm font-bold text-foreground">{cleanTitle}</Text>
+                    {dueText ? (
+                      <Text className="text-[11px] text-muted-foreground">{dueText}</Text>
+                    ) : null}
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => onSelectTask(task)}
+                    className="rounded-lg bg-primary px-3 py-1.5"
+                  >
+                    <Text className="text-xs font-semibold text-primary-foreground">시간 잡기</Text>
+                  </Pressable>
+                </View>
+                <HiddenTagDisclosure
+                  itemId={task.id}
+                  title={task.title}
+                  editable
+                  compact
+                  onPressTag={onPressTag}
+                />
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}
+
 function EventListView({
   days,
   eventsByDay,
+  tasks,
   onSelectDay,
+  onSelectTask,
+  onPressTag,
 }: {
   days: string[];
   eventsByDay: Map<string, CalendarEvent[]>;
+  tasks: readonly Card[];
   onSelectDay: (day: string) => void;
+  onSelectTask: (task: Card) => void;
+  onPressTag: (tag: string) => void;
 }) {
+  const scheduledTasksByDay = useMemo(() => {
+    const map = new Map<string, Card[]>();
+    for (const task of tasks) {
+      if (task.status === 'dismissed' || !task.startAt) continue;
+      const d = dayKey(task.startAt);
+      const list = map.get(d);
+      if (list) list.push(task);
+      else map.set(d, [task]);
+    }
+    return map;
+  }, [tasks]);
+
   const grouped = days
-    .map((d) => ({ d, ev: eventsByDay.get(d) ?? EMPTY_EVENTS }))
-    .filter((item) => item.ev.length > 0);
+    .map((d) => ({
+      d,
+      ev: eventsByDay.get(d) ?? EMPTY_EVENTS,
+      dayTasks: scheduledTasksByDay.get(d) ?? [],
+    }))
+    .filter((item) => item.ev.length > 0 || item.dayTasks.length > 0);
 
   if (grouped.length === 0) {
     return (
@@ -652,51 +794,88 @@ function EventListView({
 
   return (
     <View className="gap-3">
-      {grouped.map(({ d, ev }) => (
-        <Pressable
-          key={d}
-          accessibilityRole="button"
-          accessibilityLabel={`${DayLabel(d)} 일정 ${ev.length}개 열기`}
-          onPress={() => onSelectDay(d)}
-          className="gap-2.5 rounded-xl border border-border bg-card p-4"
-        >
-          <Text accessibilityRole="header" className="text-base font-bold text-foreground">
-            {DayLabel(d)} ({ev.length}개)
-          </Text>
-          {ev.map((event) => {
-            const { cleanTitle, tags } = splitTitleAndTags(event.title);
-            return (
-              <View
-                key={event.id}
-                className="flex-row items-center gap-3 rounded-md border-l-[3px] border-l-cal-1 bg-cal-1-soft px-3 py-2.5"
-              >
-                <Text className="w-24 text-xs font-bold text-muted-foreground">
-                  {event.allDay
-                    ? '종일'
-                    : `${timeLabel(event.startAt)} ~ ${timeLabel(event.endAt)}`}
-                </Text>
-                <View className="flex-1 gap-1">
-                  <Text className="text-sm font-bold text-foreground">{cleanTitle}</Text>
-                  {tags.length > 0 && (
-                    <View className="flex-row flex-wrap gap-1.5">
-                      {tags.map((tag) => (
-                        <View key={tag} className="rounded-sm bg-muted px-2 py-0.5">
-                          <Text className="text-[11px] font-semibold text-muted-foreground">
-                            {tag}
-                          </Text>
-                        </View>
-                      ))}
+      {grouped.map(({ d, ev, dayTasks }) => {
+        const totalCount = ev.length + dayTasks.length;
+        return (
+          <View key={d} className="gap-2.5 rounded-xl border border-border bg-card p-4">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${DayLabel(d)} 일정 ${totalCount}개 열기`}
+              onPress={() => onSelectDay(d)}
+              className="flex-row items-center justify-between gap-2"
+            >
+              <Text accessibilityRole="header" className="text-base font-bold text-foreground">
+                {DayLabel(d)} ({totalCount}개)
+              </Text>
+              <Text className="text-xs font-semibold text-primary">상세 보기</Text>
+            </Pressable>
+
+            {ev.map((event) => {
+              const { cleanTitle } = splitTitleAndTags(event.title);
+              return (
+                <View
+                  key={event.id}
+                  className="gap-1.5 rounded-md border-l-[3px] border-l-cal-1 bg-cal-1-soft px-3 py-2.5"
+                >
+                  <View className="flex-row items-center gap-3">
+                    <Text className="w-24 text-xs font-bold text-muted-foreground">
+                      {event.allDay
+                        ? '종일'
+                        : `${timeLabel(event.startAt)} ~ ${timeLabel(event.endAt)}`}
+                    </Text>
+                    <View className="flex-1">
+                      <Text className="text-sm font-bold text-foreground">{cleanTitle}</Text>
                     </View>
-                  )}
+                    <View className="rounded-sm bg-card px-2 py-0.5">
+                      <Text className="text-[11px] font-bold text-cal-1">캘린더</Text>
+                    </View>
+                  </View>
+                  <HiddenTagDisclosure
+                    itemId={event.id}
+                    title={event.title}
+                    compact
+                    onPressTag={onPressTag}
+                  />
                 </View>
-                <View className="rounded-sm bg-card px-2 py-0.5">
-                  <Text className="text-[11px] font-bold text-cal-1">캘린더</Text>
+              );
+            })}
+
+            {dayTasks.map((task) => {
+              const { cleanTitle } = splitTitleAndTags(task.title);
+              return (
+                <View
+                  key={task.id}
+                  className="gap-1.5 rounded-md border-l-[3px] border-l-task bg-task-soft px-3 py-2.5"
+                >
+                  <View className="flex-row items-center gap-3">
+                    <Text className="w-24 text-xs font-bold text-muted-foreground">
+                      {task.startAt && task.endAt
+                        ? `${timeLabel(task.startAt)} ~ ${timeLabel(task.endAt)}`
+                        : '시간 미정'}
+                    </Text>
+                    <View className="flex-1">
+                      <Text className="text-sm font-bold text-foreground">{cleanTitle}</Text>
+                    </View>
+                    <Pressable
+                      onPress={() => onSelectTask(task)}
+                      className="rounded-sm bg-card px-2 py-0.5"
+                    >
+                      <Text className="text-[11px] font-bold text-task">시간 변경</Text>
+                    </Pressable>
+                  </View>
+                  <HiddenTagDisclosure
+                    itemId={task.id}
+                    title={task.title}
+                    editable
+                    compact
+                    onPressTag={onPressTag}
+                  />
                 </View>
-              </View>
-            );
-          })}
-        </Pressable>
-      ))}
+              );
+            })}
+          </View>
+        );
+      })}
     </View>
   );
 }

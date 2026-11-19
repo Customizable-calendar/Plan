@@ -1,9 +1,9 @@
-import { palette } from '@noteapp/ui';
 import type { CalendarEvent, Card } from '@noteapp/shared';
 import { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { HiddenTagDisclosure } from './HiddenTagDisclosure';
 import {
   buildHashtagGraph,
   type CalendarTagItem,
@@ -11,6 +11,7 @@ import {
   type TagNode,
 } from './hashtags';
 import { dayKey, timeLabel } from './model';
+import { useResolvedCalendarTags } from './tagStore';
 
 const BASE_GRAPH_HEIGHT = 480;
 const ZOOM_STEPS = [0.85, 1, 1.3, 1.6] as const;
@@ -60,19 +61,21 @@ function PillButton({
 export function HashtagGraphSheet({
   events,
   tasks,
+  initialTag,
   onClose,
 }: {
   events: readonly CalendarEvent[];
   tasks: readonly Card[];
+  initialTag?: string;
   onClose: () => void;
 }) {
-  const [selectedTag, setSelectedTag] = useState<string>();
+  const [selectedTag, setSelectedTag] = useState<string | undefined>(initialTag);
   const [scope, setScope] = useState<ScopeMode>('all');
   const [backboneOnly, setBackboneOnly] = useState(true);
   const [zoomIndex, setZoomIndex] = useState(1);
   const [query, setQuery] = useState('');
 
-  const items = useMemo<CalendarTagItem[]>(
+  const rawItems = useMemo(
     () => [
       ...events.map((e) => ({
         id: e.id,
@@ -92,6 +95,20 @@ export function HashtagGraphSheet({
         })),
     ],
     [events, tasks],
+  );
+
+  const { itemsWithTags, corpusFreq } = useResolvedCalendarTags(rawItems);
+  const items = useMemo<CalendarTagItem[]>(
+    () =>
+      itemsWithTags.map((item) => ({
+        id: item.id,
+        title: item.cleanTitle,
+        kind: item.kind,
+        startAt: item.startAt,
+        endAt: item.endAt,
+        tags: item.tags,
+      })),
+    [itemsWithTags],
   );
 
   const graph = useMemo(() => buildHashtagGraph(items), [items]);
@@ -225,10 +242,9 @@ export function HashtagGraphSheet({
                     value={query}
                     onChangeText={setQuery}
                     placeholder="태그 검색 (예: 기획, 개발, 인공지능, 운동)"
-                    placeholderTextColor={palette.mutedForeground}
                     autoCapitalize="none"
                     autoCorrect={false}
-                    className="h-11 min-w-[200px] flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                    className="h-11 min-w-[200px] flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground"
                   />
                   {query.length > 0 && <PillButton label="지우기" onPress={() => setQuery('')} />}
                   <PillButton
@@ -356,6 +372,13 @@ export function HashtagGraphSheet({
                     </Text>
                   </View>
                   <Text className="text-sm text-foreground">{item.title}</Text>
+                  <HiddenTagDisclosure
+                    itemId={item.id}
+                    title={item.title}
+                    corpusFreq={corpusFreq}
+                    compact
+                    onPressTag={setSelectedTag}
+                  />
                 </View>
               ))}
 
@@ -375,7 +398,7 @@ export function HashtagGraphSheet({
             </>
           ) : (
             <Text className="text-sm text-muted-foreground">
-              일정이나 할 일 제목에 해시태그가 없어요.
+              일정이나 할 일에서 추출된 해시태그가 없어요.
             </Text>
           )}
         </ScrollView>
