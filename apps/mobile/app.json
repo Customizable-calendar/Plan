@@ -24,7 +24,9 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "permissions": ["android.permission.RECORD_AUDIO"]
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -41,13 +43,7 @@
         }
       ],
       "expo-sharing",
-      "expo-audio",
-      [
-        "llama.rn",
-        {
-          "enableOpenCLAndHexagon": true
-        }
-      ]
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true
