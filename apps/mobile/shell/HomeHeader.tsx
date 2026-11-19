@@ -1,19 +1,38 @@
-import { Text, View } from 'react-native';
+import { Icon, Text } from '@noteapp/ui';
+import { router } from 'expo-router';
+import { BellIcon, SearchIcon } from 'lucide-react-native';
+import { Pressable, View } from 'react-native';
 
 import { MenuButton } from './MenuButton';
 
-// 홈 맨 위: 메뉴 버튼, 요일, 큰 날짜. 기기 시간대로 보여줘요.
+// 홈 상단바: 메뉴 버튼, 오늘 날짜와 요일, 검색과 알림 아이콘. (디자인 시스템 redesign 홈)
 export function HomeHeader() {
   const now = new Date();
-  const weekday = now.toLocaleDateString('ko-KR', { weekday: 'long' });
-  const date = now.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
+  const label = now.toLocaleDateString('ko-KR', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long',
+  });
   return (
-    <View className="gap-2">
-      <MenuButton className="-ml-2" />
-      <View>
-        <Text className="text-sm text-muted-foreground">{weekday}</Text>
-        <Text className="text-[28px] font-bold tracking-tight text-foreground">{date}</Text>
-      </View>
+    <View className="-mx-2 h-14 flex-row items-center">
+      <MenuButton />
+      <Text className="flex-1 pl-1 text-[15px] font-bold text-foreground">{label}</Text>
+      <Pressable
+        onPress={() => router.push('/search')}
+        accessibilityRole="button"
+        accessibilityLabel="검색"
+        className="h-11 w-11 items-center justify-center"
+      >
+        <Icon as={SearchIcon} size={22} className="text-foreground" />
+      </Pressable>
+      <Pressable
+        onPress={() => router.push('/cards')}
+        accessibilityRole="button"
+        accessibilityLabel="확인할 카드"
+        className="h-11 w-11 items-center justify-center"
+      >
+        <Icon as={BellIcon} size={22} className="text-foreground" />
+      </Pressable>
     </View>
   );
 }
