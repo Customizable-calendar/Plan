@@ -7,7 +7,9 @@ import {
   PaperclipIcon,
   PencilIcon,
   ShareIcon,
+  Redo2Icon,
   SparklesIcon,
+  Undo2Icon,
 } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -33,7 +35,7 @@ import {
 import { moveCursor, readCursor } from './cursor';
 import { FormatBar } from './FormatBar';
 import { longDate, savedTime, writingMethod } from './format';
-import { insertLineAfter, lastFilledLine, lineText, photoSlot } from './blocks';
+import { insertLineAfter, lastFilledLine, lineText, photoSlot, replaceLine } from './blocks';
 import {
   applyLineFormat,
   formatAtCursor,
@@ -45,13 +47,14 @@ import { fileLine } from './paper';
 import { PaperSheet } from './PaperSheet';
 import { PhotoTray } from './PhotoTray';
 import { Preview } from './Preview';
+import { FieldSheet, type FieldTarget } from './FieldSheet';
 import { buildSlashItems, findSlashQuery, type SlashItem } from './slash';
 import { SlashMenu } from './SlashMenu';
+import { type ChangeKind, type Snapshot, useEditHistory } from './useEditHistory';
 import { usePaper } from './usePaper';
 
-// 처음부터 꾸민 모양(미리보기)으로 여는 양식 분류. 칸이 많은 양식은 마크다운보다 표와 제목으로 보는 게 쉬워요.
-// 사진 포스트는 사진이 중심이라 사진이 보이는 미리보기로 열고, 사진함도 처음부터 열어 둬요. (양식 id 기준)
-const PREVIEW_FIRST: ReadonlySet<string> = new Set(['research-paper', 'photo-post']);
+// 양식으로 쓴 문서는 모두 꾸민 모양(미리보기)으로 먼저 열어요. 마크다운은 연필 버튼으로 봐요.
+// 사진 포스트는 사진이 중심이라 사진함도 처음부터 열어 둬요. (양식 id 기준)
 const TRAY_FIRST: ReadonlySet<string> = new Set(['photo-post']);
 
 /** 편집기: 상자 없는 흰 바탕, 상단바 양식 이름, 제목 아래 상태 칩, 키보드 위 서식 막대 */
@@ -76,7 +79,10 @@ export function EditorScreen() {
   const [previewFocus, setPreviewFocus] = useState<number | null>(null);
   const [activeLine, setActiveLine] = useState<number | null>(null);
   const [trayOpen, setTrayOpen] = useState(false);
+  // 날짜, 사람, 장소 칸을 채우는 시트의 대상 칸
+  const [fieldTarget, setFieldTarget] = useState<FieldTarget | null>(null);
   const bodyRef = useRef<TextInputInstance>(null);
+  const history = useEditHistory();
 
   useEffect(() => {
     let alive = true;
@@ -87,7 +93,7 @@ export function EditorScreen() {
       if (seed) setDirty(true);
       setTemplate(result.template);
       const templateKey = result.template?.id ?? '';
-      setPreviewing(PREVIEW_FIRST.has(templateKey));
+      setPreviewing(Boolean(result.template));
       setTrayOpen(TRAY_FIRST.has(templateKey));
       const end = result.document.body.length;
       setSelection({ start: end, end });
@@ -105,11 +111,42 @@ export function EditorScreen() {
 
   // 연구논문 문서의 논문 PDF (붙이기, 열기, 초록과 서론 뽑기)
   const paper = usePaper(doc?.body ?? '', (body) => {
+    if (doc) history.remember({ title: doc.title, body: doc.body }, 'block');
     setDoc((d) => d && { ...d, body, updatedAt: new Date().toISOString() });
     setDirty(true);
     setSavedAt(null);
   });
   const isResearch = template?.category === 'research';
+
+  /** 되돌리기, 다시 하기로 꺼낸 모습을 문서에 넣어요. 이건 기록에 다시 남기지 않아요. */
+  function restore(snapshot: Snapshot | null) {
+    if (!snapshot) return;
+    setDoc((d) => d && { ...d, ...snapshot, updatedAt: new Date().toISOString() });
+    setDirty(true);
+    setSavedAt(null);
+  }
+  const undo = () => doc && restore(history.undo({ title: doc.title, body: doc.body }));
+  const redo = () => doc && restore(history.redo({ title: doc.title, body: doc.body }));
+
+  // 웹: Ctrl(맥은 Cmd)+Z 되돌리기, Ctrl+Shift+Z 또는 Ctrl+Y 다시 하기.
+  // 브라우저 입력칸의 원래 되돌리기는 화면 상태와 어긋나서 막고 우리 기록을 써요.
+  // 늘 최신 문서로 되돌리게, 그릴 때마다 다시 붙여요(가벼운 일이에요).
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    function onKey(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const key = e.key.toLowerCase();
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if ((key === 'z' && e.shiftKey) || key === 'y') {
+        e.preventDefault();
+        redo();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   if (status !== 'ready' || !doc) {
     return (
@@ -121,10 +158,26 @@ export function EditorScreen() {
     );
   }
 
-  function edit(patch: Partial<Pick<Document, 'title' | 'body'>>) {
+  function edit(patch: Partial<Pick<Document, 'title' | 'body'>>, kind?: ChangeKind) {
+    if (doc) {
+      history.remember(
+        { title: doc.title, body: doc.body },
+        kind ?? ('title' in patch ? 'title' : 'body'),
+      );
+    }
     setDoc((d) => d && { ...d, ...patch, updatedAt: new Date().toISOString() });
     setDirty(true);
     setSavedAt(null);
+  }
+
+  /** 날짜, 사람, 장소 시트에서 고른 값을 그 칸에 넣어요. */
+  function fillField(value: string) {
+    if (!doc || !fieldTarget) return;
+    edit(
+      { body: replaceLine(doc.body, fieldTarget.line, `- ${fieldTarget.label}: ${value}`) },
+      'block',
+    );
+    setFieldTarget(null);
   }
 
   async function saveNow() {
@@ -138,7 +191,7 @@ export function EditorScreen() {
     if (!doc) return;
     if (previewing) return addPreviewLine(kind);
     const next = applyLineFormat(doc.body, selection.start, kind);
-    edit({ body: next.body });
+    edit({ body: next.body }, 'block');
     setSelection({ start: next.start, end: next.end });
     requestAnimationFrame(() => {
       bodyRef.current?.focus();
@@ -151,7 +204,7 @@ export function EditorScreen() {
     if (!doc) return;
     const after = activeLine ?? lastFilledLine(doc.body);
     const body = insertLineAfter(doc.body, after, linePrefix(kind, lineText(doc.body, after)));
-    edit({ body });
+    edit({ body }, 'block');
     setActiveLine(after + 1);
     setPreviewFocus(after + 1);
   }
@@ -160,7 +213,7 @@ export function EditorScreen() {
     if (!doc) return;
     const body = doc.body.slice(0, from) + text + doc.body.slice(selection.end);
     const cursor = from + text.length;
-    edit({ body });
+    edit({ body }, 'block');
     setSelection({ start: cursor, end: cursor });
     requestAnimationFrame(() => {
       bodyRef.current?.focus();
@@ -178,7 +231,7 @@ export function EditorScreen() {
     const line = fileLine('사진', photo.id);
     if (previewing) {
       const after = activeLine ?? photoSlot(doc.body) ?? lastFilledLine(doc.body);
-      edit({ body: insertLineAfter(doc.body, after, line) });
+      edit({ body: insertLineAfter(doc.body, after, line) }, 'block');
       // 다음 사진은 이 사진 바로 아래에 들어가서, 이어진 사진은 옆으로 넘겨 보는 묶음이 돼요.
       setActiveLine(after + 1);
       return;
@@ -307,6 +360,7 @@ export function EditorScreen() {
             focusLine={previewFocus}
             onFocusLine={setPreviewFocus}
             onActiveLine={setActiveLine}
+            onFieldPick={setFieldTarget}
             onFile={(fileId, action) => void paper.onFile(fileId, action)}
             imageUrl={filesAvailable ? fileUrl : undefined}
           />
@@ -346,17 +400,32 @@ export function EditorScreen() {
           onFormat={format}
           active={activeFormat}
           trailing={
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="AI로 초안 만들기"
-              onPress={() => router.push('/draft')}
-              className="h-12 w-12 items-center justify-center rounded-md active:bg-muted"
-            >
-              <Icon as={SparklesIcon} size={20} className="text-primary" />
-            </Pressable>
+            <View className="flex-row">
+              <BarIcon
+                label="되돌리기 (Ctrl+Z)"
+                icon={Undo2Icon}
+                disabled={!history.canUndo}
+                onPress={undo}
+              />
+              <BarIcon
+                label="다시 하기 (Ctrl+Shift+Z)"
+                icon={Redo2Icon}
+                disabled={!history.canRedo}
+                onPress={redo}
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="AI로 초안 만들기"
+                onPress={() => router.push('/draft')}
+                className="h-12 w-12 items-center justify-center rounded-md active:bg-muted"
+              >
+                <Icon as={SparklesIcon} size={20} className="text-primary" />
+              </Pressable>
+            </View>
           }
         />
       </View>
+      <FieldSheet target={fieldTarget} onDone={fillField} onClose={() => setFieldTarget(null)} />
       <PaperSheet
         state={paper.sheet}
         error={paper.error}
@@ -365,5 +434,30 @@ export function EditorScreen() {
         onClose={paper.close}
       />
     </KeyboardAvoidingView>
+  );
+}
+
+/** 서식 막대 오른쪽의 작은 아이콘 버튼 (되돌리기, 다시 하기) */
+function BarIcon(props: {
+  label: string;
+  icon: typeof Undo2Icon;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={props.label}
+      accessibilityState={{ disabled: props.disabled }}
+      disabled={props.disabled}
+      onPress={props.onPress}
+      className="h-12 w-10 items-center justify-center rounded-md active:bg-muted"
+    >
+      <Icon
+        as={props.icon}
+        size={19}
+        className={props.disabled ? 'text-muted-foreground/40' : 'text-foreground'}
+      />
+    </Pressable>
   );
 }

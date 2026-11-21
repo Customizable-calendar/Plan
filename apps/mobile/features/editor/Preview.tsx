@@ -1,5 +1,5 @@
 import { Button, palette } from '@noteapp/ui';
-import { SymbolView } from 'expo-symbols';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, TextInput, type TextInputInstance, View } from 'react-native';
 
@@ -15,6 +15,7 @@ import {
   replaceLine,
 } from './blocks';
 import { moveCursor } from './cursor';
+import { type FieldKind, fieldKind, type FieldTarget } from './FieldSheet';
 import { FileImage, FileImageRow } from './FileImage';
 
 // 제목 크기는 디자인 시스템 글자 종류(h2, h3, h4)를 따라요.
@@ -37,6 +38,8 @@ interface Props {
   onFile?: (fileId: string, action: 'open' | 'extract') => void;
   /** 본문 사진의 주소를 받아요. 없으면(계정 연결이 없는 빌드) 사진 줄을 그리지 않아요. */
   imageUrl?: (fileId: string) => Promise<string>;
+  /** 날짜, 사람, 장소 칸의 도우미 버튼을 눌렀을 때 */
+  onFieldPick?: (target: FieldTarget) => void;
 }
 
 /**
@@ -51,6 +54,7 @@ export function Preview({
   onActiveLine,
   onFile,
   imageUrl,
+  onFieldPick,
 }: Props) {
   const blocks = parseBlocks(body);
   const setFocusLine = onFocusLine;
@@ -140,6 +144,12 @@ export function Preview({
                   {...lineProps(row, block)}
                   placeholder="값 없음"
                   className="flex-1 text-base leading-6 text-foreground"
+                />
+                <FieldHelper
+                  label={row.label}
+                  onPress={(kind) =>
+                    onFieldPick?.({ line: row.line, label: row.label, value: row.text, kind })
+                  }
                 />
               </View>
             ))}
@@ -294,6 +304,38 @@ export function Preview({
 
 function isPdf(name: string) {
   return /\.pdf$/i.test(name);
+}
+
+const FIELD_ICONS: Record<FieldKind, { icon: SymbolViewProps['name']; label: string }> = {
+  date: {
+    icon: { ios: 'calendar', android: 'calendar_month', web: 'calendar_month' },
+    label: '달력에서 날짜 고르기',
+  },
+  people: {
+    icon: { ios: 'person.badge.plus', android: 'person_add', web: 'person_add' },
+    label: '메일로 사람 넣기',
+  },
+  place: {
+    icon: { ios: 'mappin.and.ellipse', android: 'location_on', web: 'location_on' },
+    label: '지도에서 장소 넣기',
+  },
+};
+
+/** 날짜, 사람, 장소 칸 오른쪽의 도우미 버튼. 그 밖의 칸에는 아무것도 없어요. */
+function FieldHelper({ label, onPress }: { label: string; onPress: (kind: FieldKind) => void }) {
+  const kind = fieldKind(label);
+  if (!kind) return null;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={FIELD_ICONS[kind].label}
+      hitSlop={8}
+      onPress={() => onPress(kind)}
+      className="h-6 w-6 items-center justify-center rounded-md active:bg-muted"
+    >
+      <SymbolView name={FIELD_ICONS[kind].icon} size={18} tintColor={palette.primary} />
+    </Pressable>
+  );
 }
 
 interface LineInputProps {
