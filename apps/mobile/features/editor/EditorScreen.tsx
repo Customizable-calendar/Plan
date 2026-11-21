@@ -1,7 +1,14 @@
 import type { CalendarEvent, Document, Template } from '@noteapp/shared';
 import { Icon, palette, SaveStatus, Text } from '@noteapp/ui';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { EyeIcon, PaperclipIcon, PencilIcon, ShareIcon } from 'lucide-react-native';
+import {
+  EyeIcon,
+  ImageIcon,
+  PaperclipIcon,
+  PencilIcon,
+  ShareIcon,
+  SparklesIcon,
+} from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -16,7 +23,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listEventsForSlash, openDocument, saveDocument } from './data';
-import { moveCursor } from './cursor';
+import { moveCursor, readCursor } from './cursor';
 import { FormatBar } from './FormatBar';
 import { longDate, savedTime, writingMethod } from './format';
 import { insertLineAfter, lastFilledLine, lineText } from './blocks';
@@ -32,7 +39,6 @@ import { PhotoTray } from './PhotoTray';
 import { Preview } from './Preview';
 import { buildSlashItems, findSlashQuery, type SlashItem } from './slash';
 import { SlashMenu } from './SlashMenu';
-import { Toolbar } from './Toolbar';
 import { usePaper } from './usePaper';
 
 // 처음부터 꾸민 모양(미리보기)으로 여는 양식 분류. 칸이 많은 양식은 마크다운보다 표와 제목으로 보는 게 쉬워요.
@@ -151,13 +157,15 @@ export function EditorScreen() {
     });
   }
 
-  const before = doc.body[selection.start - 1];
-  const atLineStart = before === undefined || before === '\n';
   const slash = bodyFocused ? findSlashQuery(doc.body, selection.start) : null;
   const slashItems = slash ? buildSlashItems(slash.query, events, new Date()) : [];
 
   function pickSlash(item: SlashItem) {
-    if (slash && item.insert !== null) insert(item.insert, slash.start);
+    if (!slash || item.insert === null) return;
+    // 목록 줄(- 일정:, - [ ])은 줄 처음에 있어야 해서, 글 중간에서 고르면 새 줄로 넣어요.
+    const midLine = slash.start > 0 && doc?.body[slash.start - 1] !== '\n';
+    const text = midLine && item.insert.startsWith('- ') ? `\n${item.insert}` : item.insert;
+    insert(text, slash.start);
   }
 
   function share() {
@@ -197,6 +205,19 @@ export function EditorScreen() {
                   <Icon as={PaperclipIcon} size={20} className="text-foreground" />
                 </Pressable>
               ) : null}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={trayOpen ? '사진함 닫기' : '내 사진함 열기'}
+                accessibilityState={{ expanded: trayOpen }}
+                hitSlop={10}
+                onPress={() => setTrayOpen((open) => !open)}
+              >
+                <Icon
+                  as={ImageIcon}
+                  size={20}
+                  className={trayOpen ? 'text-primary' : 'text-foreground'}
+                />
+              </Pressable>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={previewing ? '편집으로 돌아가기' : '미리보기'}
@@ -259,11 +280,18 @@ export function EditorScreen() {
           <TextInput
             ref={bodyRef}
             value={doc.body}
-            onChangeText={(body) => edit({ body })}
+            onChangeText={(body) => {
+              // 웹은 글자를 칠 때 onSelectionChange가 안 와서 // 명령이 안 떴어요. 웹만 커서 위치를 직접 읽어요.
+              // 앱은 onSelectionChange가 제대로 와서 그대로 둬요.
+              const at = readCursor(bodyRef.current);
+              if (at !== null) setSelection({ start: at, end: at });
+              edit({ body });
+            }}
             onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
             onFocus={() => setBodyFocused(true)}
-            onBlur={() => setBodyFocused(false)}
-            placeholder="자유롭게 써 보세요"
+            // 명령 목록을 누르면 본문 칸 포커스가 먼저 빠져요. 바로 닫으면 누른 항목이 안 들어가서 조금 뒤에 닫아요.
+            onBlur={() => setTimeout(() => setBodyFocused(false), 250)}
+            placeholder="자유롭게 써 보세요. // 를 치면 일정을 넣을 수 있어요."
             placeholderTextColor={palette.mutedForeground}
             multiline
             scrollEnabled={false}
@@ -277,18 +305,23 @@ export function EditorScreen() {
 
       {!previewing && slash ? <SlashMenu items={slashItems} onPick={pickSlash} /> : null}
 
-      {trayOpen && !previewing ? <PhotoTray onClose={() => setTrayOpen(false)} /> : null}
-      <FormatBar onFormat={format} active={activeFormat} />
-      <View className="bg-background" style={{ paddingBottom: insets.bottom }}>
-        {!previewing ? (
-          <Toolbar
-            onSlash={() => insert(before && !/\s/.test(before) ? ' /' : '/')}
-            onMic={() => router.push('/stt')}
-            onAi={() => router.push('/draft')}
-            onPhoto={() => setTrayOpen((open) => !open)}
-            onCheckbox={() => insert(atLineStart ? '- [ ] ' : '\n- [ ] ')}
-          />
-        ) : null}
+      {trayOpen ? <PhotoTray onClose={() => setTrayOpen(false)} /> : null}
+      {/* 아래에는 서식 막대 한 줄만 둬요. 일정은 본문에 // 를 쳐서, 사진은 위 헤더에서 넣어요. */}
+      <View className="bg-card" style={{ paddingBottom: insets.bottom }}>
+        <FormatBar
+          onFormat={format}
+          active={activeFormat}
+          trailing={
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="AI로 초안 만들기"
+              onPress={() => router.push('/draft')}
+              className="h-12 w-12 items-center justify-center rounded-md active:bg-muted"
+            >
+              <Icon as={SparklesIcon} size={20} className="text-primary" />
+            </Pressable>
+          }
+        />
       </View>
       <PaperSheet
         state={paper.sheet}
