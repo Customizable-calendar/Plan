@@ -18,7 +18,9 @@ export type PreviewBlock =
   | (LinePart & { kind: 'check'; checked: boolean })
   | (LinePart & { kind: 'number'; order: number })
   | (LinePart & { kind: 'quote' })
-  | (LinePart & { kind: 'paragraph' });
+  | (LinePart & { kind: 'paragraph' })
+  /** 붙인 파일 줄 `![이름](file:<files id>)`. 미리보기에서 파일 카드로 보여요. */
+  | { kind: 'file'; line: number; name: string; fileId: string };
 
 // 내용 없는 제목('## ')도 제목으로 봐요. 줄 끝 띄어쓰기는 지우고 보니까 '##'만 남아도 돼요. ('#태그'는 아니에요)
 const HEADING = /^(#{1,3})(?: (.*))?$/;
@@ -31,6 +33,8 @@ const QUOTE = /^(> ?)(.*)$/;
 // 띄어쓰기 없이 서식 기호만 있는 줄('###', '-', '1.', '- [ ]', '>', '- 이름:')은 서식이 아니라 그냥 글로 봐요.
 // 미리보기에서 빈 줄의 서식을 지우면 이렇게 기호만 남겨서, 한 글자씩 더 지울 수 있게 해요.
 const BARE = /^(#{1,3}|-|- \[[ xX]\]|\d+\.|>|- [^:]{1,20}:)$/;
+// 붙인 파일: ![논문.pdf](file:<uuid>)
+const FILE = /^!\[([^\]]*)\]\(file:([0-9a-f-]{36})\)$/;
 
 export function parseBlocks(body: string): PreviewBlock[] {
   const blocks: PreviewBlock[] = [];
@@ -40,6 +44,12 @@ export function parseBlocks(body: string): PreviewBlock[] {
     if (text.trim() === '') return;
 
     // 끝 띄어쓰기를 지우기 전 글로 봐요. '## '(빈 제목)과 '##'(기호만 남은 글)을 나눠야 해서요.
+    const file = FILE.exec(text);
+    if (file) {
+      blocks.push({ kind: 'file', line, name: file[1], fileId: file[2] });
+      return;
+    }
+
     if (BARE.test(raw)) {
       blocks.push({ kind: 'paragraph', line, prefix: '', text: raw });
       return;

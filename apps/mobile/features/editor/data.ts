@@ -18,6 +18,7 @@ import { getFileStorage } from '@/lib/storage';
 import { getSupabase } from '@/lib/supabase';
 
 import { monthDay } from './format';
+import { PDF_MAX_BYTES } from './pdf';
 import { extensionOf, type PickedImage, shrinkForUpload } from './photos';
 
 // 편집기 데이터는 여기서만 가져오고 저장해요. 화면은 이 파일 함수만 불러요.
@@ -188,6 +189,65 @@ export function watchPhotos(onChange: () => void): () => void {
   return () => {
     void supabase.removeChannel(channel);
   };
+}
+
+// ---- 논문 PDF ----
+// PDF도 사진처럼 media 버킷과 files 테이블에 둬요. 본문에는 ![이름](file:<id>) 줄로 붙어요.
+
+/**
+ * 논문 PDF를 올리고 files id를 돌려줘요. 사진과 같은 순서예요: '올리는 중'으로 적고, 올리고, '다 올림'.
+ * 실패하면 적은 줄과 올린 파일을 지워요.
+ */
+export async function uploadPdf(blob: Blob): Promise<string> {
+  const supabase = getSupabase();
+  const { data } = await supabase.auth.getSession();
+  const userId = data.session?.user.id;
+  if (!userId) throw new Error('로그인한 뒤에 PDF를 붙일 수 있어요.');
+  if (blob.size > PDF_MAX_BYTES) throw new Error('PDF는 30MB까지 붙일 수 있어요.');
+
+  const id = randomId();
+  const meta: FileMeta = {
+    id,
+    key: `${userId}/${id}.pdf`,
+    mime: 'application/pdf',
+    size: blob.size,
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+  };
+  const inserted = await supabase.from('files').insert(toFileInsert(meta));
+  if (inserted.error) throw new Error(`PDF를 올리지 못했어요. (${inserted.error.message})`);
+
+  const storage = getFileStorage();
+  try {
+    await uploadFile(await storage.createUploadUrl(meta.key, meta.mime), blob, meta.mime);
+    const done = await supabase.from('files').update({ status: 'ready' }).eq('id', id);
+    if (done.error) throw new Error(done.error.message);
+    return id;
+  } catch (error) {
+    await supabase.from('files').delete().eq('id', id);
+    await Promise.allSettled([storage.remove(meta.key)]);
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`PDF를 올리지 못했어요. 인터넷 연결을 확인하고 다시 해 주세요. (${reason})`);
+  }
+}
+
+/** 붙인 파일을 열 주소(서명된 URL, 한 시간). 파일이 없으면 안내를 던져요. */
+export async function fileUrl(fileId: string): Promise<string> {
+  const { data, error } = await getSupabase()
+    .from('files')
+    .select('*')
+    .eq('id', fileId)
+    .maybeSingle();
+  if (error) throw new Error(`파일을 찾지 못했어요. (${error.message})`);
+  if (!data) throw new Error('파일을 찾지 못했어요. 지워졌거나 다른 계정의 파일이에요.');
+  return signedUrl(toFileMeta(data as FileRow).key);
+}
+
+/** 붙인 파일의 내용. 붙인 PDF에서 글을 다시 뽑을 때 써요. */
+export async function fileBlob(fileId: string): Promise<Blob> {
+  const response = await fetch(await fileUrl(fileId));
+  if (!response.ok) throw new Error(`파일을 받지 못했어요. (${response.status})`);
+  return response.blob();
 }
 
 /** 파일 id(uuid 모양). 겹치지만 않으면 되는 값이라 Math.random으로 만들어요. */
