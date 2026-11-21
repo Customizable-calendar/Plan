@@ -8,10 +8,12 @@ import {
   type LinePart,
   nextPrefix,
   parseBlocks,
+  previousFilledLine,
   type PreviewBlock,
   removeLine,
   replaceLine,
 } from './blocks';
+import { moveCursor } from './cursor';
 
 // 제목 크기는 디자인 시스템 글자 종류(h2, h3, h4)를 따라요.
 const HEADING_CLASS = {
@@ -47,6 +49,13 @@ export function Preview({ body, onChange, focusLine, onFocusLine, onActiveLine }
     );
   }
 
+  /** 줄을 없애고, 글이 있는 윗줄 끝으로 커서를 옮겨요. */
+  function removeAndGoUp(line: number) {
+    const up = previousFilledLine(body, line);
+    onChange(removeLine(body, line));
+    setFocusLine(up >= 0 ? up : null);
+  }
+
   /** 줄 하나를 고칠 때 쓰는 입력칸 속성을 만들어요. */
   function lineProps(part: LinePart, block: PreviewBlock) {
     return {
@@ -56,7 +65,11 @@ export function Preview({ body, onChange, focusLine, onFocusLine, onActiveLine }
         setFocusLine(null);
         onActiveLine(part.line);
       },
-      onText: (text: string) => onChange(replaceLine(body, part.line, part.prefix + text)),
+      onText: (text: string) => {
+        // 글만 있는 줄을 다 지우면 줄을 없애고 윗줄로 가요. 빈 줄은 화면에 안 보여서 입력칸이 사라지거든요.
+        if (block.kind === 'paragraph' && text === '') return removeAndGoUp(part.line);
+        onChange(replaceLine(body, part.line, part.prefix + text));
+      },
       // 목록에서 엔터: 커서 뒤 글을 새 항목으로 내려요. 목록이 아니면 줄을 나누지 않아요.
       onEnter: (before: string, after: string) => {
         const prefix = nextPrefix(block);
@@ -68,11 +81,12 @@ export function Preview({ body, onChange, focusLine, onFocusLine, onActiveLine }
         onChange(insertLineAfter(kept, part.line, prefix + after));
         setFocusLine(part.line + 1);
       },
-      // 빈 목록 항목에서 지우기: 그 줄을 없애고 윗줄로 가요.
+      // 빈 줄에서 지우기(Backspace): 서식 줄이면 서식을 풀어 기호만 글로 남기고('### '는 '###'),
+      // 글만 있는 줄이면 줄을 없애고 윗줄로 가요. 그래서 계속 누르면 기호도 한 글자씩 지워져요.
       onDeleteEmpty: () => {
-        if (nextPrefix(block) === null) return;
-        onChange(removeLine(body, part.line));
-        setFocusLine(part.line - 1);
+        if (block.kind === 'paragraph') return removeAndGoUp(part.line);
+        onChange(replaceLine(body, part.line, part.prefix.trimEnd()));
+        setFocusLine(part.line);
       },
     };
   }
@@ -106,7 +120,7 @@ export function Preview({ body, onChange, focusLine, onFocusLine, onActiveLine }
                   placeholderTextColor={palette.mutedForeground}
                   onFocus={() => onActiveLine(row.line)}
                   accessibilityLabel="항목 이름"
-                  className="w-24 p-0 text-sm leading-6 text-muted-foreground"
+                  className="w-24 p-0 text-sm leading-6 text-muted-foreground web:outline-none"
                 />
                 <LineInput
                   {...lineProps(row, block)}
@@ -220,10 +234,21 @@ interface LineInputProps {
 /** 꾸민 모양 그대로 고칠 수 있는 한 줄 입력칸. 길면 여러 줄로 넘어가요. */
 function LineInput(props: LineInputProps) {
   const ref = useRef<TextInputInstance>(null);
+  // 커서를 이미 옮겼는지. 글자를 칠 때마다 커서가 끝으로 튀지 않게, focused가 켜질 때 한 번만 옮겨요.
+  const moved = useRef(false);
+  const { focused, value } = props;
 
   useEffect(() => {
-    if (props.focused) ref.current?.focus();
-  }, [props.focused]);
+    if (!focused) {
+      moved.current = false;
+      return;
+    }
+    if (moved.current) return;
+    moved.current = true;
+    ref.current?.focus();
+    // 커서는 글 끝에 둬요. 서식을 푼 뒤 바로 이어서 지울 수 있게요.
+    moveCursor(ref.current, value.length);
+  }, [focused, value.length]);
 
   return (
     <TextInput
@@ -248,7 +273,7 @@ function LineInput(props: LineInputProps) {
         props.onDeleteEmpty();
       }}
       // 웹 입력칸은 내용만큼 저절로 늘어나지 않아서 field-sizing으로 늘려요. 앱에서는 원래 늘어나요.
-      className={`p-0 web:[field-sizing:content] ${props.className}`}
+      className={`p-0 web:outline-none web:[field-sizing:content] ${props.className}`}
     />
   );
 }
