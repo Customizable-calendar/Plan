@@ -123,6 +123,23 @@ export function lineText(body: string, line: number): string {
   return body.split('\n')[line] ?? '';
 }
 
+// 해시태그: 줄 처음이나 띄어쓰기 뒤에서 '#' 바로 다음에 글자가 붙은 것. ('# 제목'처럼 띄어 쓰면 제목이에요)
+const TAG = /(^|\s)(#[^\s#]+)/g;
+
+/** 글을 해시태그와 나머지로 나눠요. 미리보기에서 태그만 다른 색으로 보여줄 때 써요. */
+export function splitTags(text: string): { text: string; tag: boolean }[] {
+  const parts: { text: string; tag: boolean }[] = [];
+  let last = 0;
+  for (const match of text.matchAll(TAG)) {
+    const start = (match.index ?? 0) + match[1].length;
+    if (start > last) parts.push({ text: text.slice(last, start), tag: false });
+    parts.push({ text: match[2], tag: true });
+    last = start + match[2].length;
+  }
+  if (last < text.length) parts.push({ text: text.slice(last), tag: false });
+  return parts;
+}
+
 /** line번째 줄 위에서 글이 있는 가장 가까운 줄 번호. 없으면 -1 */
 export function previousFilledLine(body: string, line: number): number {
   const lines = body.split('\n');
