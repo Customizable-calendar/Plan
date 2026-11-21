@@ -23,3 +23,13 @@ const FALLBACK: SymbolViewProps['name'] = {
 export function templateIcon(icon: TemplateIcon | undefined): SymbolViewProps['name'] {
   return icon ? ICONS[icon] : FALLBACK;
 }
+
+// 블로그처럼 형식이 둘인 양식은 형식 고르기에서 형식마다 다른 아이콘을 보여줘요. (양식 id 기준)
+const FORMAT_ICONS: Record<string, SymbolViewProps['name']> = {
+  blog: { ios: 'doc.richtext', android: 'article', web: 'article' },
+  'photo-post': { ios: 'photo.on.rectangle', android: 'photo_library', web: 'photo_library' },
+};
+
+export function formatIcon(templateId: string): SymbolViewProps['name'] | undefined {
+  return FORMAT_ICONS[templateId];
+}

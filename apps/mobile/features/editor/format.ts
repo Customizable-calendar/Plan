@@ -32,7 +32,7 @@ export function savedTime(date: Date): string {
   }).format(date);
 }
 
-/** 슬래시 명령으로 넣는 일정 한 줄. 일정 자체의 시간대로 보여줘요. */
+/** // 명령에 보여줄 일정 한 줄(날짜, 시각, 제목). 일정 자체의 시간대로 보여줘요. */
 export function eventLine(event: CalendarEvent): string {
   const when = event.allDay
     ? new Intl.DateTimeFormat('ko-KR', {
@@ -48,7 +48,7 @@ export function eventLine(event: CalendarEvent): string {
         minute: '2-digit',
         hourCycle: 'h23',
       });
-  return `📅 ${when.format(new Date(event.startAt))} ${event.title}`;
+  return `${when.format(new Date(event.startAt))} ${event.title}`;
 }
 
 /**
