@@ -60,7 +60,7 @@ export async function listEditedDocuments(): Promise<Document[]> {
   return listAllDocuments();
 }
 
-/** `/캘` 슬래시 명령에서 고를 일정. M2에는 캘린더(C)의 index.ts에서 내보낸 함수로 바꿔요. */
+/** `//` 명령에서 고를 일정. M2에는 캘린더(C)의 index.ts에서 내보낸 함수로 바꿔요. */
 export async function listEventsForSlash(): Promise<CalendarEvent[]> {
   if (dataSource !== 'fixtures') return [];
   return fromFixture([...fixtures.events].sort((a, b) => a.startAt.localeCompare(b.startAt)));
