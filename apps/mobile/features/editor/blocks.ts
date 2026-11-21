@@ -20,7 +20,8 @@ export type PreviewBlock =
   | (LinePart & { kind: 'quote' })
   | (LinePart & { kind: 'paragraph' });
 
-const HEADING = /^(#{1,3} )(.*)$/;
+// 내용 없는 제목('## ')도 제목으로 봐요. 줄 끝 띄어쓰기는 지우고 보니까 '##'만 남아도 돼요. ('#태그'는 아니에요)
+const HEADING = /^(#{1,3})(?: (.*))?$/;
 const CHECK = /^(- \[([ xX])\] ?)(.*)$/;
 // 이름은 20자까지. 콜론 뒤에 띄어쓰기가 있거나 줄이 끝나야 해요. ("- 10:30 회의"는 해당 안 돼요)
 const FIELD = /^- ([^:]{1,20}):(?: (.*)|\s*)$/;
@@ -37,8 +38,9 @@ export function parseBlocks(body: string): PreviewBlock[] {
 
     const heading = HEADING.exec(text);
     if (heading) {
-      const level = (heading[1].length - 1) as 1 | 2 | 3;
-      blocks.push({ kind: 'heading', level, line, prefix: heading[1], text: heading[2] });
+      const level = heading[1].length as 1 | 2 | 3;
+      const prefix = `${heading[1]} `;
+      blocks.push({ kind: 'heading', level, line, prefix, text: heading[2] ?? '' });
       return;
     }
 
@@ -98,6 +100,18 @@ export function insertLineAfter(body: string, line: number, content: string): st
   const lines = body.split('\n');
   lines.splice(line + 1, 0, content);
   return lines.join('\n');
+}
+
+/** 글이 있는 마지막 줄 번호. 본문이 비었으면 -1 */
+export function lastFilledLine(body: string): number {
+  const lines = body.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) if (lines[i].trim() !== '') return i;
+  return -1;
+}
+
+/** line번째 줄의 글. 없는 줄이면 빈 글 */
+export function lineText(body: string, line: number): string {
+  return body.split('\n')[line] ?? '';
 }
 
 /** line번째 줄을 지워요. */

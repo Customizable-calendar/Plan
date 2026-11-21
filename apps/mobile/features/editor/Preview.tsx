@@ -1,6 +1,6 @@
 import { palette } from '@noteapp/ui';
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Pressable, Text, TextInput, type TextInputInstance, View } from 'react-native';
 
 import {
@@ -24,19 +24,27 @@ interface Props {
   body: string;
   /** 고친 본문 전체를 돌려줘요. */
   onChange: (body: string) => void;
+  /** 커서를 옮겨 둘 줄 (새 줄을 만들거나 줄을 지운 뒤). 편집기가 들고 있어요. */
+  focusLine: number | null;
+  onFocusLine: (line: number | null) => void;
+  /** 사용자가 마지막으로 누른 줄. 서식 막대가 그 아래에 새 줄을 넣어요. */
+  onActiveLine: (line: number) => void;
 }
 
 /**
  * 본문을 꾸며서 보여주는 화면. 글자를 누르면 그 자리에서 바로 고칠 수 있어요.
- * 고친 글은 본문의 그 줄에만 반영돼요. 새 제목이나 문단을 넣으려면 편집으로 돌아가요.
+ * 고친 글은 본문의 그 줄에만 반영돼요. 새 제목이나 항목은 아래 서식 막대로 넣어요.
  */
-export function Preview({ body, onChange }: Props) {
+export function Preview({ body, onChange, focusLine, onFocusLine, onActiveLine }: Props) {
   const blocks = parseBlocks(body);
-  // 엔터로 새 줄을 만들거나 줄을 지운 뒤 커서를 둘 줄
-  const [focusLine, setFocusLine] = useState<number | null>(null);
+  const setFocusLine = onFocusLine;
 
   if (blocks.length === 0) {
-    return <Text className="text-sm text-muted-foreground">아직 쓴 내용이 없어요.</Text>;
+    return (
+      <Text className="text-sm text-muted-foreground">
+        아직 쓴 내용이 없어요. 아래 서식 막대에서 제목이나 항목을 골라 넣어 보세요.
+      </Text>
+    );
   }
 
   /** 줄 하나를 고칠 때 쓰는 입력칸 속성을 만들어요. */
@@ -44,7 +52,10 @@ export function Preview({ body, onChange }: Props) {
     return {
       value: part.text,
       focused: focusLine === part.line,
-      onFocused: () => setFocusLine(null),
+      onFocused: () => {
+        setFocusLine(null);
+        onActiveLine(part.line);
+      },
       onText: (text: string) => onChange(replaceLine(body, part.line, part.prefix + text)),
       // 목록에서 엔터: 커서 뒤 글을 새 항목으로 내려요. 목록이 아니면 줄을 나누지 않아요.
       onEnter: (before: string, after: string) => {
@@ -83,7 +94,20 @@ export function Preview({ body, onChange }: Props) {
                 key={row.line}
                 className={`flex-row gap-3 px-3 py-2 ${index > 0 ? 'border-t border-border' : ''}`}
               >
-                <Text className="w-24 text-sm leading-6 text-muted-foreground">{row.label}</Text>
+                {/* 이름도 그 자리에서 고쳐요. 콜론과 줄바꿈은 이름과 값을 나누는 글자라 지워요.
+                    이름을 다 지워도 표에 남도록 빈 이름은 띄어쓰기 하나로 적어요. */}
+                <TextInput
+                  value={row.label}
+                  onChangeText={(label) => {
+                    const name = label.replace(/[:\n]/g, '').slice(0, 20) || ' ';
+                    onChange(replaceLine(body, row.line, `- ${name}: ${row.text}`));
+                  }}
+                  placeholder="이름"
+                  placeholderTextColor={palette.mutedForeground}
+                  onFocus={() => onActiveLine(row.line)}
+                  accessibilityLabel="항목 이름"
+                  className="w-24 p-0 text-sm leading-6 text-muted-foreground"
+                />
                 <LineInput
                   {...lineProps(row, block)}
                   placeholder="값 없음"
