@@ -62,6 +62,9 @@ importers:
       expo-constants:
         specifier: ~58.0.13
         version: 58.0.13(expo@58.0.19)(react-native@0.88.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(typescript@6.0.3)
+      expo-document-picker:
+        specifier: ~58.0.5
+        version: 58.0.5(expo@58.0.19)
       expo-file-system:
         specifier: ~58.0.13
         version: 58.0.13(expo@58.0.19)(react-native@0.88.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))
@@ -131,6 +134,9 @@ importers:
       tailwindcss:
         specifier: 3.4.17
         version: 3.4.17
+      unpdf:
+        specifier: 2.1.0
+        version: 2.1.0
       whisper.rn:
         specifier: 0.7.4
         version: 0.7.4(react-native@0.88.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
@@ -2866,6 +2872,11 @@ packages:
       expo: '*'
       react-native: '*'
 
+  expo-document-picker@58.0.5:
+    resolution: {integrity: sha512-DHv8GhjDwu2BbDWhV2j52iaqwWsA9P7n5nAwreiKRGQSxv0wpF/C0Cqpqj1B72io8E2KXddwxxKPWVPlV/kgtA==}
+    peerDependencies:
+      expo: '*'
+
   expo-eas-client@58.0.2:
     resolution: {integrity: sha512-mhRYnE35MzGxR1Xnl9FAg7/yHaocy4xoVzgsDmS9cbK+1wM6l74/I/73/E4Kr6wChdVZfeS6S+Tv4I1qYbGY2g==}
 
@@ -4800,6 +4811,15 @@ packages:
   unicode-property-aliases-ecmascript@2.2.0:
     resolution: {integrity: sha512-hpbDzxUY9BFwX+UeBnxv3Sh1q7HFxj48DTmXchNgRa46lO8uj3/1iEn3MiNUYTg1g9ctIqXCCERn8gYZhHC5lQ==}
     engines: {node: '>=4'}
+
+  unpdf@2.1.0:
+    resolution: {integrity: sha512-G/Hsrm++g0EoubUhV8TDFItq6oQ+FUu9EMvIRtHUwseKXB0iJoCvaLvBGOpYUBqyvggv/XfxhYYtohL2QpE3xQ==}
+    engines: {node: '>=24'}
+    peerDependencies:
+      '@napi-rs/canvas': ^0.1.69 || ^1.0.0
+    peerDependenciesMeta:
+      '@napi-rs/canvas':
+        optional: true
 
   unpipe@1.0.0:
     resolution: {integrity: sha512-pjy2bYhSsufwWlKwPc+l3cN7+wuJlK6uz0YdJEOlQDbl6jo/YlPi4mb8agUkVC8BF7V8NuzeyPNqRksA3hztKQ==}
@@ -8052,6 +8072,10 @@ snapshots:
       - supports-color
       - typescript
 
+  expo-document-picker@58.0.5(expo@58.0.19):
+    dependencies:
+      expo: 58.0.19(@babel/core@7.29.7)(@expo/dom-webview@58.0.2)(@expo/metro-runtime@58.0.15)(expo-router@58.0.26)(react-dom@19.3.0(react@19.3.0))(react-native-web@0.21.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-native-worklets@0.13.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(react-native@0.88.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native@0.88.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
+
   expo-eas-client@58.0.2: {}
 
   expo-file-system@58.0.13(expo@58.0.19)(react-native@0.88.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0)):
@@ -10205,6 +10229,8 @@ snapshots:
   unicode-match-property-value-ecmascript@2.2.1: {}
 
   unicode-property-aliases-ecmascript@2.2.0: {}
+
+  unpdf@2.1.0: {}
 
   unpipe@1.0.0: {}
 

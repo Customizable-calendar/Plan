@@ -1,7 +1,7 @@
 import type { CalendarEvent, Document, Template } from '@noteapp/shared';
 import { Icon, palette, SaveStatus, Text } from '@noteapp/ui';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { EyeIcon, PencilIcon, ShareIcon } from 'lucide-react-native';
+import { EyeIcon, PaperclipIcon, PencilIcon, ShareIcon } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -27,11 +27,13 @@ import {
   lineFormatOf,
   linePrefix,
 } from './markdown';
+import { PaperSheet } from './PaperSheet';
 import { PhotoTray } from './PhotoTray';
 import { Preview } from './Preview';
 import { buildSlashItems, findSlashQuery, type SlashItem } from './slash';
 import { SlashMenu } from './SlashMenu';
 import { Toolbar } from './Toolbar';
+import { usePaper } from './usePaper';
 
 // 처음부터 꾸민 모양(미리보기)으로 여는 양식 분류. 칸이 많은 양식은 마크다운보다 표와 제목으로 보는 게 쉬워요.
 const PREVIEW_FIRST: ReadonlySet<string> = new Set(['research']);
@@ -83,6 +85,14 @@ export function EditorScreen() {
   useEffect(() => {
     if (doc && dirty) void saveDocument(doc);
   }, [doc, dirty]);
+
+  // 연구논문 문서의 논문 PDF (붙이기, 열기, 초록과 서론 뽑기)
+  const paper = usePaper(doc?.body ?? '', (body) => {
+    setDoc((d) => d && { ...d, body, updatedAt: new Date().toISOString() });
+    setDirty(true);
+    setSavedAt(null);
+  });
+  const isResearch = template?.category === 'research';
 
   if (status !== 'ready' || !doc) {
     return (
@@ -177,6 +187,16 @@ export function EditorScreen() {
           headerRight: () => (
             <View className="mr-2 flex-row items-center gap-3">
               <SaveStatus state={saveState} onPress={() => void saveNow()} />
+              {isResearch ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="논문 PDF 붙이기"
+                  hitSlop={10}
+                  onPress={() => void paper.attach()}
+                >
+                  <Icon as={PaperclipIcon} size={20} className="text-foreground" />
+                </Pressable>
+              ) : null}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={previewing ? '편집으로 돌아가기' : '미리보기'}
@@ -233,6 +253,7 @@ export function EditorScreen() {
             focusLine={previewFocus}
             onFocusLine={setPreviewFocus}
             onActiveLine={setActiveLine}
+            onFile={(fileId, action) => void paper.onFile(fileId, action)}
           />
         ) : (
           <TextInput
@@ -269,6 +290,12 @@ export function EditorScreen() {
           />
         ) : null}
       </View>
+      <PaperSheet
+        state={paper.sheet}
+        error={paper.error}
+        onApply={paper.apply}
+        onClose={paper.close}
+      />
     </KeyboardAvoidingView>
   );
 }

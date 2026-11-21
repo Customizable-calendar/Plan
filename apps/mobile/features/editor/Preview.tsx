@@ -1,4 +1,4 @@
-import { palette } from '@noteapp/ui';
+import { Button, palette } from '@noteapp/ui';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, TextInput, type TextInputInstance, View } from 'react-native';
@@ -32,13 +32,15 @@ interface Props {
   onFocusLine: (line: number | null) => void;
   /** 사용자가 마지막으로 누른 줄. 서식 막대가 그 아래에 새 줄을 넣어요. */
   onActiveLine: (line: number) => void;
+  /** 파일 카드의 버튼: 열기, 또는 (PDF면) 논문 내용 다시 뽑기 */
+  onFile?: (fileId: string, action: 'open' | 'extract') => void;
 }
 
 /**
  * 본문을 꾸며서 보여주는 화면. 글자를 누르면 그 자리에서 바로 고칠 수 있어요.
  * 고친 글은 본문의 그 줄에만 반영돼요. 새 제목이나 항목은 아래 서식 막대로 넣어요.
  */
-export function Preview({ body, onChange, focusLine, onFocusLine, onActiveLine }: Props) {
+export function Preview({ body, onChange, focusLine, onFocusLine, onActiveLine, onFile }: Props) {
   const blocks = parseBlocks(body);
   const setFocusLine = onFocusLine;
 
@@ -202,6 +204,34 @@ export function Preview({ body, onChange, focusLine, onFocusLine, onActiveLine }
             />
           </View>
         );
+
+      case 'file': {
+        const pdf = /\.pdf$/i.test(block.name);
+        return (
+          <View className="flex-row items-center gap-3 rounded-lg border border-border px-3 py-2.5">
+            <SymbolView
+              name={
+                pdf
+                  ? { ios: 'doc.richtext', android: 'picture_as_pdf', web: 'picture_as_pdf' }
+                  : { ios: 'doc', android: 'description', web: 'description' }
+              }
+              size={22}
+              tintColor={palette.primary}
+            />
+            <Text className="flex-1 text-sm font-medium text-foreground" numberOfLines={1}>
+              {block.name || '붙인 파일'}
+            </Text>
+            {pdf ? (
+              <Button size="sm" variant="ghost" onPress={() => onFile?.(block.fileId, 'extract')}>
+                <Text className="text-sm text-primary">초록, 서론 뽑기</Text>
+              </Button>
+            ) : null}
+            <Button size="sm" variant="soft" onPress={() => onFile?.(block.fileId, 'open')}>
+              <Text className="text-sm font-medium text-primary-soft-foreground">열기</Text>
+            </Button>
+          </View>
+        );
+      }
 
       case 'paragraph':
         return (
