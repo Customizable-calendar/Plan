@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GROUPS } from './groups';
 import { formatIcon, templateIcon } from './icons';
 
 interface Props {
@@ -13,17 +14,6 @@ interface Props {
   onPick: (template: Template) => void;
   onClose: () => void;
 }
-
-// 한 분류에 형식이 여러 개인 양식은 한 칸으로 묶고, 누르면 형식을 한 번 더 골라요. 지금은 블로그만 그래요.
-const GROUPS: Partial<
-  Record<TemplateCategory, { name: string; description: string; ask: string }>
-> = {
-  blog: {
-    name: '블로그',
-    description: '글과 사진으로 쓸지, 사진에 짧은 글을 붙일지 골라요.',
-    ask: '어떤 형식으로 쓸까요?',
-  },
-};
 
 type Entry =
   | { kind: 'template'; template: Template }

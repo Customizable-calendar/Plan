@@ -13,7 +13,13 @@ import { uploadFile } from '@noteapp/storage';
 
 import { loginRequired } from '@/lib/auth';
 import { dataSource, fromFixture } from '@/lib/data-source';
-import { findDocument, listAllDocuments, putDocument } from '@/lib/documents';
+import {
+  findDocument,
+  listAllDocuments,
+  listSessions,
+  putDocument,
+  putSession,
+} from '@/lib/documents';
 import { getFileStorage } from '@/lib/storage';
 import { getSupabase } from '@/lib/supabase';
 
@@ -53,6 +59,32 @@ export async function openDocument(
 /** 고친 문서를 저장해요. 앱을 다시 켜도 남아요. */
 export async function saveDocument(document: Document): Promise<void> {
   await putDocument(document);
+  await keepSession(document);
+}
+
+/**
+ * 문서를 저장하면 그 양식의 세션도 이어 둬요. 세션이 없으면 만들고, 마지막 문서를 이 문서로 바꿔요.
+ * 예전에는 세션을 만들지 않아서, 새 양식(예: 사진 포스트)으로 쓴 문서가 왼쪽 메뉴 세션에 안 보였어요.
+ */
+async function keepSession(document: Document): Promise<void> {
+  const template = templates.find((t) => t.id === document.templateId);
+  if (!template) return;
+  const existing = (await listSessions()).find((s) => s.templateId === template.id);
+  // 글자를 칠 때마다 저장하지 않게, 처음이거나 마지막 문서가 바뀔 때만 써요.
+  if (existing?.lastDocumentId === document.id) return;
+  const now = new Date().toISOString();
+  await putSession(
+    existing
+      ? { ...existing, lastDocumentId: document.id, updatedAt: now }
+      : {
+          id: `session-${template.id}`,
+          templateId: template.id,
+          title: template.name,
+          lastDocumentId: document.id,
+          createdAt: now,
+          updatedAt: now,
+        },
+  );
 }
 
 /** 저장된 문서 전부(예전 이름 그대로). 세션 목록이 써요. */
