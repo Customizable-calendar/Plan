@@ -20,13 +20,17 @@ export type PreviewBlock =
   | (LinePart & { kind: 'quote' })
   | (LinePart & { kind: 'paragraph' });
 
-const HEADING = /^(#{1,3} )(.*)$/;
+// 내용 없는 제목('## ')도 제목으로 봐요. 줄 끝 띄어쓰기는 지우고 보니까 '##'만 남아도 돼요. ('#태그'는 아니에요)
+const HEADING = /^(#{1,3})(?: (.*))?$/;
 const CHECK = /^(- \[([ xX])\] ?)(.*)$/;
 // 이름은 20자까지. 콜론 뒤에 띄어쓰기가 있거나 줄이 끝나야 해요. ("- 10:30 회의"는 해당 안 돼요)
 const FIELD = /^- ([^:]{1,20}):(?: (.*)|\s*)$/;
 const BULLET = /^(- ?)(.*)$/;
 const NUMBER = /^((\d+)\. ?)(.*)$/;
 const QUOTE = /^(> ?)(.*)$/;
+// 띄어쓰기 없이 서식 기호만 있는 줄('###', '-', '1.', '- [ ]', '>', '- 이름:')은 서식이 아니라 그냥 글로 봐요.
+// 미리보기에서 빈 줄의 서식을 지우면 이렇게 기호만 남겨서, 한 글자씩 더 지울 수 있게 해요.
+const BARE = /^(#{1,3}|-|- \[[ xX]\]|\d+\.|>|- [^:]{1,20}:)$/;
 
 export function parseBlocks(body: string): PreviewBlock[] {
   const blocks: PreviewBlock[] = [];
@@ -35,10 +39,17 @@ export function parseBlocks(body: string): PreviewBlock[] {
     const text = raw.trimEnd();
     if (text.trim() === '') return;
 
+    // 끝 띄어쓰기를 지우기 전 글로 봐요. '## '(빈 제목)과 '##'(기호만 남은 글)을 나눠야 해서요.
+    if (BARE.test(raw)) {
+      blocks.push({ kind: 'paragraph', line, prefix: '', text: raw });
+      return;
+    }
+
     const heading = HEADING.exec(text);
     if (heading) {
-      const level = (heading[1].length - 1) as 1 | 2 | 3;
-      blocks.push({ kind: 'heading', level, line, prefix: heading[1], text: heading[2] });
+      const level = heading[1].length as 1 | 2 | 3;
+      const prefix = `${heading[1]} `;
+      blocks.push({ kind: 'heading', level, line, prefix, text: heading[2] ?? '' });
       return;
     }
 
@@ -98,6 +109,42 @@ export function insertLineAfter(body: string, line: number, content: string): st
   const lines = body.split('\n');
   lines.splice(line + 1, 0, content);
   return lines.join('\n');
+}
+
+/** 글이 있는 마지막 줄 번호. 본문이 비었으면 -1 */
+export function lastFilledLine(body: string): number {
+  const lines = body.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) if (lines[i].trim() !== '') return i;
+  return -1;
+}
+
+/** line번째 줄의 글. 없는 줄이면 빈 글 */
+export function lineText(body: string, line: number): string {
+  return body.split('\n')[line] ?? '';
+}
+
+// 해시태그: 줄 처음이나 띄어쓰기 뒤에서 '#' 바로 다음에 글자가 붙은 것. ('# 제목'처럼 띄어 쓰면 제목이에요)
+const TAG = /(^|\s)(#[^\s#]+)/g;
+
+/** 글을 해시태그와 나머지로 나눠요. 미리보기에서 태그만 다른 색으로 보여줄 때 써요. */
+export function splitTags(text: string): { text: string; tag: boolean }[] {
+  const parts: { text: string; tag: boolean }[] = [];
+  let last = 0;
+  for (const match of text.matchAll(TAG)) {
+    const start = (match.index ?? 0) + match[1].length;
+    if (start > last) parts.push({ text: text.slice(last, start), tag: false });
+    parts.push({ text: match[2], tag: true });
+    last = start + match[2].length;
+  }
+  if (last < text.length) parts.push({ text: text.slice(last), tag: false });
+  return parts;
+}
+
+/** line번째 줄 위에서 글이 있는 가장 가까운 줄 번호. 없으면 -1 */
+export function previousFilledLine(body: string, line: number): number {
+  const lines = body.split('\n');
+  for (let i = line - 1; i >= 0; i--) if (lines[i].trim() !== '') return i;
+  return -1;
 }
 
 /** line번째 줄을 지워요. */

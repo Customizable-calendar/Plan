@@ -17,13 +17,24 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listEventsForSlash, openDocument, saveDocument } from './data';
+import { moveCursor } from './cursor';
 import { FormatBar } from './FormatBar';
 import { longDate, savedTime, writingMethod } from './format';
-import { applyLineFormat, type LineFormat } from './markdown';
+import { insertLineAfter, lastFilledLine, lineText } from './blocks';
+import {
+  applyLineFormat,
+  formatAtCursor,
+  type LineFormat,
+  lineFormatOf,
+  linePrefix,
+} from './markdown';
 import { Preview } from './Preview';
 import { buildSlashItems, findSlashQuery, type SlashItem } from './slash';
 import { SlashMenu } from './SlashMenu';
 import { Toolbar } from './Toolbar';
+
+// 처음부터 꾸민 모양(미리보기)으로 여는 양식 분류. 칸이 많은 양식은 마크다운보다 표와 제목으로 보는 게 쉬워요.
+const PREVIEW_FIRST: ReadonlySet<string> = new Set(['research']);
 
 /** 편집기: 상자 없는 흰 바탕, 상단바 양식 이름, 제목 아래 상태 칩, 키보드 위 서식 막대 */
 export function EditorScreen() {
@@ -43,6 +54,9 @@ export function EditorScreen() {
   const [dirty, setDirty] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  // 미리보기에서 커서를 옮길 줄과, 마지막으로 누른 줄
+  const [previewFocus, setPreviewFocus] = useState<number | null>(null);
+  const [activeLine, setActiveLine] = useState<number | null>(null);
   const bodyRef = useRef<TextInputInstance>(null);
 
   useEffect(() => {
@@ -53,6 +67,8 @@ export function EditorScreen() {
       setDoc(result.document);
       if (seed) setDirty(true);
       setTemplate(result.template);
+      const category = result.template?.category;
+      setPreviewing(category !== undefined && PREVIEW_FIRST.has(category));
       const end = result.document.body.length;
       setSelection({ start: end, end });
       setStatus('ready');
@@ -92,13 +108,24 @@ export function EditorScreen() {
 
   function format(kind: LineFormat) {
     if (!doc) return;
+    if (previewing) return addPreviewLine(kind);
     const next = applyLineFormat(doc.body, selection.start, kind);
     edit({ body: next.body });
-    setSelection({ start: next.cursor, end: next.cursor });
+    setSelection({ start: next.start, end: next.end });
     requestAnimationFrame(() => {
       bodyRef.current?.focus();
-      bodyRef.current?.setSelection(next.cursor, next.cursor);
+      moveCursor(bodyRef.current, next.start, next.end);
     });
+  }
+
+  /** 미리보기에서 서식 버튼: 마지막으로 누른 줄 아래(없으면 맨 끝)에 그 서식의 빈 줄을 넣고 커서를 둬요. */
+  function addPreviewLine(kind: LineFormat) {
+    if (!doc) return;
+    const after = activeLine ?? lastFilledLine(doc.body);
+    const body = insertLineAfter(doc.body, after, linePrefix(kind, lineText(doc.body, after)));
+    edit({ body });
+    setActiveLine(after + 1);
+    setPreviewFocus(after + 1);
   }
 
   function insert(text: string, from = selection.start) {
@@ -109,7 +136,7 @@ export function EditorScreen() {
     setSelection({ start: cursor, end: cursor });
     requestAnimationFrame(() => {
       bodyRef.current?.focus();
-      bodyRef.current?.setSelection(cursor, cursor);
+      moveCursor(bodyRef.current, cursor);
     });
   }
 
@@ -128,6 +155,14 @@ export function EditorScreen() {
   }
 
   const saveState = savedAt ? 'saved' : dirty ? 'editing' : 'local';
+  // 서식 막대에 지금 줄의 서식을 표시해요. 미리보기에서는 마지막으로 누른 줄이에요.
+  const activeFormat = previewing
+    ? activeLine === null
+      ? null
+      : (lineFormatOf(lineText(doc.body, activeLine))?.format ?? null)
+    : bodyFocused
+      ? formatAtCursor(doc.body, selection.start)
+      : null;
 
   return (
     <KeyboardAvoidingView
@@ -176,7 +211,7 @@ export function EditorScreen() {
           onChangeText={(title) => edit({ title })}
           placeholder="제목"
           placeholderTextColor={palette.mutedForeground}
-          className="p-0 text-2xl font-bold tracking-tight text-foreground"
+          className="p-0 text-2xl font-bold tracking-tight text-foreground web:outline-none"
         />
         <View className="flex-row flex-wrap items-center gap-2">
           <View className="rounded-full bg-muted px-2.5 py-0.5">
@@ -191,7 +226,13 @@ export function EditorScreen() {
         </View>
         <View className="my-1 h-px bg-border" />
         {previewing ? (
-          <Preview body={doc.body} onChange={(body) => edit({ body })} />
+          <Preview
+            body={doc.body}
+            onChange={(body) => edit({ body })}
+            focusLine={previewFocus}
+            onFocusLine={setPreviewFocus}
+            onActiveLine={setActiveLine}
+          />
         ) : (
           <TextInput
             ref={bodyRef}
@@ -205,14 +246,16 @@ export function EditorScreen() {
             multiline
             scrollEnabled={false}
             textAlignVertical="top"
-            className="min-h-[320px] p-0 text-base leading-7 text-foreground"
+            // 웹 입력칸은 내용만큼 늘어나지 않아 안에서 스크롤되고 아래가 비어 보여요. field-sizing으로 늘려요.
+            // 글 쓰는 칸이라 브라우저가 그리는 굵은 테두리(outline)는 빼요. 커서로 위치가 보여요.
+            className="min-h-[320px] p-0 text-base leading-7 text-foreground web:outline-none web:[field-sizing:content]"
           />
         )}
       </ScrollView>
 
       {!previewing && slash ? <SlashMenu items={slashItems} onPick={pickSlash} /> : null}
 
-      {!previewing ? <FormatBar onFormat={format} /> : null}
+      <FormatBar onFormat={format} active={activeFormat} />
       <View className="bg-background" style={{ paddingBottom: insets.bottom }}>
         {!previewing ? (
           <Toolbar
