@@ -4,7 +4,6 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { EyeIcon, PencilIcon, ShareIcon } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -28,6 +27,7 @@ import {
   lineFormatOf,
   linePrefix,
 } from './markdown';
+import { PhotoTray } from './PhotoTray';
 import { Preview } from './Preview';
 import { buildSlashItems, findSlashQuery, type SlashItem } from './slash';
 import { SlashMenu } from './SlashMenu';
@@ -57,6 +57,7 @@ export function EditorScreen() {
   // 미리보기에서 커서를 옮길 줄과, 마지막으로 누른 줄
   const [previewFocus, setPreviewFocus] = useState<number | null>(null);
   const [activeLine, setActiveLine] = useState<number | null>(null);
+  const [trayOpen, setTrayOpen] = useState(false);
   const bodyRef = useRef<TextInputInstance>(null);
 
   useEffect(() => {
@@ -255,6 +256,7 @@ export function EditorScreen() {
 
       {!previewing && slash ? <SlashMenu items={slashItems} onPick={pickSlash} /> : null}
 
+      {trayOpen && !previewing ? <PhotoTray onClose={() => setTrayOpen(false)} /> : null}
       <FormatBar onFormat={format} active={activeFormat} />
       <View className="bg-background" style={{ paddingBottom: insets.bottom }}>
         {!previewing ? (
@@ -262,7 +264,7 @@ export function EditorScreen() {
             onSlash={() => insert(before && !/\s/.test(before) ? ' /' : '/')}
             onMic={() => router.push('/stt')}
             onAi={() => router.push('/draft')}
-            onPhoto={() => Alert.alert('사진 넣기', '사진 첨부는 나중에 붙여요.')}
+            onPhoto={() => setTrayOpen((open) => !open)}
             onCheckbox={() => insert(atLineStart ? '- [ ] ' : '\n- [ ] ')}
           />
         ) : null}
