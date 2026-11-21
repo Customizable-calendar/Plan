@@ -17,6 +17,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listEventsForSlash, openDocument, saveDocument } from './data';
+import { moveCursor } from './cursor';
 import { FormatBar } from './FormatBar';
 import { longDate, savedTime, writingMethod } from './format';
 import { insertLineAfter, lastFilledLine, lineText } from './blocks';
@@ -113,7 +114,7 @@ export function EditorScreen() {
     setSelection({ start: next.start, end: next.end });
     requestAnimationFrame(() => {
       bodyRef.current?.focus();
-      bodyRef.current?.setSelection(next.start, next.end);
+      moveCursor(bodyRef.current, next.start, next.end);
     });
   }
 
@@ -135,7 +136,7 @@ export function EditorScreen() {
     setSelection({ start: cursor, end: cursor });
     requestAnimationFrame(() => {
       bodyRef.current?.focus();
-      bodyRef.current?.setSelection(cursor, cursor);
+      moveCursor(bodyRef.current, cursor);
     });
   }
 
@@ -245,7 +246,9 @@ export function EditorScreen() {
             multiline
             scrollEnabled={false}
             textAlignVertical="top"
-            className="min-h-[320px] p-0 text-base leading-7 text-foreground"
+            // 웹 입력칸은 내용만큼 늘어나지 않아 안에서 스크롤되고 아래가 비어 보여요. field-sizing으로 늘려요.
+            // 글 쓰는 칸이라 브라우저가 그리는 굵은 테두리(outline)는 빼요. 커서로 위치가 보여요.
+            className="min-h-[320px] p-0 text-base leading-7 text-foreground web:outline-none web:[field-sizing:content]"
           />
         )}
       </ScrollView>

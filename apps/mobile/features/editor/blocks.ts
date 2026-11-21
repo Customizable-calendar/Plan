@@ -28,6 +28,9 @@ const FIELD = /^- ([^:]{1,20}):(?: (.*)|\s*)$/;
 const BULLET = /^(- ?)(.*)$/;
 const NUMBER = /^((\d+)\. ?)(.*)$/;
 const QUOTE = /^(> ?)(.*)$/;
+// 띄어쓰기 없이 서식 기호만 있는 줄('###', '-', '1.', '- [ ]', '>', '- 이름:')은 서식이 아니라 그냥 글로 봐요.
+// 미리보기에서 빈 줄의 서식을 지우면 이렇게 기호만 남겨서, 한 글자씩 더 지울 수 있게 해요.
+const BARE = /^(#{1,3}|-|- \[[ xX]\]|\d+\.|>|- [^:]{1,20}:)$/;
 
 export function parseBlocks(body: string): PreviewBlock[] {
   const blocks: PreviewBlock[] = [];
@@ -35,6 +38,12 @@ export function parseBlocks(body: string): PreviewBlock[] {
   body.split('\n').forEach((raw, line) => {
     const text = raw.trimEnd();
     if (text.trim() === '') return;
+
+    // 끝 띄어쓰기를 지우기 전 글로 봐요. '## '(빈 제목)과 '##'(기호만 남은 글)을 나눠야 해서요.
+    if (BARE.test(raw)) {
+      blocks.push({ kind: 'paragraph', line, prefix: '', text: raw });
+      return;
+    }
 
     const heading = HEADING.exec(text);
     if (heading) {
@@ -112,6 +121,13 @@ export function lastFilledLine(body: string): number {
 /** line번째 줄의 글. 없는 줄이면 빈 글 */
 export function lineText(body: string, line: number): string {
   return body.split('\n')[line] ?? '';
+}
+
+/** line번째 줄 위에서 글이 있는 가장 가까운 줄 번호. 없으면 -1 */
+export function previousFilledLine(body: string, line: number): number {
+  const lines = body.split('\n');
+  for (let i = line - 1; i >= 0; i--) if (lines[i].trim() !== '') return i;
+  return -1;
 }
 
 /** line번째 줄을 지워요. */
