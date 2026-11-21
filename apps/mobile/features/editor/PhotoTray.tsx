@@ -15,13 +15,15 @@ import { pickImages } from './photos';
 
 interface Props {
   onClose: () => void;
+  /** 사진을 누르면 본문에 넣어요. */
+  onPick: (photo: Photo) => void;
 }
 
 /**
  * 편집기 안 「내 사진함」 칸. 내가 올린 사진을 최근 것부터 가로로 보여줘요.
- * 폰이나 다른 기기에서 올린 사진도 실시간으로 바로 나타나요.
+ * 폰이나 다른 기기에서 올린 사진도 실시간으로 바로 나타나요. 사진을 누르면 본문에 들어가요.
  */
-export function PhotoTray({ onClose }: Props) {
+export function PhotoTray({ onClose, onPick }: Props) {
   const [access, setAccess] = useState<PhotoAccess | null>(null);
   const [photos, setPhotos] = useState<Photo[] | null>(null);
   const [busy, setBusy] = useState(0);
@@ -110,7 +112,15 @@ export function PhotoTray({ onClose }: Props) {
           contentContainerClassName="gap-2"
         >
           {photos.map((photo) => (
-            <View key={photo.id} className="h-20 w-20 overflow-hidden rounded-md bg-muted">
+            <Pressable
+              key={photo.id}
+              accessibilityRole="button"
+              accessibilityLabel="이 사진을 본문에 넣기"
+              // 올리는 중인 사진은 아직 넣을 수 없어요.
+              disabled={photo.uploading}
+              onPress={() => onPick(photo)}
+              className="h-20 w-20 overflow-hidden rounded-md bg-muted active:opacity-70"
+            >
               {photo.thumbUrl ? (
                 <Image
                   source={{ uri: photo.thumbUrl }}
@@ -124,11 +134,14 @@ export function PhotoTray({ onClose }: Props) {
                   <Text className="text-[11px] text-muted-foreground">올리는 중</Text>
                 </View>
               )}
-            </View>
+            </Pressable>
           ))}
         </ScrollView>
       )}
 
+      {photos?.length ? (
+        <Text className="text-xs text-muted-foreground">사진을 누르면 본문에 넣어요.</Text>
+      ) : null}
       {message ? <Text className="text-xs text-destructive">{message}</Text> : null}
     </View>
   );

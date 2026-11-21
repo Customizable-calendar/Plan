@@ -22,11 +22,18 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { listEventsForSlash, openDocument, saveDocument } from './data';
+import {
+  fileUrl,
+  filesAvailable,
+  listEventsForSlash,
+  openDocument,
+  type Photo,
+  saveDocument,
+} from './data';
 import { moveCursor, readCursor } from './cursor';
 import { FormatBar } from './FormatBar';
 import { longDate, savedTime, writingMethod } from './format';
-import { insertLineAfter, lastFilledLine, lineText } from './blocks';
+import { insertLineAfter, lastFilledLine, lineText, photoSlot } from './blocks';
 import {
   applyLineFormat,
   formatAtCursor,
@@ -34,6 +41,7 @@ import {
   lineFormatOf,
   linePrefix,
 } from './markdown';
+import { fileLine } from './paper';
 import { PaperSheet } from './PaperSheet';
 import { PhotoTray } from './PhotoTray';
 import { Preview } from './Preview';
@@ -42,7 +50,9 @@ import { SlashMenu } from './SlashMenu';
 import { usePaper } from './usePaper';
 
 // 처음부터 꾸민 모양(미리보기)으로 여는 양식 분류. 칸이 많은 양식은 마크다운보다 표와 제목으로 보는 게 쉬워요.
-const PREVIEW_FIRST: ReadonlySet<string> = new Set(['research']);
+// 사진 포스트는 사진이 중심이라 사진이 보이는 미리보기로 열고, 사진함도 처음부터 열어 둬요. (양식 id 기준)
+const PREVIEW_FIRST: ReadonlySet<string> = new Set(['research-paper', 'photo-post']);
+const TRAY_FIRST: ReadonlySet<string> = new Set(['photo-post']);
 
 /** 편집기: 상자 없는 흰 바탕, 상단바 양식 이름, 제목 아래 상태 칩, 키보드 위 서식 막대 */
 export function EditorScreen() {
@@ -76,8 +86,9 @@ export function EditorScreen() {
       setDoc(result.document);
       if (seed) setDirty(true);
       setTemplate(result.template);
-      const category = result.template?.category;
-      setPreviewing(category !== undefined && PREVIEW_FIRST.has(category));
+      const templateKey = result.template?.id ?? '';
+      setPreviewing(PREVIEW_FIRST.has(templateKey));
+      setTrayOpen(TRAY_FIRST.has(templateKey));
       const end = result.document.body.length;
       setSelection({ start: end, end });
       setStatus('ready');
@@ -155,6 +166,28 @@ export function EditorScreen() {
       bodyRef.current?.focus();
       moveCursor(bodyRef.current, cursor);
     });
+  }
+
+  /**
+   * 사진함에서 고른 사진을 본문에 `![사진](file:<id>)` 한 줄로 넣어요.
+   * 미리보기: 마지막으로 누른 줄 아래, 없으면 '## 사진', '## 대표 사진' 칸, 그것도 없으면 맨 끝.
+   * 편집: 커서 자리에 한 줄로.
+   */
+  function insertPhoto(photo: Photo) {
+    if (!doc) return;
+    const line = fileLine('사진', photo.id);
+    if (previewing) {
+      const after = activeLine ?? photoSlot(doc.body) ?? lastFilledLine(doc.body);
+      edit({ body: insertLineAfter(doc.body, after, line) });
+      // 다음 사진은 이 사진 바로 아래에 들어가서, 이어진 사진은 옆으로 넘겨 보는 묶음이 돼요.
+      setActiveLine(after + 1);
+      return;
+    }
+    const before = doc.body[selection.start - 1];
+    const next = doc.body[selection.end];
+    const head = before === undefined || before === '\n' ? '' : '\n';
+    const tail = next === undefined || next === '\n' ? '' : '\n';
+    insert(`${head}${line}${tail}`);
   }
 
   const slash = bodyFocused ? findSlashQuery(doc.body, selection.start) : null;
@@ -275,6 +308,7 @@ export function EditorScreen() {
             onFocusLine={setPreviewFocus}
             onActiveLine={setActiveLine}
             onFile={(fileId, action) => void paper.onFile(fileId, action)}
+            imageUrl={filesAvailable ? fileUrl : undefined}
           />
         ) : (
           <TextInput
@@ -305,7 +339,7 @@ export function EditorScreen() {
 
       {!previewing && slash ? <SlashMenu items={slashItems} onPick={pickSlash} /> : null}
 
-      {trayOpen ? <PhotoTray onClose={() => setTrayOpen(false)} /> : null}
+      {trayOpen ? <PhotoTray onClose={() => setTrayOpen(false)} onPick={insertPhoto} /> : null}
       {/* 아래에는 서식 막대 한 줄만 둬요. 일정은 본문에 // 를 쳐서, 사진은 위 헤더에서 넣어요. */}
       <View className="bg-card" style={{ paddingBottom: insets.bottom }}>
         <FormatBar
