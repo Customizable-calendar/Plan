@@ -1,6 +1,6 @@
 import { palette } from '@noteapp/ui';
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, TextInput, type TextInputInstance, View } from 'react-native';
 
 import {
@@ -9,6 +9,7 @@ import {
   nextPrefix,
   parseBlocks,
   previousFilledLine,
+  splitTags,
   type PreviewBlock,
   removeLine,
   replaceLine,
@@ -237,9 +238,15 @@ function LineInput(props: LineInputProps) {
   // 커서를 이미 옮겼는지. 글자를 칠 때마다 커서가 끝으로 튀지 않게, focused가 켜질 때 한 번만 옮겨요.
   const moved = useRef(false);
   const { focused, value } = props;
+  // 해시태그가 있는 줄은 고치지 않을 때 태그를 칩 색으로 보여줘요. 누르면 입력칸으로 바뀌어요.
+  const [editing, setEditing] = useState(false);
+  const parts = splitTags(value);
+  const showText = parts.some((p) => p.tag) && !editing && !focused;
+  // 편집기가 커서를 옮겨 달라고 했거나(focused), 태그 줄을 눌러 입력칸으로 바뀐 때(editing)
+  const wantFocus = focused || editing;
 
   useEffect(() => {
-    if (!focused) {
+    if (!wantFocus) {
       moved.current = false;
       return;
     }
@@ -248,11 +255,32 @@ function LineInput(props: LineInputProps) {
     ref.current?.focus();
     // 커서는 글 끝에 둬요. 서식을 푼 뒤 바로 이어서 지울 수 있게요.
     moveCursor(ref.current, value.length);
-  }, [focused, value.length]);
+  }, [wantFocus, value.length]);
+
+  if (showText) {
+    return (
+      <Text
+        onPress={() => setEditing(true)}
+        accessibilityHint="눌러서 고쳐요"
+        className={props.className}
+      >
+        {parts.map((part, i) =>
+          part.tag ? (
+            <Text key={i} className="bg-primary-soft font-medium text-primary-soft-foreground">
+              {part.text}
+            </Text>
+          ) : (
+            part.text
+          ),
+        )}
+      </Text>
+    );
+  }
 
   return (
     <TextInput
       ref={ref}
+      onBlur={() => setEditing(false)}
       value={props.value}
       multiline
       rows={1} // 웹 입력칸은 기본이 두 줄 높이라 한 줄로 시작해요

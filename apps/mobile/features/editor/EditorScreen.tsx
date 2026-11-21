@@ -211,7 +211,7 @@ export function EditorScreen() {
           onChangeText={(title) => edit({ title })}
           placeholder="제목"
           placeholderTextColor={palette.mutedForeground}
-          className="p-0 text-2xl font-bold tracking-tight text-foreground"
+          className="p-0 text-2xl font-bold tracking-tight text-foreground web:outline-none"
         />
         <View className="flex-row flex-wrap items-center gap-2">
           <View className="rounded-full bg-muted px-2.5 py-0.5">
