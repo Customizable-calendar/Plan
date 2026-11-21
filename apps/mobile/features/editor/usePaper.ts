@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Linking, Platform } from 'react-native';
 
-import { fileBlob, fileUrl, uploadPdf } from './data';
+import { fileBlob, fileUrl, photoAccess, uploadPdf } from './data';
 import { applyPaper, fileLine, type PaperExtract, type PaperPart } from './paper';
 import { extractFromPdf, pickPdf } from './pdf';
 
@@ -12,6 +12,8 @@ import { extractFromPdf, pickPdf } from './pdf';
 export function usePaper(body: string, setBody: (body: string) => void) {
   const [sheet, setSheet] = useState<PaperExtract | 'loading' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 오류는 아니지만 알려 줄 것 (예: 로그인 전이라 PDF 파일은 안 붙여요)
+  const [notice, setNotice] = useState<string | null>(null);
 
   const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -29,9 +31,23 @@ export function usePaper(body: string, setBody: (body: string) => void) {
     const pdf = await pickPdf();
     if (!pdf) return;
     setError(null);
+    setNotice(null);
     setSheet('loading');
     const blob = await (await fetch(pdf.uri)).blob();
-    // 올리기와 글 뽑기를 함께 해요. 올리지 못해도(로그인 전 등) 뽑은 내용은 넣을 수 있어요.
+
+    // 계정이 없으면(로그인 전, 계정 연결이 꺼진 빌드) PDF 파일은 붙이지 않고 찾은 내용만 넣어요.
+    const access = await photoAccess();
+    if (access !== 'ready') {
+      setNotice(
+        access === 'signed-out'
+          ? '로그인하면 PDF 파일도 문서에 붙여 둘 수 있어요. 지금은 찾은 내용만 넣어요.'
+          : '이 빌드는 계정 연결이 꺼져 있어서 PDF 파일은 붙이지 않고, 찾은 내용만 넣어요.',
+      );
+      await extract(blob);
+      return;
+    }
+
+    // 올리기와 글 뽑기를 함께 해요. 올리지 못해도 뽑은 내용은 넣을 수 있어요.
     const [uploaded] = await Promise.allSettled([uploadPdf(blob), extract(blob)]);
     if (uploaded.status === 'fulfilled') {
       setBody(`${fileLine(pdf.name, uploaded.value)}\n\n${body}`);
@@ -69,7 +85,8 @@ export function usePaper(body: string, setBody: (body: string) => void) {
   function close() {
     setSheet(null);
     setError(null);
+    setNotice(null);
   }
 
-  return { sheet, error, attach, onFile, apply, close };
+  return { sheet, error, notice, attach, onFile, apply, close };
 }

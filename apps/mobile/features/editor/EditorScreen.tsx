@@ -293,6 +293,7 @@ export function EditorScreen() {
       <PaperSheet
         state={paper.sheet}
         error={paper.error}
+        notice={paper.notice}
         onApply={paper.apply}
         onClose={paper.close}
       />
