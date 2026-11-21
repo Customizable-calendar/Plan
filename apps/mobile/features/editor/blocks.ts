@@ -150,6 +150,19 @@ export function splitTags(text: string): { text: string; tag: boolean }[] {
   return parts;
 }
 
+/**
+ * 사진을 넣을 기본 자리: '## 사진'이나 '## 대표 사진' 제목 아래, 이미 넣은 사진 줄들의 끝.
+ * 이 줄 번호 바로 아래에 넣으면 돼요. 그런 칸이 없으면 null
+ */
+export function photoSlot(body: string): number | null {
+  const lines = body.split('\n');
+  const heading = lines.findIndex((l) => /^## (대표 )?사진\s*$/.test(l));
+  if (heading === -1) return null;
+  let at = heading;
+  while (at + 1 < lines.length && FILE.test(lines[at + 1])) at++;
+  return at;
+}
+
 /** line번째 줄 위에서 글이 있는 가장 가까운 줄 번호. 없으면 -1 */
 export function previousFilledLine(body: string, line: number): number {
   const lines = body.split('\n');

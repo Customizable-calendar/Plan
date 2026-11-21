@@ -15,6 +15,7 @@ import {
   replaceLine,
 } from './blocks';
 import { moveCursor } from './cursor';
+import { FileImage, FileImageRow } from './FileImage';
 
 // 제목 크기는 디자인 시스템 글자 종류(h2, h3, h4)를 따라요.
 const HEADING_CLASS = {
@@ -34,13 +35,23 @@ interface Props {
   onActiveLine: (line: number) => void;
   /** 파일 카드의 버튼: 열기, 또는 (PDF면) 논문 내용 다시 뽑기 */
   onFile?: (fileId: string, action: 'open' | 'extract') => void;
+  /** 본문 사진의 주소를 받아요. 없으면(계정 연결이 없는 빌드) 사진 줄을 그리지 않아요. */
+  imageUrl?: (fileId: string) => Promise<string>;
 }
 
 /**
  * 본문을 꾸며서 보여주는 화면. 글자를 누르면 그 자리에서 바로 고칠 수 있어요.
  * 고친 글은 본문의 그 줄에만 반영돼요. 새 제목이나 항목은 아래 서식 막대로 넣어요.
  */
-export function Preview({ body, onChange, focusLine, onFocusLine, onActiveLine, onFile }: Props) {
+export function Preview({
+  body,
+  onChange,
+  focusLine,
+  onFocusLine,
+  onActiveLine,
+  onFile,
+  imageUrl,
+}: Props) {
   const blocks = parseBlocks(body);
   const setFocusLine = onFocusLine;
 
@@ -206,7 +217,7 @@ export function Preview({ body, onChange, focusLine, onFocusLine, onActiveLine, 
         );
 
       case 'file': {
-        const pdf = /\.pdf$/i.test(block.name);
+        const pdf = isPdf(block.name);
         return (
           <View className="flex-row items-center gap-3 rounded-lg border border-border px-3 py-2.5">
             <SymbolView
@@ -240,14 +251,49 @@ export function Preview({ body, onChange, focusLine, onFocusLine, onActiveLine, 
     }
   }
 
+  // 사진 줄이 이어지면 한 묶음으로 옆으로 넘겨 보게 해요. 사진 한 장이면 너비에 맞춰 크게 보여요.
+  const rows: {
+    index: number;
+    photos?: { line: number; fileId: string }[];
+    block?: PreviewBlock;
+  }[] = [];
+  blocks.forEach((block, index) => {
+    if (block.kind === 'file' && !isPdf(block.name)) {
+      const last = rows[rows.length - 1];
+      const photo = { line: block.line, fileId: block.fileId };
+      if (last?.photos && last.photos[last.photos.length - 1].line === block.line - 1) {
+        last.photos.push(photo);
+      } else rows.push({ index, photos: [photo] });
+      return;
+    }
+    rows.push({ index, block });
+  });
+
   return (
     <View className="gap-2">
-      {blocks.map((block, index) => (
+      {rows.map(({ index, block, photos }) => (
         // 줄을 넣거나 빼도 입력칸이 자리를 지키도록 순서(index)를 key로 써요.
-        <View key={index}>{renderBlock(block)}</View>
+        <View key={index}>
+          {block ? (
+            renderBlock(block)
+          ) : photos && imageUrl ? (
+            // 사진을 누르면 그 아래가 서식 막대와 사진함의 넣을 자리가 돼요.
+            <Pressable onPress={() => onActiveLine(photos[photos.length - 1].line)}>
+              {photos.length === 1 ? (
+                <FileImage fileId={photos[0].fileId} resolve={imageUrl} />
+              ) : (
+                <FileImageRow fileIds={photos.map((p) => p.fileId)} resolve={imageUrl} />
+              )}
+            </Pressable>
+          ) : null}
+        </View>
       ))}
     </View>
   );
+}
+
+function isPdf(name: string) {
+  return /\.pdf$/i.test(name);
 }
 
 interface LineInputProps {

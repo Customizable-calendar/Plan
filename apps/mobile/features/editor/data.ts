@@ -115,6 +115,9 @@ export interface Photo {
 /** 사진함을 쓸 수 있는지. 계정 연결이 없는 빌드면 'unavailable', 로그인 전이면 'signed-out' */
 export type PhotoAccess = 'ready' | 'signed-out' | 'unavailable';
 
+/** 이 빌드가 계정(사진, PDF 파일)을 쓸 수 있는지. 예시 데이터만 쓰는 빌드면 false예요. */
+export const filesAvailable = loginRequired;
+
 export async function photoAccess(): Promise<PhotoAccess> {
   if (!loginRequired) return 'unavailable';
   const { data } = await getSupabase().auth.getSession();
