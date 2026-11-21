@@ -10,6 +10,8 @@ interface Props {
   /** null이면 닫혀 있어요. 'loading'이면 PDF를 읽는 중이에요. */
   state: PaperExtract | 'loading' | null;
   error?: string | null;
+  /** 오류는 아니지만 알려 줄 것. 회색 글로 보여요. */
+  notice?: string | null;
   onApply: (parts: PaperPart[]) => void;
   onClose: () => void;
 }
@@ -18,7 +20,7 @@ interface Props {
  * PDF에서 찾은 논문 정보, 초록, 키워드, 서론을 "제안"으로 보여주는 시트.
  * 사용자가 고른 것만 본문에 넣어요. 못 찾은 것은 못 찾았다고 보여주고 지어내지 않아요.
  */
-export function PaperSheet({ state, error, onApply, onClose }: Props) {
+export function PaperSheet({ state, error, notice, onApply, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const found = state && state !== 'loading' ? state : null;
   // 사용자가 바꾼 고르기. 다른 PDF 결과(found)가 오면 처음 고르기(찾은 것 전부)로 돌아가요.
@@ -71,6 +73,9 @@ export function PaperSheet({ state, error, onApply, onClose }: Props) {
         ) : found ? (
           <>
             {error ? <Text className="px-5 pb-3 text-sm text-destructive">{error}</Text> : null}
+            {notice ? (
+              <Text className="px-5 pb-3 text-sm text-muted-foreground">{notice}</Text>
+            ) : null}
             <ScrollView contentContainerClassName="gap-2 px-5 pb-3">
               <Item
                 title="논문 정보"
