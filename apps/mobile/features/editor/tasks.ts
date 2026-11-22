@@ -8,9 +8,6 @@
 // 한 줄이 할 일 하나: 과목 | 할 일 | 예상 분 | 실제 분 | 결과(O, △, X, 비움)
 // 글로 저장해서 동기화, 되돌리기, 내보내기가 그대로 되고, 편집 화면에서도 읽을 수 있어요. 화면 없이 쓰는 순수 함수예요.
 
-export const TASKS_OPEN = '```할일';
-export const FENCE_CLOSE = '```';
-
 export type TaskResult = 'O' | '△' | 'X' | '';
 
 export interface TaskRow {

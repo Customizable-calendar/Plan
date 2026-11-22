@@ -12,6 +12,8 @@ interface Props {
   onAdd: () => void;
   /** 그 줄을 지워요. */
   onRemove: (row: TaskRow) => void;
+  /** 표 아래 한 줄 결산을 보여줄지. 같은 문서에 결산 칸이 있으면 false예요. */
+  showSummary?: boolean;
 }
 
 // 결과 칸 색. 글자(O, △, X)와 색을 함께 써서 색만으로 구분하지 않아요.
@@ -25,7 +27,7 @@ const RESULT_STYLE: Record<
 };
 
 /** 할 일 표: 과목, 할 일, 예상 분, 실제 분, 결과(O, △, X). 칸을 눌러 바로 고쳐요. */
-export function TaskTable({ rows, onRow, onAdd, onRemove }: Props) {
+export function TaskTable({ rows, onRow, onAdd, onRemove, showSummary = true }: Props) {
   const sum = summarize(rows);
   const change = (row: TaskRow, patch: Partial<TaskRow>) => onRow({ ...row, ...patch });
 
@@ -111,14 +113,16 @@ export function TaskTable({ rows, onRow, onAdd, onRemove }: Props) {
       </Pressable>
 
       {/* 결산 한 줄: 표에 적은 것만으로 계산해요. */}
-      <View className="flex-row flex-wrap gap-x-4 gap-y-1 border-t border-border bg-muted px-3 py-2">
-        <Stat label="다 함" value={`${sum.done}개`} />
-        <Stat label="조금 함" value={`${sum.partly}개`} />
-        <Stat label="못 함" value={`${sum.missed}개`} />
-        <Stat label="달성" value={sum.rate === null ? '아직 없음' : `${sum.rate}%`} />
-        <Stat label="예상" value={`${sum.planMinutes}분`} />
-        <Stat label="실제" value={`${sum.actualMinutes}분`} />
-      </View>
+      {showSummary ? (
+        <View className="flex-row flex-wrap gap-x-4 gap-y-1 border-t border-border bg-muted px-3 py-2">
+          <Stat label="다 함" value={`${sum.done}개`} />
+          <Stat label="조금 함" value={`${sum.partly}개`} />
+          <Stat label="못 함" value={`${sum.missed}개`} />
+          <Stat label="달성" value={sum.rate === null ? '아직 없음' : `${sum.rate}%`} />
+          <Stat label="예상" value={`${sum.planMinutes}분`} />
+          <Stat label="실제" value={`${sum.actualMinutes}분`} />
+        </View>
+      ) : null}
     </View>
   );
 }

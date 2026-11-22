@@ -1,4 +1,4 @@
-import { FENCE_CLOSE, parseTaskLine, type TaskRow, TASKS_OPEN } from './tasks';
+import { FENCE_CLOSE, WIDGET_OPEN, type WidgetType } from './widgets';
 
 // 본문 마크다운을 미리보기용 블록으로 나누고, 블록에서 고친 글을 본문의 그 줄에 되돌려 써요.
 // 화면 없이 쓸 수 있는 순수 함수예요.
@@ -24,10 +24,16 @@ export type PreviewBlock =
   /** 붙인 파일 줄 `![이름](file:<files id>)`. 미리보기에서 파일 카드로 보여요. */
   | { kind: 'file'; line: number; name: string; fileId: string }
   /**
-   * 할 일 표(```할일 ... ```). start는 여는 줄, end는 닫는 줄(없으면 null).
-   * 모양은 tasks.ts에 있어요.
+   * 위젯 칸(할 일 표, 시간 기록, 결산, 복습). start는 여는 줄, end는 닫는 줄(없으면 null).
+   * lines는 그 안의 글 줄들이에요. 모양은 widgets.ts, tasks.ts에 있어요.
    */
-  | { kind: 'tasks'; start: number; end: number | null; rows: TaskRow[] };
+  | {
+      kind: 'widget';
+      type: WidgetType;
+      start: number;
+      end: number | null;
+      lines: { line: number; text: string }[];
+    };
 
 // 내용 없는 제목('## ')도 제목으로 봐요. 줄 끝 띄어쓰기는 지우고 보니까 '##'만 남아도 돼요. ('#태그'는 아니에요)
 const HEADING = /^(#{1,3})(?: (.*))?$/;
@@ -45,24 +51,25 @@ const FILE = /^!\[([^\]]*)\]\(file:([0-9a-f-]{36})\)$/;
 
 export function parseBlocks(body: string): PreviewBlock[] {
   const blocks: PreviewBlock[] = [];
-  // 열려 있는 할 일 표. 닫는 줄(```)이 나올 때까지 줄을 표에 넣어요.
-  let table: Extract<PreviewBlock, { kind: 'tasks' }> | null = null;
+  // 열려 있는 위젯 칸. 닫는 줄(```)이 나올 때까지 줄을 칸에 넣어요.
+  let widget: Extract<PreviewBlock, { kind: 'widget' }> | null = null;
 
   body.split('\n').forEach((raw, line) => {
     const text = raw.trimEnd();
 
-    if (table) {
+    if (widget) {
       if (text.trim() === FENCE_CLOSE) {
-        table.end = line;
-        table = null;
+        widget.end = line;
+        widget = null;
       } else if (text.trim() !== '') {
-        table.rows.push(parseTaskLine(text, line));
+        widget.lines.push({ line, text });
       }
       return;
     }
-    if (text.trim() === TASKS_OPEN) {
-      table = { kind: 'tasks', start: line, end: null, rows: [] };
-      blocks.push(table);
+    const type = WIDGET_OPEN[text.trim()];
+    if (type) {
+      widget = { kind: 'widget', type, start: line, end: null, lines: [] };
+      blocks.push(widget);
       return;
     }
 

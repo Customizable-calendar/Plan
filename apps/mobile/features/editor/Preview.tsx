@@ -18,7 +18,18 @@ import { moveCursor } from './cursor';
 import { type FieldKind, fieldKind, type FieldTarget } from './FieldSheet';
 import { FileImage, FileImageRow } from './FileImage';
 import { TaskTable } from './TaskTable';
-import { FENCE_CLOSE, taskLine } from './tasks';
+import { parseTaskLine, summarize, taskLine } from './tasks';
+import { TimeGrid } from './TimeGrid';
+import { type ReviewTarget, ReviewList } from './ReviewList';
+import { SummaryCard } from './SummaryCard';
+import {
+  FENCE_CLOSE,
+  parseCondition,
+  parseReview,
+  parseTime,
+  reviewLines,
+  timeLine,
+} from './widgets';
 
 // 제목 크기는 디자인 시스템 글자 종류(h2, h3, h4)를 따라요.
 const HEADING_CLASS = {
@@ -42,12 +53,22 @@ interface Props {
   imageUrl?: (fileId: string) => Promise<string>;
   /** 날짜, 사람, 장소 칸의 도우미 버튼을 눌렀을 때 */
   onFieldPick?: (target: FieldTarget) => void;
+  /** 학습일지 복습 칸: 1일, 3일, 7일 전 일지와, 눌렀을 때 여는 함수 */
+  study?: StudyContext;
 }
 
 /**
  * 본문을 꾸며서 보여주는 화면. 글자를 누르면 그 자리에서 바로 고칠 수 있어요.
  * 고친 글은 본문의 그 줄에만 반영돼요. 새 제목이나 항목은 아래 서식 막대로 넣어요.
  */
+/** 학습일지 복습 칸에 쓰는 것. 편집기가 같은 양식의 지난 일지를 찾아서 넘겨줘요. */
+export interface StudyContext {
+  reviews: Record<number, { doc: ReviewTarget | null; dateLabel: string }>;
+  onOpen: (id: string) => void;
+}
+
+type WidgetBlock = Extract<PreviewBlock, { kind: 'widget' }>;
+
 export function Preview({
   body,
   onChange,
@@ -57,6 +78,7 @@ export function Preview({
   onFile,
   imageUrl,
   onFieldPick,
+  study,
 }: Props) {
   const blocks = parseBlocks(body);
   const setFocusLine = onFocusLine;
@@ -109,6 +131,82 @@ export function Preview({
         setFocusLine(part.line);
       },
     };
+  }
+
+  // 같은 문서의 할 일 표와 시간 기록. 결산 칸이 이 숫자를 모아 보여줘요.
+  const widgets = blocks.filter((b): b is WidgetBlock => b.kind === 'widget');
+  const taskRows = widgets
+    .filter((w) => w.type === 'tasks')
+    .flatMap((w) => w.lines.map((l) => parseTaskLine(l.text, l.line)));
+  const timeBlocks = widgets.filter((w) => w.type === 'time');
+  const studySlots = parseTime(timeBlocks.flatMap((w) => w.lines.map((l) => l.text)).join(', '));
+  const hasSummary = widgets.some((w) => w.type === 'summary');
+
+  /**
+   * 위젯 칸 안의 글 줄들을 새 줄들로 통째로 바꿔요. 닫는 줄이 없던 칸이면 같이 닫아 줘요.
+   * 줄 수가 달라져도 되게, 여는 줄 다음부터 닫는 줄 앞까지를 바꿔요.
+   */
+  function replaceWidget(block: WidgetBlock, lines: string[]) {
+    const all = body.split('\n');
+    const from = block.start + 1;
+    const to = block.end ?? all.length;
+    all.splice(from, to - from, ...lines, ...(block.end === null ? [FENCE_CLOSE] : []));
+    onChange(all.join('\n'));
+  }
+
+  function renderWidget(block: WidgetBlock) {
+    const texts = block.lines.map((l) => l.text);
+    switch (block.type) {
+      case 'tasks': {
+        const rows = block.lines.map((l) => parseTaskLine(l.text, l.line));
+        const last = rows[rows.length - 1]?.line ?? block.start;
+        return (
+          <TaskTable
+            rows={rows}
+            // 결산 칸이 있으면 표 아래 한 줄 결산은 빼요(같은 숫자가 두 번 나오지 않게).
+            showSummary={!hasSummary}
+            onRow={(row) => onChange(replaceLine(body, row.line, taskLine(row)))}
+            onRemove={(row) => onChange(removeLine(body, row.line))}
+            onAdd={() => {
+              const empty = taskLine({ subject: '', task: '', plan: '', actual: '', result: '' });
+              let next = insertLineAfter(body, last, empty);
+              if (block.end === null) next = insertLineAfter(next, last + 1, FENCE_CLOSE);
+              onChange(next);
+            }}
+          />
+        );
+      }
+      case 'time':
+        return (
+          <TimeGrid
+            slots={parseTime(texts.join(', '))}
+            onChange={(slots) => {
+              const line = timeLine(slots);
+              replaceWidget(block, line ? [line] : []);
+            }}
+          />
+        );
+      case 'summary':
+        return (
+          <SummaryCard
+            tasks={taskRows.length ? summarize(taskRows) : null}
+            studyMinutes={timeBlocks.length ? studySlots.size * 10 : null}
+            condition={parseCondition(texts)}
+            onCondition={(c) => replaceWidget(block, [`컨디션: ${c}`.trimEnd()])}
+          />
+        );
+      case 'review': {
+        const done = parseReview(texts);
+        return (
+          <ReviewList
+            targets={study?.reviews ?? {}}
+            done={done}
+            onToggle={(d) => replaceWidget(block, reviewLines({ ...done, [d]: !done[d] }))}
+            onOpen={(id) => study?.onOpen(id)}
+          />
+        );
+      }
+    }
   }
 
   function renderBlock(block: PreviewBlock) {
@@ -256,23 +354,8 @@ export function Preview({
         );
       }
 
-      case 'tasks': {
-        const last = block.rows[block.rows.length - 1]?.line ?? block.start;
-        return (
-          <TaskTable
-            rows={block.rows}
-            onRow={(row) => onChange(replaceLine(body, row.line, taskLine(row)))}
-            onRemove={(row) => onChange(removeLine(body, row.line))}
-            onAdd={() => {
-              const empty = taskLine({ subject: '', task: '', plan: '', actual: '', result: '' });
-              let next = insertLineAfter(body, last, empty);
-              // 닫는 줄(```)이 없던 표면 같이 닫아 줘요.
-              if (block.end === null) next = insertLineAfter(next, last + 1, FENCE_CLOSE);
-              onChange(next);
-            }}
-          />
-        );
-      }
+      case 'widget':
+        return renderWidget(block);
 
       case 'paragraph':
         return (

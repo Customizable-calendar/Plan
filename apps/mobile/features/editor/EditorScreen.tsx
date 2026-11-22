@@ -27,6 +27,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   fileUrl,
   filesAvailable,
+  listEditedDocuments,
   listEventsForSlash,
   openDocument,
   type Photo,
@@ -52,6 +53,10 @@ import { buildSlashItems, findSlashQuery, type SlashItem } from './slash';
 import { SlashMenu } from './SlashMenu';
 import { type ChangeKind, type Snapshot, useEditHistory } from './useEditHistory';
 import { usePaper } from './usePaper';
+import { dDayLabel, studyInfo } from './study';
+
+/** 학습일지 양식 id. 번호, D-day, 복습 연결을 이 양식에서만 보여줘요. */
+const STUDY_LOG = 'study-log';
 
 // 양식으로 쓴 문서는 모두 꾸민 모양(미리보기)으로 먼저 열어요. 마크다운은 연필 버튼으로 봐요.
 // 사진 포스트는 사진이 중심이라 사진함도 처음부터 열어 둬요. (양식 id 기준)
@@ -81,6 +86,8 @@ export function EditorScreen() {
   const [trayOpen, setTrayOpen] = useState(false);
   // 날짜, 사람, 장소 칸을 채우는 시트의 대상 칸
   const [fieldTarget, setFieldTarget] = useState<FieldTarget | null>(null);
+  // 학습일지면 같은 양식으로 쓴 일지들 (번호, D-day, 복습할 일지를 찾는 데 써요)
+  const [studyDocs, setStudyDocs] = useState<Document[]>([]);
   const bodyRef = useRef<TextInputInstance>(null);
   const history = useEditHistory();
 
@@ -117,6 +124,18 @@ export function EditorScreen() {
     setSavedAt(null);
   });
   const isResearch = template?.category === 'research';
+  const isStudyLog = template?.id === STUDY_LOG;
+
+  useEffect(() => {
+    if (!isStudyLog) return;
+    let alive = true;
+    listEditedDocuments().then(
+      (list) => alive && setStudyDocs(list.filter((d) => d.templateId === STUDY_LOG)),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [isStudyLog]);
 
   /** 되돌리기, 다시 하기로 꺼낸 모습을 문서에 넣어요. 이건 기록에 다시 남기지 않아요. */
   function restore(snapshot: Snapshot | null) {
@@ -157,6 +176,9 @@ export function EditorScreen() {
       </View>
     );
   }
+
+  // 학습일지 번호, 시험 D-day, 1일, 3일, 7일 전 복습할 일지
+  const study = isStudyLog ? studyInfo(doc, studyDocs) : null;
 
   function edit(patch: Partial<Pick<Document, 'title' | 'body'>>, kind?: ChangeKind) {
     if (doc) {
@@ -348,6 +370,20 @@ export function EditorScreen() {
           <View className="rounded-full bg-muted px-2.5 py-0.5">
             <Text className="text-xs text-muted-foreground">{writingMethod(doc)}</Text>
           </View>
+          {study ? (
+            <View className="rounded-full bg-primary-soft px-2.5 py-0.5">
+              <Text className="text-xs font-semibold text-primary-soft-foreground">
+                No. {study.number}
+              </Text>
+            </View>
+          ) : null}
+          {study?.dDay != null ? (
+            <View className="rounded-full bg-secondary-soft px-2.5 py-0.5">
+              <Text className="text-xs font-semibold text-secondary-soft-foreground">
+                {dDayLabel(study.dDay)}
+              </Text>
+            </View>
+          ) : null}
           {savedAt ? (
             <Text className="text-xs text-muted-foreground">{savedTime(savedAt)} 저장됨</Text>
           ) : null}
@@ -361,6 +397,15 @@ export function EditorScreen() {
             onFocusLine={setPreviewFocus}
             onActiveLine={setActiveLine}
             onFieldPick={setFieldTarget}
+            study={
+              study
+                ? {
+                    reviews: study.reviews,
+                    onOpen: (docId) =>
+                      router.push({ pathname: '/editor/[id]', params: { id: docId } }),
+                  }
+                : undefined
+            }
             onFile={(fileId, action) => void paper.onFile(fileId, action)}
             imageUrl={filesAvailable ? fileUrl : undefined}
           />
@@ -399,6 +444,7 @@ export function EditorScreen() {
         <FormatBar
           onFormat={format}
           active={activeFormat}
+          showFormats={!previewing}
           trailing={
             <View className="flex-row">
               <BarIcon
