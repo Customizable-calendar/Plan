@@ -1,6 +1,7 @@
 ---
 name: 공통 타입 변경
 about: packages/shared의 타입이나 예시 JSON을 바꾸자는 제안
+title: '[공통 타입] '
 labels: contract
 ---
 
