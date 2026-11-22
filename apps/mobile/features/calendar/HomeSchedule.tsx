@@ -1,10 +1,10 @@
 import { AgendaRow, DaySectionTitle, Text } from '@noteapp/ui';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { MicIcon } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
-import { loadCalendar, useCalendar } from './data';
+import { loadCalendar, refreshCalendar, useCalendar } from './data';
 import { dayKey, eventsOnDay, splitTitleAndTags, timeLabel } from './model';
 
 // 홈 오늘 일정 자리(schedule). 상자 없는 목록(AgendaRow)과 구분선으로 보여 줘요.
@@ -22,6 +22,11 @@ interface Row {
 
 export function HomeSchedule() {
   const { events, tasks, loading, error } = useCalendar();
+  useFocusEffect(
+    useCallback(() => {
+      void refreshCalendar();
+    }, []),
+  );
   const [now] = useState(() => new Date());
   const today = dayKey(now);
   const nowMs = now.getTime();

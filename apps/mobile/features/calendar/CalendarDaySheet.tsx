@@ -15,6 +15,7 @@ import {
 import {
   busyHoursOnDay,
   dayKey,
+  MAX_EVENT_TITLE_LENGTH,
   overlaps,
   shiftDay,
   splitTitleAndTags,
@@ -269,6 +270,10 @@ export function CalendarDaySheet({
     const trimmed = title.trim();
     if (!trimmed) {
       setError('일정 제목을 입력해 주세요.');
+      return;
+    }
+    if (trimmed.length > MAX_EVENT_TITLE_LENGTH) {
+      setError(`일정 제목은 ${MAX_EVENT_TITLE_LENGTH}자 이하로 입력해 주세요.`);
       return;
     }
     setBusyId('add-event');
@@ -659,9 +664,17 @@ export function CalendarDaySheet({
             {tab === 'add' && (
               <View className="gap-3.5">
                 <View className="gap-1.5">
-                  <Text className="text-xs font-bold text-muted-foreground">일정 제목</Text>
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-xs font-bold text-muted-foreground">일정 제목</Text>
+                    {title.length >= 160 && (
+                      <Text className="text-[11px] text-muted-foreground">
+                        {title.length}/{MAX_EVENT_TITLE_LENGTH}
+                      </Text>
+                    )}
+                  </View>
                   <TextInput
                     value={title}
+                    maxLength={MAX_EVENT_TITLE_LENGTH}
                     onChangeText={(text) => {
                       setTitle(text);
                       if (error) setError('');

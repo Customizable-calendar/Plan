@@ -9,7 +9,7 @@ import {
 
 import { dayKey, listCalendarTasks } from '@/features/calendar';
 import { fromFixture, sourceFor } from '@/lib/data-source';
-import { localFirstTable } from '@/lib/local-first';
+import { localFirstTable, onAccountChange } from '@/lib/local-first';
 
 // 수행 기록은 로그인 전에는 이 기기에만, 로그인 후에는 기기와 계정(exec_records) 둘 다에 저장해요.
 export const isExecutionRemote = sourceFor('execution') === 'supabase';
@@ -22,6 +22,20 @@ const recordTable = localFirstTable<ExecutionRecord>({
 });
 
 let saved: ExecutionRecord[] | undefined;
+
+const accountListeners = new Set<() => void>();
+onAccountChange(() => {
+  saved = undefined;
+  accountListeners.forEach((notify) => notify());
+});
+
+/** 로그인·로그아웃으로 계정이 바뀔 때 수행 확인 화면이 다시 불러올 수 있게 알려요. */
+export function onExecutionAccountChange(listener: () => void): () => void {
+  accountListeners.add(listener);
+  return () => {
+    accountListeners.delete(listener);
+  };
+}
 
 export async function listExecutionRecords(): Promise<ExecutionRecord[]> {
   if (isExecutionRemote) {

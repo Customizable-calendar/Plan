@@ -13,7 +13,14 @@ import { fromFixture, sourceFor } from '@/lib/data-source';
 import { localFirstTable, onAccountChange } from '@/lib/local-first';
 
 import { stripInlineHashtags } from './autoTags';
-import { dayKey, overlaps, shiftDay, TIMEZONE, type TimeSlot } from './model';
+import {
+  dayKey,
+  overlaps,
+  shiftDay,
+  TIMEZONE,
+  type TimeSlot,
+  validateCalendarEventInput,
+} from './model';
 import {
   loadHiddenTagStore,
   seedExplicitTagsFromTitle,
@@ -49,12 +56,18 @@ function publish(next: State) {
   listeners.forEach((notify) => notify());
 }
 
-export async function loadCalendar(): Promise<void> {
+export async function loadCalendar(options?: {
+  silent?: boolean;
+  forceTagStore?: boolean;
+}): Promise<void> {
   if (pending) return pending;
-  publish({ ...state, loading: true, error: '' });
+  const isSilent = Boolean(options?.silent && !state.loading);
+  if (!isSilent) {
+    publish({ ...state, loading: true, error: '' });
+  }
   pending = (async () => {
     try {
-      await loadHiddenTagStore();
+      await loadHiddenTagStore(options?.forceTagStore ? { force: true } : undefined);
       if (isCalendarRemote) {
         const [storedEvents, allCards] = await Promise.all([eventTable.list(), listCards()]);
         const cards = allCards.filter(
@@ -310,7 +323,7 @@ export async function loadCalendar(): Promise<void> {
     } catch (error) {
       publish({
         ...state,
-        fixtureDay: undefined,
+        fixtureDay: isSilent ? state.fixtureDay : undefined,
         loading: false,
         error: error instanceof Error ? error.message : '일정을 불러오지 못했어요.',
       });
@@ -320,7 +333,17 @@ export async function loadCalendar(): Promise<void> {
   pending = undefined;
 }
 // 로그인·로그아웃하면 그 계정(또는 이 기기)의 일정으로 다시 불러요.
-onAccountChange(() => void loadCalendar());
+onAccountChange(() => void loadCalendar({ forceTagStore: true }));
+
+export async function refreshCalendar(): Promise<void> {
+  if (isCalendarRemote) {
+    await loadCalendar({ silent: !state.loading });
+    return;
+  }
+  if (state.loading || (state.fixtureDay && state.fixtureDay !== dayKey(new Date()))) {
+    await loadCalendar();
+  }
+}
 
 export function useCalendar() {
   const snapshot = useSyncExternalStore(
@@ -350,10 +373,13 @@ export function useCalendar() {
   }, [snapshot.fixtureDay]);
   return snapshot;
 }
+export async function listCalendarEvents(): Promise<CalendarEvent[]> {
+  await refreshCalendar();
+  if (state.error) throw new Error(state.error);
+  return fromFixture([...state.events].sort((a, b) => a.startAt.localeCompare(b.startAt)));
+}
 export async function listCalendarTasks(): Promise<Card[]> {
-  if (state.loading || (state.fixtureDay && state.fixtureDay !== dayKey(new Date()))) {
-    await loadCalendar();
-  }
+  await refreshCalendar();
   if (state.error) throw new Error(state.error);
   return fromFixture(state.tasks);
 }
@@ -445,7 +471,12 @@ export async function clearTaskTimeSlot(id: string): Promise<void> {
 
 export async function saveCalendarEvent(event: CalendarEvent): Promise<void> {
   const { cleanTitle, tags } = stripInlineHashtags(event.title);
-  const cleanEvent: CalendarEvent = tags.length > 0 ? { ...event, title: cleanTitle } : event;
+  const validatedTitle = validateCalendarEventInput({
+    title: cleanTitle,
+    startAt: event.startAt,
+    endAt: event.endAt,
+  });
+  const cleanEvent: CalendarEvent = { ...event, title: validatedTitle };
   if (isCalendarRemote) await eventTable.put([cleanEvent]);
   if (tags.length > 0) {
     await setItemManualTags(cleanEvent.id, tags);

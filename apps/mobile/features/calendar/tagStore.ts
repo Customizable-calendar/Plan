@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 
+import { currentUserId, onAccountChange } from '@/lib/local-first';
 import { listTagCategories } from '@/lib/tag-categories';
 
 import {
@@ -13,8 +14,11 @@ import {
   type TagExtractionLevel,
 } from './autoTags';
 
-const STORAGE_KEY = 'calendar:hidden-tags:v1';
-const TAG_LEVEL_STORAGE_KEY = 'calendar:tag-level:v1';
+const LEGACY_STORAGE_KEY = 'calendar:hidden-tags:v1';
+const LEGACY_TAG_LEVEL_STORAGE_KEY = 'calendar:tag-level:v1';
+const GUEST_OWNER = 'guest';
+const overridesKeyFor = (owner: string) => `${LEGACY_STORAGE_KEY}:${owner}`;
+const levelKeyFor = (owner: string) => `${LEGACY_TAG_LEVEL_STORAGE_KEY}:${owner}`;
 
 type TagOverrides = Record<string, string[]>;
 
@@ -35,8 +39,17 @@ let snapshot: StoreSnapshot = {
 };
 
 let levelModifiedInMemory = false;
+let loadedOwner: string | null = null;
 let loadPromise: Promise<void> | undefined;
 const listeners = new Set<() => void>();
+
+async function resolveOwner(): Promise<string> {
+  try {
+    return (await currentUserId()) ?? GUEST_OWNER;
+  } catch {
+    return GUEST_OWNER;
+  }
+}
 
 function emit(next: StoreSnapshot) {
   snapshot = next;
@@ -65,37 +78,73 @@ function normalizeTagList(tags: readonly string[]): string[] {
   return result;
 }
 
-async function persistOverrides(overrides: TagOverrides): Promise<void> {
+async function persistOverrides(overrides: TagOverrides, owner?: string): Promise<void> {
   try {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(overrides));
+    const targetOwner = owner ?? loadedOwner ?? (await resolveOwner());
+    await AsyncStorage.setItem(overridesKeyFor(targetOwner), JSON.stringify(overrides));
   } catch {
     // 저장소 쓰기가 실패하더라도 메모리 상태는 유지해 UI가 멈추지 않게 해요.
   }
 }
 
-async function persistTagLevel(level: TagExtractionLevel): Promise<void> {
+async function persistTagLevel(level: TagExtractionLevel, owner?: string): Promise<void> {
   try {
-    await AsyncStorage.setItem(TAG_LEVEL_STORAGE_KEY, String(level));
+    const targetOwner = owner ?? loadedOwner ?? (await resolveOwner());
+    await AsyncStorage.setItem(levelKeyFor(targetOwner), String(level));
   } catch {
     // 저장소 쓰기가 실패하더라도 메모리 상태는 유지해 UI가 멈추지 않게 해요.
   }
 }
 
 /** 기기 저장소의 수동 태그, 추출 강도, 사용자 태그 카테고리 목록을 불러와 내부 태그 스토어를 초기화해요. */
-export async function loadHiddenTagStore(): Promise<void> {
-  if (snapshot.loaded) return;
+export async function loadHiddenTagStore(options?: { force?: boolean }): Promise<void> {
+  if (!options?.force && snapshot.loaded && !loadPromise) {
+    const currentOwner = await resolveOwner();
+    if (snapshot.loaded && loadedOwner === currentOwner) return;
+  }
+  if (loadPromise) {
+    await loadPromise;
+    const currentOwner = await resolveOwner();
+    if (!options?.force && snapshot.loaded && loadedOwner === currentOwner) return;
+  }
   if (loadPromise) return loadPromise;
 
   loadPromise = (async () => {
-    let overrides: TagOverrides = { ...snapshot.overrides };
-    let preferredTags: string[] = [...snapshot.preferredTags];
-    let tagLevel: TagExtractionLevel = snapshot.tagLevel;
+    const owner = await resolveOwner();
+    const ownerChanged = loadedOwner !== null && loadedOwner !== owner;
+    if (ownerChanged) {
+      levelModifiedInMemory = false;
+    }
+
+    let overrides: TagOverrides = ownerChanged ? {} : { ...snapshot.overrides };
+    let preferredTags: string[] = ownerChanged ? [] : [...snapshot.preferredTags];
+    let tagLevel: TagExtractionLevel = ownerChanged
+      ? DEFAULT_TAG_EXTRACTION_LEVEL
+      : snapshot.tagLevel;
 
     try {
-      const [rawOverrides, rawLevel] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEY),
-        AsyncStorage.getItem(TAG_LEVEL_STORAGE_KEY),
+      let [rawOverrides, rawLevel] = await Promise.all([
+        AsyncStorage.getItem(overridesKeyFor(owner)),
+        AsyncStorage.getItem(levelKeyFor(owner)),
       ]);
+      if (owner === GUEST_OWNER) {
+        if (rawOverrides === null) {
+          const legacyOverrides = await AsyncStorage.getItem(LEGACY_STORAGE_KEY);
+          if (legacyOverrides !== null) {
+            rawOverrides = legacyOverrides;
+            void AsyncStorage.setItem(overridesKeyFor(GUEST_OWNER), legacyOverrides).catch(
+              () => {},
+            );
+          }
+        }
+        if (rawLevel === null) {
+          const legacyLevel = await AsyncStorage.getItem(LEGACY_TAG_LEVEL_STORAGE_KEY);
+          if (legacyLevel !== null) {
+            rawLevel = legacyLevel;
+            void AsyncStorage.setItem(levelKeyFor(GUEST_OWNER), legacyLevel).catch(() => {});
+          }
+        }
+      }
       if (rawOverrides) {
         const parsed = JSON.parse(rawOverrides) as unknown;
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
@@ -107,13 +156,13 @@ export async function loadHiddenTagStore(): Promise<void> {
               );
             }
           }
-          // 로드 중 먼저 기록된 인메모리 변경분을 우선 보존해요.
-          overrides = { ...nextOverrides, ...snapshot.overrides };
+          // 같은 계정 로드 중 먼저 기록된 인메모리 변경분은 보존하고, 계정 전환 시에는 새 계정 기준으로 교체해요.
+          overrides = ownerChanged ? nextOverrides : { ...nextOverrides, ...snapshot.overrides };
         }
       }
       if (rawLevel !== null && !levelModifiedInMemory) {
         tagLevel = normalizeTagExtractionLevel(rawLevel);
-      } else if (levelModifiedInMemory) {
+      } else if (!ownerChanged && levelModifiedInMemory) {
         tagLevel = snapshot.tagLevel;
       }
     } catch {
@@ -127,6 +176,7 @@ export async function loadHiddenTagStore(): Promise<void> {
       preferredTags = [];
     }
 
+    loadedOwner = owner;
     emit({
       loaded: true,
       overrides,
@@ -140,6 +190,10 @@ export async function loadHiddenTagStore(): Promise<void> {
 
   return loadPromise;
 }
+
+onAccountChange(() => {
+  void loadHiddenTagStore({ force: true });
+});
 
 /** 캘린더 전체 항목을 기준으로 코퍼스 빈도 통계를 갱신해 단건 뷰에서도 일관된 추천을 제공해요. */
 export function updateCalendarTagCorpus(

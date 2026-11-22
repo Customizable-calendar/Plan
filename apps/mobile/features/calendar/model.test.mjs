@@ -19,11 +19,13 @@ import {
   dayKey,
   eventsOnDay,
   groupEventsByDay,
+  MAX_EVENT_TITLE_LENGTH,
   overlaps,
   shiftDay,
   splitTitleAndTags,
   suggestSlots as calculateSlots,
   suggestSlotsAcrossDays,
+  validateCalendarEventInput,
   weekDays,
 } from './model.ts';
 
@@ -446,4 +448,31 @@ test('suggestSlotsAcrossDays는 제목의 시간 단서(예: 저녁)를 우선 �
     `expected evening slot >= 18시, got ${topHourKst}시 (${slots[0].reason})`,
   );
   assert(slots[0].reason.includes('저녁'));
+});
+
+test('validateCalendarEventInput은 DB 제약 조건(제목 1~200자, 종료 >= 시작)을 검증해요', () => {
+  assert.equal(MAX_EVENT_TITLE_LENGTH, 200);
+  const startAt = '2026-10-28T01:00:00Z';
+  const endAt = '2026-10-28T02:00:00Z';
+
+  assert.equal(validateCalendarEventInput({ title: '  주간 회의  ', startAt, endAt }), '주간 회의');
+  const exact200 = '가'.repeat(200);
+  assert.equal(validateCalendarEventInput({ title: exact200, startAt, endAt }), exact200);
+
+  // calendar_events 테이블 check (end_at >= start_at) 기준과 동일하게 같아도 허용해요.
+  assert.equal(
+    validateCalendarEventInput({ title: '마일스톤', startAt, endAt: startAt }),
+    '마일스톤',
+  );
+
+  assert.throws(() => validateCalendarEventInput({ title: '   ', startAt, endAt }));
+  assert.throws(() => validateCalendarEventInput({ title: '가'.repeat(201), startAt, endAt }));
+  assert.throws(() => validateCalendarEventInput({ title: '회의', startAt: 'invalid', endAt }));
+  assert.throws(() =>
+    validateCalendarEventInput({
+      title: '역전 일정',
+      startAt: '2026-10-28T03:00:00Z',
+      endAt: '2026-10-28T02:00:00Z',
+    }),
+  );
 });
