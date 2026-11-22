@@ -774,6 +774,29 @@ export function busyHoursOnDay(
   return result;
 }
 
+export const MAX_EVENT_TITLE_LENGTH = 200;
+
+/** Supabase calendar_events 테이블 제약(제목 1~200자, 종료 >= 시작)에 맞게 새 일정 입력을 검증해요. */
+export function validateCalendarEventInput(input: {
+  title: string;
+  startAt: string;
+  endAt: string;
+}): string {
+  const trimmed = input.title.trim();
+  if (trimmed.length === 0) {
+    throw new Error('일정 제목을 입력해 주세요.');
+  }
+  if (trimmed.length > MAX_EVENT_TITLE_LENGTH) {
+    throw new Error(`일정 제목은 ${MAX_EVENT_TITLE_LENGTH}자 이하로 입력해 주세요.`);
+  }
+  const startMs = Date.parse(input.startAt);
+  const endMs = Date.parse(input.endAt);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) {
+    throw new Error('일정 시간 범위를 확인해 주세요.');
+  }
+  return trimmed;
+}
+
 /** 화면 표시를 위해 제목에서 #해시태그를 분리하고 깔끔한 본문만 돌려줘요. 원문은 고치지 않아요. */
 export function splitTitleAndTags(title: string): { cleanTitle: string; tags: string[] } {
   const tags = new Set<string>();

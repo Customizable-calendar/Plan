@@ -43,6 +43,10 @@
   - `CalendarTimeline`과 `EventListView`에서 배정된 할 일을 일정과 동일한 충돌 레인으로 함께 표시하고 눌러서 바로 시간을 바꿀 수 있어요.
   - `TimeCandidates`와 `CalendarDaySheet`에서 `08시 ~ 21시` 빈 시간 시각화, 다중 날짜 추천(`오늘`/`내일`/`이번 주 추천`), 소요 시간(`30분`/`1시간`/`2시간`), 직접 시간 선택과 배정 시간 비우기를 지원해요.
 - **디자인 시스템**: 모든 컴포넌트는 공용 `@noteapp/ui`와 NativeWind 시맨틱 토큰(`className`)만을 사용해요.
+- **Supabase 실연동 · 포커스 동기화 · 에디터 API (`data.ts`, `index.ts`, `tagStore.ts`, `CalendarDaySheet.tsx`)**:
+  - `listCalendarEvents()`를 `index.ts`에서 공개해 에디터 `//` 일정 넣기 등 외부 기능에서 실제 Supabase/로컬 일정 목록을 바로 가져올 수 있게 했어요.
+  - `CalendarScreen`, `HomeSchedule`, `TodayEventsSection`, `ExecutionScreen`에 포커스 진입 시 백그라운드 갱신(`useFocusEffect`)을 붙여 카드/노트 확정 변경이 즉시 반영되게 했어요.
+  - `tagStore.ts` 저장 키를 계정 ID별로 분리하고 `onAccountChange` 구독을 연결해(게스트는 기존 로컬 키 자동 이관) 계정 전환 시 수동 태그·추출 레벨이 섞이지 않게 했으며, `saveCalendarEvent`와 입력 시트에 `calendar_events` DB 제약(`title` 최대 200자, `end_at >= start_at`) 검증을 추가했어요.
 
 ### 검증
 

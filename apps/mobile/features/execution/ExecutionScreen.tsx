@@ -1,12 +1,12 @@
 import type { Card, ExecutionRecord, ExecutionResult } from '@noteapp/shared';
 import { Button, CompletionBar, StatusPicker, TaskCheckRow, Text, type Status } from '@noteapp/ui';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 
 import { dayKey, HiddenTagDisclosure, splitTitleAndTags, timeLabel } from '@/features/calendar';
 
-import { loadExecution, saveExecutionRecords } from './data';
+import { loadExecution, onExecutionAccountChange, saveExecutionRecords } from './data';
 
 const toUiStatus = (r?: ExecutionResult): Status | undefined => (r === 'not_done' ? 'missed' : r);
 
@@ -29,33 +29,56 @@ export function ExecutionScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [retry, setRetry] = useState(0);
+  const requestIdRef = useRef(0);
+  const loadedDayRef = useRef<string | null>(null);
+
+  const fetchExecution = useCallback(
+    (options?: { showSpinner?: boolean }) => {
+      const requestId = ++requestIdRef.current;
+      if (options?.showSpinner || loadedDayRef.current !== day) {
+        setLoading(true);
+      }
+      loadExecution(day)
+        .then(({ tasks: loadedTasks, records }) => {
+          if (requestIdRef.current !== requestId) return;
+          const taskIds = new Set(loadedTasks.map((task) => task.id));
+          const nextDrafts: Record<string, ExecutionRecord> = {};
+          for (const record of records) {
+            if (taskIds.has(record.cardId) && !nextDrafts[record.cardId]) {
+              nextDrafts[record.cardId] = record;
+            }
+          }
+          loadedDayRef.current = day;
+          setError('');
+          setTasks(loadedTasks);
+          setDrafts(nextDrafts);
+        })
+        .catch((err: Error) => {
+          if (requestIdRef.current === requestId) setError(err.message);
+        })
+        .finally(() => {
+          if (requestIdRef.current === requestId) setLoading(false);
+        });
+    },
+    [day],
+  );
 
   useEffect(() => {
-    let active = true;
-    loadExecution(day)
-      .then(({ tasks: loadedTasks, records }) => {
-        if (!active) return;
-        const taskIds = new Set(loadedTasks.map((task) => task.id));
-        const nextDrafts: Record<string, ExecutionRecord> = {};
-        for (const record of records) {
-          if (taskIds.has(record.cardId) && !nextDrafts[record.cardId]) {
-            nextDrafts[record.cardId] = record;
-          }
-        }
-        setTasks(loadedTasks);
-        setDrafts(nextDrafts);
-      })
-      .catch((err: Error) => {
-        if (active) setError(err.message);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [day, retry]);
+    return onExecutionAccountChange(() => {
+      loadedDayRef.current = null;
+      setError('');
+      fetchExecution({ showSpinner: true });
+    });
+  }, [fetchExecution]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchExecution();
+      return () => {
+        requestIdRef.current += 1;
+      };
+    }, [fetchExecution]),
+  );
 
   function choose(cardId: string, result: ExecutionResult) {
     setMessage('');
@@ -145,9 +168,8 @@ export function ExecutionScreen() {
           <Button
             variant="outline"
             onPress={() => {
-              setLoading(true);
               setError('');
-              setRetry((value) => value + 1);
+              fetchExecution({ showSpinner: true });
             }}
           >
             <Text>다시 불러오기</Text>

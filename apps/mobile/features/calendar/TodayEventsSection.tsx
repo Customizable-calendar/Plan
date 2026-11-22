@@ -1,11 +1,17 @@
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { loadCalendar, useCalendar } from './data';
+import { loadCalendar, refreshCalendar, useCalendar } from './data';
 import { dayKey, eventsOnDay, splitTitleAndTags, timeLabel } from './model';
 
 export function TodayEventsSection() {
   const { events, tasks, loading, error } = useCalendar();
+  useFocusEffect(
+    useCallback(() => {
+      void refreshCalendar();
+    }, []),
+  );
   const today = dayKey(new Date());
   const daily = eventsOnDay(events, today);
   const scheduled = tasks.filter(

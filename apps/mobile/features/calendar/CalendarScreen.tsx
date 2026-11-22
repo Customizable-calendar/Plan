@@ -1,4 +1,5 @@
 import type { CalendarEvent, Card } from '@noteapp/shared';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
@@ -8,7 +9,7 @@ import { CalendarTimeline } from './CalendarTimeline';
 import { HashtagGraphSheet } from './HashtagGraphSheet';
 import { HiddenTagDisclosure } from './HiddenTagDisclosure';
 import { TimeCandidates } from './TimeCandidates';
-import { loadCalendar, useCalendar } from './data';
+import { loadCalendar, refreshCalendar, useCalendar } from './data';
 import {
   dayKey,
   eventsOnDay,
@@ -73,6 +74,11 @@ function buildMonthWeeks(monthStart: string): string[][] {
 
 export function CalendarScreen() {
   const { events, tasks, loading, error } = useCalendar();
+  useFocusEffect(
+    useCallback(() => {
+      void refreshCalendar();
+    }, []),
+  );
   const today = dayKey(new Date());
   const [day, setDay] = useState(() => dayKey(new Date()));
   const [view, setView] = useState<CalendarViewMode>('day');
