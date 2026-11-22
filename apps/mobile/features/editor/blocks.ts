@@ -1,3 +1,5 @@
+import { FENCE_CLOSE, parseTaskLine, type TaskRow, TASKS_OPEN } from './tasks';
+
 // 본문 마크다운을 미리보기용 블록으로 나누고, 블록에서 고친 글을 본문의 그 줄에 되돌려 써요.
 // 화면 없이 쓸 수 있는 순수 함수예요.
 
@@ -20,7 +22,12 @@ export type PreviewBlock =
   | (LinePart & { kind: 'quote' })
   | (LinePart & { kind: 'paragraph' })
   /** 붙인 파일 줄 `![이름](file:<files id>)`. 미리보기에서 파일 카드로 보여요. */
-  | { kind: 'file'; line: number; name: string; fileId: string };
+  | { kind: 'file'; line: number; name: string; fileId: string }
+  /**
+   * 할 일 표(```할일 ... ```). start는 여는 줄, end는 닫는 줄(없으면 null).
+   * 모양은 tasks.ts에 있어요.
+   */
+  | { kind: 'tasks'; start: number; end: number | null; rows: TaskRow[] };
 
 // 내용 없는 제목('## ')도 제목으로 봐요. 줄 끝 띄어쓰기는 지우고 보니까 '##'만 남아도 돼요. ('#태그'는 아니에요)
 const HEADING = /^(#{1,3})(?: (.*))?$/;
@@ -38,9 +45,27 @@ const FILE = /^!\[([^\]]*)\]\(file:([0-9a-f-]{36})\)$/;
 
 export function parseBlocks(body: string): PreviewBlock[] {
   const blocks: PreviewBlock[] = [];
+  // 열려 있는 할 일 표. 닫는 줄(```)이 나올 때까지 줄을 표에 넣어요.
+  let table: Extract<PreviewBlock, { kind: 'tasks' }> | null = null;
 
   body.split('\n').forEach((raw, line) => {
     const text = raw.trimEnd();
+
+    if (table) {
+      if (text.trim() === FENCE_CLOSE) {
+        table.end = line;
+        table = null;
+      } else if (text.trim() !== '') {
+        table.rows.push(parseTaskLine(text, line));
+      }
+      return;
+    }
+    if (text.trim() === TASKS_OPEN) {
+      table = { kind: 'tasks', start: line, end: null, rows: [] };
+      blocks.push(table);
+      return;
+    }
+
     if (text.trim() === '') return;
 
     // 끝 띄어쓰기를 지우기 전 글로 봐요. '## '(빈 제목)과 '##'(기호만 남은 글)을 나눠야 해서요.

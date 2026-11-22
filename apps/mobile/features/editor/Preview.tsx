@@ -17,6 +17,8 @@ import {
 import { moveCursor } from './cursor';
 import { type FieldKind, fieldKind, type FieldTarget } from './FieldSheet';
 import { FileImage, FileImageRow } from './FileImage';
+import { TaskTable } from './TaskTable';
+import { FENCE_CLOSE, taskLine } from './tasks';
 
 // 제목 크기는 디자인 시스템 글자 종류(h2, h3, h4)를 따라요.
 const HEADING_CLASS = {
@@ -138,7 +140,7 @@ export function Preview({
                   placeholderTextColor={palette.mutedForeground}
                   onFocus={() => onActiveLine(row.line)}
                   accessibilityLabel="항목 이름"
-                  className="w-24 p-0 text-sm leading-6 text-muted-foreground web:outline-none"
+                  className="w-28 p-0 text-sm leading-6 text-muted-foreground web:outline-none"
                 />
                 <LineInput
                   {...lineProps(row, block)}
@@ -251,6 +253,24 @@ export function Preview({
               <Text className="text-sm font-medium text-primary-soft-foreground">열기</Text>
             </Button>
           </View>
+        );
+      }
+
+      case 'tasks': {
+        const last = block.rows[block.rows.length - 1]?.line ?? block.start;
+        return (
+          <TaskTable
+            rows={block.rows}
+            onRow={(row) => onChange(replaceLine(body, row.line, taskLine(row)))}
+            onRemove={(row) => onChange(removeLine(body, row.line))}
+            onAdd={() => {
+              const empty = taskLine({ subject: '', task: '', plan: '', actual: '', result: '' });
+              let next = insertLineAfter(body, last, empty);
+              // 닫는 줄(```)이 없던 표면 같이 닫아 줘요.
+              if (block.end === null) next = insertLineAfter(next, last + 1, FENCE_CLOSE);
+              onChange(next);
+            }}
+          />
         );
       }
 
