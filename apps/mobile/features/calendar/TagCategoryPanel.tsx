@@ -1,7 +1,8 @@
 import { type TagCategory, type TagSuggestion, tagSuggestionKey } from '@noteapp/shared';
-import { palette } from '@noteapp/ui';
+import { Button, DaySectionTitle, Icon, Text } from '@noteapp/ui';
+import { ArrowRightIcon, SparklesIcon } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import {
   acceptSuggestion,
@@ -115,33 +116,25 @@ export function TagCategoryPanel({
   };
 
   return (
-    <View className="gap-3 rounded-xl border border-border bg-card p-4">
+    <View className="gap-3 border-t border-border pt-4">
       <View className="flex-row items-center justify-between gap-2">
         <View className="flex-1 gap-0.5">
           <Text accessibilityRole="header" className="text-base font-bold text-foreground">
             AI 해시태그 자동 분류
           </Text>
           <Text className="text-xs text-muted-foreground">
-            카테고리 {categories.length}개 · 분류된 태그 {groupedCount}/{tags.length}개
+            카테고리 {categories.length}개, 분류된 태그 {groupedCount}/{tags.length}개
           </Text>
         </View>
         {allowed ? (
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            size="sm"
             disabled={busy || tags.length === 0}
             onPress={() => void requestSuggestions()}
-            className={`min-h-10 flex-row items-center justify-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 ${
-              busy || tags.length === 0 ? 'opacity-50' : ''
-            }`}
           >
-            {busy ? (
-              <ActivityIndicator size="small" color={palette.primaryForeground} />
-            ) : (
-              <Text className="text-xs font-bold text-primary-foreground">
-                {suggestions ? '다시 추천' : 'AI로 분류 추천'}
-              </Text>
-            )}
-          </Pressable>
+            <Icon as={SparklesIcon} size={14} />
+            <Text>{busy ? '추천 중' : suggestions ? '다시 추천' : 'AI로 분류 추천'}</Text>
+          </Button>
         ) : null}
       </View>
 
@@ -160,46 +153,48 @@ export function TagCategoryPanel({
           </Text>
         ) : (
           <View className="gap-2">
-            <Text className="text-xs font-bold text-primary">
-              AI 추천 {suggestions.length}건 · 확인한 것만 저장돼요
-            </Text>
+            <View className="flex-row items-center gap-1.5">
+              <Icon as={SparklesIcon} size={13} className="text-ai" />
+              <Text className="text-xs font-bold text-ai">
+                AI 추천 {suggestions.length}건, 확인한 것만 저장돼요
+              </Text>
+            </View>
             {suggestions.map((s) => {
               const key = tagSuggestionKey(s);
               const pending = actingKey === key;
               return (
                 <View
                   key={key}
-                  className="gap-2 rounded-lg border border-primary/25 bg-primary-soft p-3"
+                  className="gap-2 rounded-lg border border-dashed border-ai bg-ai-soft/40 p-3"
                 >
                   {s.kind === 'assign' ? (
-                    <Text className="text-sm font-semibold text-foreground">
-                      {s.tag} → {categoryNameById.get(s.categoryId) ?? '카테고리'}
-                    </Text>
+                    <View className="flex-row flex-wrap items-center gap-1.5">
+                      <Text className="text-sm font-semibold text-foreground">{s.tag}</Text>
+                      <Icon as={ArrowRightIcon} size={14} className="text-muted-foreground" />
+                      <Text className="text-sm font-semibold text-foreground">
+                        {categoryNameById.get(s.categoryId) ?? '카테고리'}
+                      </Text>
+                    </View>
                   ) : (
                     <View className="gap-1">
                       <Text className="text-sm font-semibold text-foreground">
                         새 카테고리 &ldquo;{s.name ?? '분류'}&rdquo;
                       </Text>
-                      <Text className="text-xs text-muted-foreground">{s.tags.join('  ')}</Text>
+                      <Text className="text-xs text-muted-foreground">{s.tags.join(', ')}</Text>
                     </View>
                   )}
                   <View className="flex-row gap-2">
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={pending}
-                      onPress={() => void handleAccept(s)}
-                      className="min-h-8 items-center justify-center rounded-md bg-primary px-3 py-1"
-                    >
-                      <Text className="text-xs font-bold text-primary-foreground">수락</Text>
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
+                    <Button size="sm" disabled={pending} onPress={() => void handleAccept(s)}>
+                      <Text>수락</Text>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
                       disabled={pending}
                       onPress={() => void handleDismiss(s)}
-                      className="min-h-8 items-center justify-center rounded-md border border-border bg-card px-3 py-1"
                     >
-                      <Text className="text-xs font-semibold text-muted-foreground">거절</Text>
-                    </Pressable>
+                      <Text>거절</Text>
+                    </Button>
                   </View>
                 </View>
               );
@@ -210,12 +205,10 @@ export function TagCategoryPanel({
 
       {categories.length > 0 ? (
         <View className="gap-2 border-t border-border pt-3">
-          <Text className="text-xs font-bold text-muted-foreground">내 카테고리</Text>
-          {categories.map((cat) => (
-            <View
-              key={cat.id}
-              className="gap-1.5 rounded-lg border border-border bg-background p-2.5"
-            >
+          <DaySectionTitle label="내 카테고리" count={categories.length} />
+          {categories.map((cat, idx) => (
+            <View key={cat.id} className="gap-1.5 py-2">
+              {idx > 0 ? <View className="mb-2 h-px bg-border" /> : null}
               <View className="flex-row items-center justify-between gap-2">
                 <Text className="text-sm font-bold text-foreground">
                   {cat.name}{' '}

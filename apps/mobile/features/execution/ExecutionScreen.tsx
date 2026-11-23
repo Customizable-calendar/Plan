@@ -1,5 +1,13 @@
 import type { Card, ExecutionRecord, ExecutionResult } from '@noteapp/shared';
-import { Button, CompletionBar, StatusPicker, TaskCheckRow, Text, type Status } from '@noteapp/ui';
+import {
+  Button,
+  CompletionBar,
+  StatusPicker,
+  TaskCheckRow,
+  Text,
+  cn,
+  type Status,
+} from '@noteapp/ui';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
@@ -12,7 +20,7 @@ const toUiStatus = (r?: ExecutionResult): Status | undefined => (r === 'not_done
 
 const fromUiStatus = (s: Status): ExecutionResult => (s === 'missed' ? 'not_done' : s);
 
-// 수행 확인 시트. 디자인 시스템 개편안(동그라미 한 번으로 완료, 줄을 누르면 4가지 펼치기, 진행 숫자)을 따라요.
+// 수행 확인 시트. 디자인 시스템 개편안(동그라미 한 번으로 완료, 줄을 누르면 4가지 펼치기, 진행 줄)을 따라요.
 export function ExecutionScreen() {
   const { date } = useLocalSearchParams<{ date?: string }>();
   const day =
@@ -106,6 +114,27 @@ export function ExecutionScreen() {
     } else {
       choose(cardId, 'done');
     }
+    setOpenId(null);
+  }
+
+  function completeRemaining() {
+    setMessage('');
+    const nowIso = new Date().toISOString();
+    setDrafts((previous) => {
+      const next = { ...previous };
+      for (const task of tasks) {
+        if (!next[task.id]?.result) {
+          next[task.id] = {
+            id: `exec-${task.id}`,
+            cardId: task.id,
+            result: 'done',
+            recordedAt: nowIso,
+          };
+        }
+      }
+      return next;
+    });
+    setOpenId(null);
   }
 
   async function save() {
@@ -126,7 +155,9 @@ export function ExecutionScreen() {
     }
   }
 
-  const canSave = !saving && Object.keys(drafts).length > 0;
+  const answeredCount = tasks.filter((t) => Boolean(drafts[t.id]?.result)).length;
+  const allAnswered = tasks.length > 0 && answeredCount === tasks.length;
+  const canSave = !saving && answeredCount > 0;
   const doneCount = tasks.filter((t) => drafts[t.id]?.result === 'done').length;
   const partialCount = tasks.filter((t) => drafts[t.id]?.result === 'partial').length;
   const missedCount = tasks.filter((t) => drafts[t.id]?.result === 'not_done').length;
@@ -135,23 +166,29 @@ export function ExecutionScreen() {
     <ScrollView
       className="flex-1 bg-background"
       keyboardShouldPersistTaps="handled"
-      contentContainerClassName="mx-auto w-full max-w-[960px] gap-5 p-5 pb-12"
+      contentContainerClassName="mx-auto w-full max-w-[960px] gap-4 p-5 pb-12"
     >
-      <View className="gap-1">
-        <View className="flex-row items-baseline justify-between">
+      <View className="flex-row items-end justify-between gap-2">
+        <View className="gap-0.5">
           <Text className="text-xs text-muted-foreground">{day} 수행 확인</Text>
-          {tasks.length > 0 ? (
-            <Text className="text-sm font-bold text-primary">
-              {doneCount}/{tasks.length} 완료
-            </Text>
-          ) : null}
+          <Text
+            accessibilityRole="header"
+            className="text-xl font-bold tracking-tight text-foreground"
+          >
+            오늘 한 일 확인
+          </Text>
         </View>
-        <Text
-          accessibilityRole="header"
-          className="text-[26px] font-bold tracking-tight text-foreground"
-        >
-          계획한 일, 어땠나요?
-        </Text>
+        {tasks.length > 0 ? (
+          allAnswered ? (
+            <Text className="text-[13px] font-bold text-primary">{doneCount}개 끝냄</Text>
+          ) : (
+            <Pressable accessibilityRole="button" hitSlop={10} onPress={completeRemaining}>
+              <Text className="text-[13px] font-bold text-primary">
+                남은 {tasks.length - answeredCount}개 모두 완료
+              </Text>
+            </Pressable>
+          )
+        ) : null}
       </View>
 
       {tasks.length > 0 ? (
@@ -195,25 +232,20 @@ export function ExecutionScreen() {
                   : '시간 미정';
                 const expanded = openId === task.id;
                 return (
-                  <View key={task.id}>
-                    {index > 0 ? <View className="h-px bg-border" /> : null}
-                    <Pressable
+                  <View key={task.id} className={cn(index > 0 && 'border-t border-border')}>
+                    <TaskCheckRow
+                      flat
+                      title={cleanTitle}
+                      meta={scheduleText}
+                      status={toUiStatus(record?.result)}
+                      onToggle={() => toggleQuickDone(task.id)}
                       onPress={() => setOpenId((cur) => (cur === task.id ? null : task.id))}
-                      accessibilityRole="button"
-                    >
-                      <TaskCheckRow
-                        flat
-                        title={cleanTitle}
-                        meta={scheduleText}
-                        status={toUiStatus(record?.result)}
-                        onToggle={() => toggleQuickDone(task.id)}
-                      />
-                    </Pressable>
-                    <View className="pb-2">
+                    />
+                    <View className="pb-2 pl-9">
                       <HiddenTagDisclosure itemId={task.id} title={task.title} compact />
                     </View>
                     {expanded ? (
-                      <View className="pb-3 pt-1">
+                      <View className="pb-3 pl-9 pt-1">
                         <StatusPicker
                           value={toUiStatus(record?.result)}
                           onChange={(s) => choose(task.id, fromUiStatus(s))}
@@ -226,33 +258,36 @@ export function ExecutionScreen() {
             </View>
           )}
 
-          {!!tasks.length ? (
-            <Button size="lg" disabled={!canSave} onPress={() => void save()}>
-              <Text>{saving ? '저장 중' : '수행 기록 저장'}</Text>
-            </Button>
+          {!!message ? (
+            <Text
+              accessibilityLiveRegion="polite"
+              className="text-center text-sm font-semibold text-primary"
+            >
+              {message}
+            </Text>
           ) : null}
+
+          <View className="flex-row items-center justify-between border-t border-border pt-3">
+            <Button
+              variant="ghost"
+              disabled={saving}
+              onPress={() => {
+                if (router.canGoBack()) router.back();
+                else router.replace('/calendar');
+              }}
+            >
+              <Text>나중에</Text>
+            </Button>
+            {tasks.length > 0 ? (
+              <Button size="lg" disabled={!canSave} onPress={() => void save()}>
+                <Text>
+                  {saving ? '저장 중' : allAnswered ? '저장' : `${answeredCount}개만 저장`}
+                </Text>
+              </Button>
+            ) : null}
+          </View>
         </>
       ) : null}
-
-      {!!message ? (
-        <Text
-          accessibilityLiveRegion="polite"
-          className="text-center text-sm font-semibold text-primary"
-        >
-          {message}
-        </Text>
-      ) : null}
-
-      <Button
-        variant="ghost"
-        disabled={saving}
-        onPress={() => {
-          if (router.canGoBack()) router.back();
-          else router.replace('/calendar');
-        }}
-      >
-        <Text>닫기</Text>
-      </Button>
     </ScrollView>
   );
 }
