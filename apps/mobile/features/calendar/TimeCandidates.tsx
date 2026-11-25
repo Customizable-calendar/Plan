@@ -1,5 +1,16 @@
 import type { Card } from '@noteapp/shared';
-import { BottomSheet, Button, Scrim, SlotOption, Text } from '@noteapp/ui';
+import {
+  BottomSheet,
+  Button,
+  Icon,
+  RailCard,
+  Scrim,
+  ScrollChips,
+  SlotOption,
+  Text,
+  type ChipItem,
+} from '@noteapp/ui';
+import { SparklesIcon } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 
@@ -257,10 +268,30 @@ export function TimeCandidates({
   const isPastDueSelection =
     Boolean(dueMs && effectiveCandidate) && Date.parse(effectiveCandidate!.endAt) > dueMs!;
 
+  const metaParts: string[] = [formatDurationLabel(durationMinutes)];
+  if (task.startAt && task.endAt) {
+    metaParts.push(
+      `현재 ${formatDayPill(dayKey(task.startAt), today, tomorrow)} ${timeLabel(task.startAt)} ~ ${timeLabel(task.endAt)}`,
+    );
+  }
+  if (task.dueAt) {
+    metaParts.push(`마감 ${dayKey(task.dueAt).slice(5)} ${timeLabel(task.dueAt)}`);
+  }
+
+  const scopeChips: ChipItem[] = [
+    { key: 'today', label: '오늘' },
+    { key: 'tomorrow', label: '내일' },
+    ...(day !== today && day !== tomorrow
+      ? [{ key: 'target', label: formatDayPill(day, today, tomorrow) }]
+      : []),
+    { key: 'week', label: '이번 주' },
+    { key: 'manual', label: '직접 고르기' },
+  ];
+
   const primaryLabel = saving
     ? '저장 중'
     : effectiveCandidate
-      ? `${formatDayPill(dayKey(effectiveCandidate.startAt), today, tomorrow)} ${timeLabel(effectiveCandidate.startAt)}에 넣기`
+      ? `${formatDayPill(dayKey(effectiveCandidate.startAt), today, tomorrow)} ${timeLabel(effectiveCandidate.startAt)} ~ ${timeLabel(effectiveCandidate.endAt)}에 저장`
       : '시간을 먼저 골라 주세요';
 
   return (
@@ -275,33 +306,19 @@ export function TimeCandidates({
         >
           <Scrim />
         </Pressable>
-        <BottomSheet title={cleanTitle} className="max-h-[88%]">
-          <ScrollView contentContainerClassName="gap-4 pb-2">
-            <View className="gap-1.5">
-              <View className="flex-row flex-wrap items-center justify-between gap-2">
-                {task.startAt && task.endAt ? (
-                  <Text className="text-xs font-semibold text-primary">
-                    현재 배정: {formatDayPill(dayKey(task.startAt), today, tomorrow)}{' '}
-                    {timeLabel(task.startAt)} ~ {timeLabel(task.endAt)}
-                  </Text>
-                ) : (
+        <BottomSheet title="시간 잡기" className="mx-auto max-h-[88%] w-full max-w-[640px]">
+          <ScrollView className="shrink" contentContainerClassName="gap-4 pb-2">
+            <View className="gap-1">
+              <RailCard
+                type="task"
+                title={cleanTitle}
+                meta={metaParts.join(', ')}
+                right={
                   <Text className="text-xs text-muted-foreground">
-                    빈 시간대와 소요 시간을 고르고 한 번에 저장하세요.
-                  </Text>
-                )}
-                <View className="rounded-md bg-task-soft px-2 py-0.5">
-                  <Text className="text-[11px] font-semibold text-task">
                     {task.status === 'confirmed' ? '할 일' : '확인 대기'}
                   </Text>
-                </View>
-              </View>
-
-              {task.dueAt ? (
-                <Text className="text-[11px] text-muted-foreground">
-                  마감 기준: {dayKey(task.dueAt).slice(5)} {timeLabel(task.dueAt)}
-                </Text>
-              ) : null}
-
+                }
+              />
               <HiddenTagDisclosure
                 itemId={task.id}
                 title={task.title}
@@ -311,145 +328,28 @@ export function TimeCandidates({
               />
             </View>
 
-            <View className="gap-2">
-              <Text className="text-xs font-semibold text-muted-foreground">날짜와 소요 시간</Text>
-              <View className="flex-row flex-wrap gap-1.5">
-                <Pressable
-                  onPress={() => selectScope('today')}
-                  className={
-                    scope === 'today'
-                      ? 'rounded-full border border-primary bg-primary px-3 py-1.5'
-                      : 'rounded-full border border-border bg-card px-3 py-1.5'
-                  }
-                >
-                  <Text
-                    className={
-                      scope === 'today'
-                        ? 'text-xs font-semibold text-primary-foreground'
-                        : 'text-xs font-semibold text-foreground'
-                    }
-                  >
-                    오늘
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => selectScope('tomorrow')}
-                  className={
-                    scope === 'tomorrow'
-                      ? 'rounded-full border border-primary bg-primary px-3 py-1.5'
-                      : 'rounded-full border border-border bg-card px-3 py-1.5'
-                  }
-                >
-                  <Text
-                    className={
-                      scope === 'tomorrow'
-                        ? 'text-xs font-semibold text-primary-foreground'
-                        : 'text-xs font-semibold text-foreground'
-                    }
-                  >
-                    내일
-                  </Text>
-                </Pressable>
-                {day !== today && day !== tomorrow && (
-                  <Pressable
-                    onPress={() => selectScope('target')}
-                    className={
-                      scope === 'target'
-                        ? 'rounded-full border border-primary bg-primary px-3 py-1.5'
-                        : 'rounded-full border border-border bg-card px-3 py-1.5'
-                    }
-                  >
-                    <Text
-                      className={
-                        scope === 'target'
-                          ? 'text-xs font-semibold text-primary-foreground'
-                          : 'text-xs font-semibold text-foreground'
-                      }
-                    >
-                      {formatDayPill(day, today, tomorrow)}
-                    </Text>
-                  </Pressable>
-                )}
-                <Pressable
-                  onPress={() => selectScope('week')}
-                  className={
-                    scope === 'week'
-                      ? 'rounded-full border border-primary bg-primary px-3 py-1.5'
-                      : 'rounded-full border border-border bg-card px-3 py-1.5'
-                  }
-                >
-                  <Text
-                    className={
-                      scope === 'week'
-                        ? 'text-xs font-semibold text-primary-foreground'
-                        : 'text-xs font-semibold text-foreground'
-                    }
-                  >
-                    이번 주 추천
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View className="flex-row items-center justify-between gap-2 pt-1">
-                <View className="flex-row gap-1.5">
-                  {DURATIONS.map((minutes) => {
-                    const active = durationMinutes === minutes;
-                    return (
-                      <Pressable
-                        key={minutes}
-                        onPress={() => selectDuration(minutes)}
-                        className={
-                          active
-                            ? 'rounded-lg border border-primary/50 bg-primary-soft px-3 py-1.5'
-                            : 'rounded-lg border border-border bg-muted px-3 py-1.5'
-                        }
-                      >
-                        <Text
-                          className={
-                            active
-                              ? 'text-xs font-semibold text-primary-soft-foreground'
-                              : 'text-xs font-medium text-muted-foreground'
-                          }
-                        >
-                          {formatDurationLabel(minutes)}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-
-                <Pressable
-                  onPress={() => {
-                    setMode((prev) => (prev === 'recommend' ? 'manual' : 'recommend'));
+            <View className="-mx-5">
+              <ScrollChips
+                items={scopeChips}
+                active={mode === 'manual' ? 'manual' : scope}
+                onChange={(nextKey) => {
+                  if (nextKey === 'manual') {
+                    setMode('manual');
                     setError('');
-                  }}
-                  className={
-                    mode === 'manual'
-                      ? 'rounded-lg border border-primary bg-primary-soft px-3 py-1.5'
-                      : 'rounded-lg border border-border bg-background px-3 py-1.5'
+                    return;
                   }
-                >
-                  <Text
-                    className={
-                      mode === 'manual'
-                        ? 'text-xs font-semibold text-primary-soft-foreground'
-                        : 'text-xs font-semibold text-foreground'
-                    }
-                  >
-                    {mode === 'manual' ? '추천 보기' : '직접 시간 고르기'}
-                  </Text>
-                </Pressable>
-              </View>
+                  setMode('recommend');
+                  selectScope(nextKey as RangeScope);
+                }}
+              />
             </View>
 
-            <View className="gap-2 rounded-xl border border-border bg-muted/40 p-3">
+            <View className="gap-2 rounded-lg bg-muted/40 p-3">
               <View className="flex-row items-center justify-between">
                 <Text className="text-xs font-semibold text-foreground">
                   {formatDayPill(inspectDay, today, tomorrow)} 빈 시간 (08시 ~ 21시)
                 </Text>
-                <Text className="text-[11px] text-muted-foreground">
-                  칸을 눌러 바로 선택할 수도 있어요
-                </Text>
+                <Text className="text-[11px] text-muted-foreground">칸을 눌러 바로 선택</Text>
               </View>
 
               <View className="flex-row gap-1">
@@ -521,23 +421,36 @@ export function TimeCandidates({
 
             {mode === 'recommend' ? (
               <View className="gap-2">
-                <View className="gap-1">
-                  <Text className="text-xs font-semibold text-muted-foreground">
-                    추천 시간 후보
+                <View className="flex-row items-center gap-1.5">
+                  <Icon as={SparklesIcon} size={14} className="text-ai" />
+                  <Text className="flex-1 text-[13px] font-bold text-ai">
+                    겹치지 않는 시간 {candidates.length}개
                   </Text>
-                  {targetTags.length > 0 ? (
-                    <Text className="text-[11px] text-muted-foreground">
-                      분석 기준 태그: {targetTags.slice(0, 4).join(', ')}
-                    </Text>
-                  ) : null}
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setMode('manual');
+                      setError('');
+                    }}
+                    hitSlop={6}
+                  >
+                    <Text className="text-[13px] font-bold text-primary">직접 고르기</Text>
+                  </Pressable>
                 </View>
+
+                {targetTags.length > 0 ? (
+                  <Text className="text-[11px] text-muted-foreground">
+                    분석 기준 태그: {targetTags.slice(0, 4).join(', ')}
+                  </Text>
+                ) : null}
+
                 {candidates.length === 0 ? (
-                  <View className="gap-2 rounded-xl border border-border bg-muted/40 p-3.5">
+                  <View className="gap-1.5 rounded-lg bg-muted/40 p-3.5">
                     <Text className="text-sm font-semibold text-foreground">
                       선택한 날짜에 비어 있는 {formatDurationLabel(durationMinutes)} 슬롯이 없어요.
                     </Text>
                     <Text className="text-xs text-muted-foreground">
-                      위에서 내일, 이번 주 추천 또는 30분 단위로 바꿔 보세요.
+                      위에서 내일, 이번 주 또는 30분 단위로 바꿔 보세요.
                     </Text>
                   </View>
                 ) : (
@@ -570,9 +483,22 @@ export function TimeCandidates({
               </View>
             ) : (
               <View className="gap-2.5">
-                <Text className="text-xs font-semibold text-muted-foreground">
-                  날짜와 시작 시각 직접 고르기
-                </Text>
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-[13px] font-bold text-foreground">
+                    날짜와 시작 시각 직접 고르기
+                  </Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setMode('recommend');
+                      setError('');
+                    }}
+                    hitSlop={6}
+                  >
+                    <Text className="text-[13px] font-bold text-primary">추천 보기</Text>
+                  </Pressable>
+                </View>
+
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View className="flex-row gap-1.5">
                     {weekDays.map((candidateDay) => {
@@ -587,14 +513,14 @@ export function TimeCandidates({
                           }}
                           className={
                             active
-                              ? 'rounded-lg border border-primary bg-primary px-3 py-1.5'
-                              : 'rounded-lg border border-border bg-card px-3 py-1.5'
+                              ? 'rounded-full border border-foreground bg-foreground px-3 py-1.5'
+                              : 'rounded-full border border-border bg-background px-3 py-1.5'
                           }
                         >
                           <Text
                             className={
                               active
-                                ? 'text-xs font-semibold text-primary-foreground'
+                                ? 'text-xs font-bold text-background'
                                 : 'text-xs font-medium text-foreground'
                             }
                           >
@@ -622,7 +548,7 @@ export function TimeCandidates({
                         }}
                         className={
                           isSelected
-                            ? 'w-[23%] items-center rounded-lg border border-primary bg-primary py-2'
+                            ? 'w-[23%] items-center rounded-lg border-2 border-primary bg-primary-soft/40 py-2'
                             : candidateSlot
                               ? 'w-[23%] items-center rounded-lg border border-border bg-card py-2'
                               : 'w-[23%] items-center rounded-lg border border-border bg-muted py-2 opacity-45'
@@ -631,7 +557,7 @@ export function TimeCandidates({
                         <Text
                           className={
                             isSelected
-                              ? 'text-xs font-bold text-primary-foreground'
+                              ? 'text-xs font-bold text-primary'
                               : 'text-xs font-semibold text-foreground'
                           }
                         >
@@ -640,7 +566,7 @@ export function TimeCandidates({
                         <Text
                           className={
                             isSelected
-                              ? 'text-[10px] text-primary-foreground'
+                              ? 'text-[10px] font-semibold text-primary'
                               : 'text-[10px] text-muted-foreground'
                           }
                         >
@@ -653,8 +579,58 @@ export function TimeCandidates({
               </View>
             )}
 
+            <View>
+              <View className="h-px bg-border" />
+              <View className="min-h-[48px] flex-row items-center justify-between gap-2 py-2">
+                <Text className="text-[15px] text-foreground">소요 시간</Text>
+                <View className="flex-row gap-1.5">
+                  {DURATIONS.map((minutes) => {
+                    const active = durationMinutes === minutes;
+                    return (
+                      <Pressable
+                        key={minutes}
+                        onPress={() => selectDuration(minutes)}
+                        className={
+                          active
+                            ? 'rounded-full border border-primary bg-primary-soft px-3 py-1'
+                            : 'rounded-full border border-border bg-background px-3 py-1'
+                        }
+                      >
+                        <Text
+                          className={
+                            active
+                              ? 'text-xs font-bold text-primary-soft-foreground'
+                              : 'text-xs text-muted-foreground'
+                          }
+                        >
+                          {formatDurationLabel(minutes)}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+              {task.startAt ? (
+                <>
+                  <View className="h-px bg-border" />
+                  <View className="min-h-[48px] flex-row items-center justify-between py-2">
+                    <Text className="text-[15px] text-foreground">배정된 시간</Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={saving}
+                      onPress={() => void handleClear()}
+                      hitSlop={8}
+                    >
+                      <Text className="text-sm font-semibold text-destructive">비우기</Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : null}
+              <View className="h-px bg-border" />
+            </View>
+
             {isPastDueSelection ? (
-              <View className="rounded-lg border border-border bg-accent px-3 py-2">
+              <View className="rounded-lg bg-accent px-3 py-2">
                 <Text className="text-xs font-medium text-accent-foreground">
                   기존 마감 기준 이후 시간으로 배정돼요. 필요하면 그대로 저장할 수 있어요.
                 </Text>
@@ -666,25 +642,21 @@ export function TimeCandidates({
                 {error}
               </Text>
             ) : null}
-
-            <View className="gap-2 pt-1">
-              <Button
-                size="lg"
-                disabled={!effectiveCandidate || saving}
-                onPress={() => void handleSave()}
-              >
-                <Text>{primaryLabel}</Text>
-              </Button>
-              {task.startAt ? (
-                <Button variant="outline" disabled={saving} onPress={() => void handleClear()}>
-                  <Text>배정된 시간 비우기</Text>
-                </Button>
-              ) : null}
-              <Button variant="ghost" disabled={saving} onPress={onClose}>
-                <Text>닫기</Text>
-              </Button>
-            </View>
           </ScrollView>
+
+          <View className="flex-row items-center gap-2 border-t border-border pt-3">
+            <Button variant="ghost" disabled={saving} onPress={onClose}>
+              <Text>닫기</Text>
+            </Button>
+            <Button
+              size="lg"
+              className="flex-1"
+              disabled={!effectiveCandidate || saving}
+              onPress={() => void handleSave()}
+            >
+              <Text>{primaryLabel}</Text>
+            </Button>
+          </View>
         </BottomSheet>
       </View>
     </Modal>

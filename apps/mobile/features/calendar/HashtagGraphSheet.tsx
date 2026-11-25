@@ -1,6 +1,8 @@
 import type { CalendarEvent, Card } from '@noteapp/shared';
+import { Button, DaySectionTitle, Icon, Input, RailCard, SegmentTabs, Text } from '@noteapp/ui';
+import { XIcon } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { HashtagLevelBar } from './HashtagLevelBar';
@@ -28,7 +30,7 @@ const CLUSTER_STYLES = [
   { bg: 'bg-idea', border: 'border-idea' },
 ] as const;
 
-function PillButton({
+function TagPillButton({
   label,
   selected = false,
   disabled = false,
@@ -45,15 +47,11 @@ function PillButton({
       accessibilityState={{ selected, disabled }}
       disabled={disabled}
       onPress={onPress}
-      className={`min-h-10 items-center justify-center rounded-lg border px-3.5 py-2 ${
-        selected ? 'border-primary bg-primary' : 'border-border bg-card'
+      className={`h-8 items-center justify-center rounded-full border px-3 ${
+        selected ? 'border-foreground bg-foreground' : 'border-border bg-background'
       } ${disabled ? 'opacity-40' : ''}`}
     >
-      <Text
-        className={`text-sm font-semibold ${
-          selected ? 'text-primary-foreground' : 'text-foreground'
-        }`}
-      >
+      <Text className={`text-[13px] ${selected ? 'font-bold text-background' : 'text-foreground'}`}>
         {label}
       </Text>
     </Pressable>
@@ -154,6 +152,8 @@ export function HashtagGraphSheet({
     ? CLUSTER_STYLES[selected.cluster % CLUSTER_STYLES.length]
     : CLUSTER_STYLES[0];
 
+  const scopeLabel = scope === 'all' ? '전체 범위' : scope === 1 ? '1촌 연결' : '2촌 연결';
+
   return (
     <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView className="flex-1 bg-background">
@@ -161,21 +161,28 @@ export function HashtagGraphSheet({
           contentContainerClassName="mx-auto w-full max-w-[960px] gap-4 p-5 pb-10"
           keyboardShouldPersistTaps="handled"
         >
-          <View className="flex-row items-center justify-between gap-3">
+          <View className="flex-row items-center justify-between gap-3 border-b border-border pb-3">
             <View className="flex-1 gap-0.5">
-              <Text accessibilityRole="header" className="text-2xl font-bold text-foreground">
+              <Text accessibilityRole="header" className="text-xl font-bold text-foreground">
                 해시태그 연결망
               </Text>
               <Text className="text-xs text-muted-foreground">
                 같은 일정이나 할 일에 함께 쓰인 주제 태그들이 신경망처럼 연결돼요.
               </Text>
             </View>
-            <PillButton label="닫기" onPress={onClose} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="닫기"
+              onPress={onClose}
+              className="h-9 w-9 items-center justify-center rounded-full active:bg-muted"
+            >
+              <Icon as={XIcon} size={20} className="text-foreground" />
+            </Pressable>
           </View>
 
           {selected ? (
             <>
-              <View className="flex-row flex-wrap gap-2 rounded-xl border border-border bg-muted p-3">
+              <View className="flex-row flex-wrap gap-3">
                 {[
                   ['해시태그 노드', `${stats.nodes}개`],
                   ['신경망 연결선', `${stats.edges}개`],
@@ -183,7 +190,7 @@ export function HashtagGraphSheet({
                 ].map(([label, value]) => (
                   <View
                     key={label}
-                    className="flex-row items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5"
+                    className="flex-row items-center gap-1.5 rounded-full bg-muted px-3 py-1"
                   >
                     <Text className="text-xs text-muted-foreground">{label}</Text>
                     <Text className="text-xs font-bold text-foreground">{value}</Text>
@@ -195,75 +202,48 @@ export function HashtagGraphSheet({
 
               <TagCategoryPanel tags={graph.map((n) => n.tag)} onSelectTag={setSelectedTag} />
 
-              <View className="gap-3 rounded-xl border border-border bg-card p-4">
+              <View className="gap-3 border-t border-border pt-4">
                 <View className="flex-row flex-wrap items-center justify-between gap-2">
-                  <View className="flex-row rounded-lg bg-muted p-1">
-                    {[
-                      [true, '핵심 연결만'],
-                      [false, '모든 연결선'],
-                    ].map(([val, label]) => (
-                      <Pressable
-                        key={String(label)}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: backboneOnly === val }}
-                        onPress={() => setBackboneOnly(Boolean(val))}
-                        className={`rounded-md px-3 py-1.5 ${backboneOnly === val ? 'bg-background' : ''}`}
-                      >
-                        <Text
-                          className={`text-xs font-bold ${backboneOnly === val ? 'text-foreground' : 'text-muted-foreground'}`}
-                        >
-                          {String(label)}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                  <View className="flex-row rounded-lg bg-muted p-1">
-                    {(
-                      [
-                        ['all', '전체 범위'],
-                        [1, '1촌 연결'],
-                        [2, '2촌 연결'],
-                      ] as const
-                    ).map(([val, label]) => (
-                      <Pressable
-                        key={label}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: scope === val }}
-                        onPress={() => setScope(val)}
-                        className={`rounded-md px-3 py-1.5 ${scope === val ? 'bg-background' : ''}`}
-                      >
-                        <Text
-                          className={`text-xs font-bold ${scope === val ? 'text-foreground' : 'text-muted-foreground'}`}
-                        >
-                          {label}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
+                  <SegmentTabs
+                    items={['핵심 연결만', '모든 연결선']}
+                    active={backboneOnly ? '핵심 연결만' : '모든 연결선'}
+                    onChange={(label) => setBackboneOnly(label === '핵심 연결만')}
+                  />
+                  <SegmentTabs
+                    items={['전체 범위', '1촌 연결', '2촌 연결']}
+                    active={scopeLabel}
+                    onChange={(label) =>
+                      setScope(label === '전체 범위' ? 'all' : label === '1촌 연결' ? 1 : 2)
+                    }
+                  />
                 </View>
 
                 <View className="flex-row flex-wrap items-center gap-2">
-                  <TextInput
+                  <Input
                     accessibilityLabel="해시태그 검색"
                     value={query}
                     onChangeText={setQuery}
                     placeholder="태그 검색 (예: 기획, 개발, 인공지능, 운동)"
                     autoCapitalize="none"
                     autoCorrect={false}
-                    className="h-11 min-w-[200px] flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground"
+                    className="h-10 min-w-[200px] flex-1"
                   />
-                  {query.length > 0 && <PillButton label="지우기" onPress={() => setQuery('')} />}
-                  <PillButton
+                  {query.length > 0 && (
+                    <Button variant="ghost" size="sm" onPress={() => setQuery('')}>
+                      <Text>지우기</Text>
+                    </Button>
+                  )}
+                  <TagPillButton
                     label="축소"
                     disabled={zoomIndex <= 0}
                     onPress={() => setZoomIndex((i) => Math.max(0, i - 1))}
                   />
-                  <PillButton
+                  <TagPillButton
                     label="기본 크기"
                     selected={zoomIndex === 1}
                     onPress={() => setZoomIndex(1)}
                   />
-                  <PillButton
+                  <TagPillButton
                     label="확대"
                     disabled={zoomIndex >= ZOOM_STEPS.length - 1}
                     onPress={() => setZoomIndex((i) => Math.min(ZOOM_STEPS.length - 1, i + 1))}
@@ -276,7 +256,7 @@ export function HashtagGraphSheet({
                       filteredTags
                         .slice(0, 8)
                         .map((n) => (
-                          <PillButton
+                          <TagPillButton
                             key={n.tag}
                             label={`${n.tag} (${n.items.length})`}
                             selected={n.tag === selected.tag}
@@ -320,7 +300,7 @@ export function HashtagGraphSheet({
                 </View>
               </View>
 
-              <View className={`gap-2 rounded-xl border-2 bg-card p-4 ${selectedStyle.border}`}>
+              <View className={`gap-1 border-l-4 pl-3 ${selectedStyle.border}`}>
                 <View className="flex-row flex-wrap items-center justify-between gap-2">
                   <Text accessibilityRole="header" className="text-2xl font-bold text-foreground">
                     {selected.tag}
@@ -334,13 +314,11 @@ export function HashtagGraphSheet({
                 </Text>
               </View>
 
-              <Text accessibilityRole="header" className="text-base font-bold text-foreground">
-                함께 쓰인 태그 ({related.length}개)
-              </Text>
+              <DaySectionTitle label="함께 쓰인 태그" count={related.length} />
               <View className="flex-row flex-wrap gap-2">
                 {related.length ? (
                   related.map(([tag, count]) => (
-                    <PillButton
+                    <TagPillButton
                       key={tag}
                       label={`${tag} (${count})`}
                       onPress={() => setSelectedTag(tag)}
@@ -351,49 +329,43 @@ export function HashtagGraphSheet({
                 )}
               </View>
 
-              <Text accessibilityRole="header" className="text-base font-bold text-foreground">
-                {selected.tag} 관련 일정 및 할 일 ({selected.items.length}개)
-              </Text>
-              {selected.items.map((item) => (
-                <View
-                  key={item.id}
-                  className="gap-1.5 rounded-xl border border-border bg-card p-3.5"
-                >
-                  <View className="flex-row items-center justify-between gap-2">
-                    <View
-                      className={`rounded-sm px-2 py-0.5 ${item.kind === 'task' ? 'bg-task-soft' : 'bg-cal-1-soft'}`}
-                    >
-                      <Text
-                        className={`text-xs font-bold ${item.kind === 'task' ? 'text-task' : 'text-cal-1'}`}
-                      >
-                        {item.kind === 'task' ? '할 일' : '일정'}
-                      </Text>
+              <DaySectionTitle
+                label={`${selected.tag} 관련 일정 및 할 일`}
+                count={selected.items.length}
+              />
+              <View>
+                {selected.items.map((item, idx) => {
+                  const whenText = item.startAt
+                    ? item.endAt
+                      ? `${dayKey(item.startAt)} (${timeLabel(item.startAt)} ~ ${timeLabel(item.endAt)})`
+                      : dayKey(item.startAt)
+                    : '시간 미정';
+                  return (
+                    <View key={item.id}>
+                      {idx > 0 ? <View className="h-px bg-border" /> : null}
+                      <RailCard
+                        type={item.kind === 'task' ? 'task' : 'event'}
+                        title={item.title}
+                        meta={whenText}
+                      />
+                      <View className="pb-2">
+                        <HiddenTagDisclosure
+                          itemId={item.id}
+                          title={item.title}
+                          corpusFreq={corpusFreq}
+                          compact
+                          onPressTag={setSelectedTag}
+                        />
+                      </View>
                     </View>
-                    <Text className="text-xs text-muted-foreground">
-                      {item.startAt
-                        ? item.endAt
-                          ? `${dayKey(item.startAt)} (${timeLabel(item.startAt)} ~ ${timeLabel(item.endAt)})`
-                          : dayKey(item.startAt)
-                        : '시간 미정'}
-                    </Text>
-                  </View>
-                  <Text className="text-sm text-foreground">{item.title}</Text>
-                  <HiddenTagDisclosure
-                    itemId={item.id}
-                    title={item.title}
-                    corpusFreq={corpusFreq}
-                    compact
-                    onPressTag={setSelectedTag}
-                  />
-                </View>
-              ))}
+                  );
+                })}
+              </View>
 
-              <Text accessibilityRole="header" className="text-base font-bold text-foreground">
-                전체 태그 목록 ({filteredTags.length}개)
-              </Text>
+              <DaySectionTitle label="전체 태그 목록" count={filteredTags.length} />
               <View className="flex-row flex-wrap gap-2">
                 {filteredTags.map(({ tag, items: list }) => (
-                  <PillButton
+                  <TagPillButton
                     key={tag}
                     label={`${tag} (${list.length})`}
                     selected={tag === selected.tag}
