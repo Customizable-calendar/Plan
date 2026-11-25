@@ -1,5 +1,5 @@
-import { palette } from '@noteapp/ui';
-import { SymbolView } from 'expo-symbols';
+import { Button, palette } from '@noteapp/ui';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, TextInput, type TextInputInstance, View } from 'react-native';
 
@@ -8,10 +8,17 @@ import {
   type LinePart,
   nextPrefix,
   parseBlocks,
+  previousFilledLine,
+  splitTags,
   type PreviewBlock,
   removeLine,
   replaceLine,
 } from './blocks';
+import { moveCursor } from './cursor';
+import { type FieldKind, fieldKind, type FieldTarget } from './FieldSheet';
+import { FileImage, FileImageRow } from './FileImage';
+import { TaskTable } from './TaskTable';
+import { FENCE_CLOSE, taskLine } from './tasks';
 
 // 제목 크기는 디자인 시스템 글자 종류(h2, h3, h4)를 따라요.
 const HEADING_CLASS = {
@@ -24,19 +31,49 @@ interface Props {
   body: string;
   /** 고친 본문 전체를 돌려줘요. */
   onChange: (body: string) => void;
+  /** 커서를 옮겨 둘 줄 (새 줄을 만들거나 줄을 지운 뒤). 편집기가 들고 있어요. */
+  focusLine: number | null;
+  onFocusLine: (line: number | null) => void;
+  /** 사용자가 마지막으로 누른 줄. 서식 막대가 그 아래에 새 줄을 넣어요. */
+  onActiveLine: (line: number) => void;
+  /** 파일 카드의 버튼: 열기, 또는 (PDF면) 논문 내용 다시 뽑기 */
+  onFile?: (fileId: string, action: 'open' | 'extract') => void;
+  /** 본문 사진의 주소를 받아요. 없으면(계정 연결이 없는 빌드) 사진 줄을 그리지 않아요. */
+  imageUrl?: (fileId: string) => Promise<string>;
+  /** 날짜, 사람, 장소 칸의 도우미 버튼을 눌렀을 때 */
+  onFieldPick?: (target: FieldTarget) => void;
 }
 
 /**
  * 본문을 꾸며서 보여주는 화면. 글자를 누르면 그 자리에서 바로 고칠 수 있어요.
- * 고친 글은 본문의 그 줄에만 반영돼요. 새 제목이나 문단을 넣으려면 편집으로 돌아가요.
+ * 고친 글은 본문의 그 줄에만 반영돼요. 새 제목이나 항목은 아래 서식 막대로 넣어요.
  */
-export function Preview({ body, onChange }: Props) {
+export function Preview({
+  body,
+  onChange,
+  focusLine,
+  onFocusLine,
+  onActiveLine,
+  onFile,
+  imageUrl,
+  onFieldPick,
+}: Props) {
   const blocks = parseBlocks(body);
-  // 엔터로 새 줄을 만들거나 줄을 지운 뒤 커서를 둘 줄
-  const [focusLine, setFocusLine] = useState<number | null>(null);
+  const setFocusLine = onFocusLine;
 
   if (blocks.length === 0) {
-    return <Text className="text-sm text-muted-foreground">아직 쓴 내용이 없어요.</Text>;
+    return (
+      <Text className="text-sm text-muted-foreground">
+        아직 쓴 내용이 없어요. 아래 서식 막대에서 제목이나 항목을 골라 넣어 보세요.
+      </Text>
+    );
+  }
+
+  /** 줄을 없애고, 글이 있는 윗줄 끝으로 커서를 옮겨요. */
+  function removeAndGoUp(line: number) {
+    const up = previousFilledLine(body, line);
+    onChange(removeLine(body, line));
+    setFocusLine(up >= 0 ? up : null);
   }
 
   /** 줄 하나를 고칠 때 쓰는 입력칸 속성을 만들어요. */
@@ -44,8 +81,15 @@ export function Preview({ body, onChange }: Props) {
     return {
       value: part.text,
       focused: focusLine === part.line,
-      onFocused: () => setFocusLine(null),
-      onText: (text: string) => onChange(replaceLine(body, part.line, part.prefix + text)),
+      onFocused: () => {
+        setFocusLine(null);
+        onActiveLine(part.line);
+      },
+      onText: (text: string) => {
+        // 글만 있는 줄을 다 지우면 줄을 없애고 윗줄로 가요. 빈 줄은 화면에 안 보여서 입력칸이 사라지거든요.
+        if (block.kind === 'paragraph' && text === '') return removeAndGoUp(part.line);
+        onChange(replaceLine(body, part.line, part.prefix + text));
+      },
       // 목록에서 엔터: 커서 뒤 글을 새 항목으로 내려요. 목록이 아니면 줄을 나누지 않아요.
       onEnter: (before: string, after: string) => {
         const prefix = nextPrefix(block);
@@ -57,11 +101,12 @@ export function Preview({ body, onChange }: Props) {
         onChange(insertLineAfter(kept, part.line, prefix + after));
         setFocusLine(part.line + 1);
       },
-      // 빈 목록 항목에서 지우기: 그 줄을 없애고 윗줄로 가요.
+      // 빈 줄에서 지우기(Backspace): 서식 줄이면 서식을 풀어 기호만 글로 남기고('### '는 '###'),
+      // 글만 있는 줄이면 줄을 없애고 윗줄로 가요. 그래서 계속 누르면 기호도 한 글자씩 지워져요.
       onDeleteEmpty: () => {
-        if (nextPrefix(block) === null) return;
-        onChange(removeLine(body, part.line));
-        setFocusLine(part.line - 1);
+        if (block.kind === 'paragraph') return removeAndGoUp(part.line);
+        onChange(replaceLine(body, part.line, part.prefix.trimEnd()));
+        setFocusLine(part.line);
       },
     };
   }
@@ -83,11 +128,30 @@ export function Preview({ body, onChange }: Props) {
                 key={row.line}
                 className={`flex-row gap-3 px-3 py-2 ${index > 0 ? 'border-t border-border' : ''}`}
               >
-                <Text className="w-24 text-sm leading-6 text-muted-foreground">{row.label}</Text>
+                {/* 이름도 그 자리에서 고쳐요. 콜론과 줄바꿈은 이름과 값을 나누는 글자라 지워요.
+                    이름을 다 지워도 표에 남도록 빈 이름은 띄어쓰기 하나로 적어요. */}
+                <TextInput
+                  value={row.label}
+                  onChangeText={(label) => {
+                    const name = label.replace(/[:\n]/g, '').slice(0, 20) || ' ';
+                    onChange(replaceLine(body, row.line, `- ${name}: ${row.text}`));
+                  }}
+                  placeholder="이름"
+                  placeholderTextColor={palette.mutedForeground}
+                  onFocus={() => onActiveLine(row.line)}
+                  accessibilityLabel="항목 이름"
+                  className="w-28 p-0 text-sm leading-6 text-muted-foreground web:outline-none"
+                />
                 <LineInput
                   {...lineProps(row, block)}
                   placeholder="값 없음"
                   className="flex-1 text-base leading-6 text-foreground"
+                />
+                <FieldHelper
+                  label={row.label}
+                  onPress={(kind) =>
+                    onFieldPick?.({ line: row.line, label: row.label, value: row.text, kind })
+                  }
                 />
               </View>
             ))}
@@ -164,6 +228,52 @@ export function Preview({ body, onChange }: Props) {
           </View>
         );
 
+      case 'file': {
+        const pdf = isPdf(block.name);
+        return (
+          <View className="flex-row items-center gap-3 rounded-lg border border-border px-3 py-2.5">
+            <SymbolView
+              name={
+                pdf
+                  ? { ios: 'doc.richtext', android: 'picture_as_pdf', web: 'picture_as_pdf' }
+                  : { ios: 'doc', android: 'description', web: 'description' }
+              }
+              size={22}
+              tintColor={palette.primary}
+            />
+            <Text className="flex-1 text-sm font-medium text-foreground" numberOfLines={1}>
+              {block.name || '붙인 파일'}
+            </Text>
+            {pdf ? (
+              <Button size="sm" variant="ghost" onPress={() => onFile?.(block.fileId, 'extract')}>
+                <Text className="text-sm text-primary">초록, 서론 뽑기</Text>
+              </Button>
+            ) : null}
+            <Button size="sm" variant="soft" onPress={() => onFile?.(block.fileId, 'open')}>
+              <Text className="text-sm font-medium text-primary-soft-foreground">열기</Text>
+            </Button>
+          </View>
+        );
+      }
+
+      case 'tasks': {
+        const last = block.rows[block.rows.length - 1]?.line ?? block.start;
+        return (
+          <TaskTable
+            rows={block.rows}
+            onRow={(row) => onChange(replaceLine(body, row.line, taskLine(row)))}
+            onRemove={(row) => onChange(removeLine(body, row.line))}
+            onAdd={() => {
+              const empty = taskLine({ subject: '', task: '', plan: '', actual: '', result: '' });
+              let next = insertLineAfter(body, last, empty);
+              // 닫는 줄(```)이 없던 표면 같이 닫아 줘요.
+              if (block.end === null) next = insertLineAfter(next, last + 1, FENCE_CLOSE);
+              onChange(next);
+            }}
+          />
+        );
+      }
+
       case 'paragraph':
         return (
           <LineInput {...lineProps(block, block)} className="text-base leading-7 text-foreground" />
@@ -171,13 +281,80 @@ export function Preview({ body, onChange }: Props) {
     }
   }
 
+  // 사진 줄이 이어지면 한 묶음으로 옆으로 넘겨 보게 해요. 사진 한 장이면 너비에 맞춰 크게 보여요.
+  const rows: {
+    index: number;
+    photos?: { line: number; fileId: string }[];
+    block?: PreviewBlock;
+  }[] = [];
+  blocks.forEach((block, index) => {
+    if (block.kind === 'file' && !isPdf(block.name)) {
+      const last = rows[rows.length - 1];
+      const photo = { line: block.line, fileId: block.fileId };
+      if (last?.photos && last.photos[last.photos.length - 1].line === block.line - 1) {
+        last.photos.push(photo);
+      } else rows.push({ index, photos: [photo] });
+      return;
+    }
+    rows.push({ index, block });
+  });
+
   return (
     <View className="gap-2">
-      {blocks.map((block, index) => (
+      {rows.map(({ index, block, photos }) => (
         // 줄을 넣거나 빼도 입력칸이 자리를 지키도록 순서(index)를 key로 써요.
-        <View key={index}>{renderBlock(block)}</View>
+        <View key={index}>
+          {block ? (
+            renderBlock(block)
+          ) : photos && imageUrl ? (
+            // 사진을 누르면 그 아래가 서식 막대와 사진함의 넣을 자리가 돼요.
+            <Pressable onPress={() => onActiveLine(photos[photos.length - 1].line)}>
+              {photos.length === 1 ? (
+                <FileImage fileId={photos[0].fileId} resolve={imageUrl} />
+              ) : (
+                <FileImageRow fileIds={photos.map((p) => p.fileId)} resolve={imageUrl} />
+              )}
+            </Pressable>
+          ) : null}
+        </View>
       ))}
     </View>
+  );
+}
+
+function isPdf(name: string) {
+  return /\.pdf$/i.test(name);
+}
+
+const FIELD_ICONS: Record<FieldKind, { icon: SymbolViewProps['name']; label: string }> = {
+  date: {
+    icon: { ios: 'calendar', android: 'calendar_month', web: 'calendar_month' },
+    label: '달력에서 날짜 고르기',
+  },
+  people: {
+    icon: { ios: 'person.badge.plus', android: 'person_add', web: 'person_add' },
+    label: '메일로 사람 넣기',
+  },
+  place: {
+    icon: { ios: 'mappin.and.ellipse', android: 'location_on', web: 'location_on' },
+    label: '지도에서 장소 넣기',
+  },
+};
+
+/** 날짜, 사람, 장소 칸 오른쪽의 도우미 버튼. 그 밖의 칸에는 아무것도 없어요. */
+function FieldHelper({ label, onPress }: { label: string; onPress: (kind: FieldKind) => void }) {
+  const kind = fieldKind(label);
+  if (!kind) return null;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={FIELD_ICONS[kind].label}
+      hitSlop={8}
+      onPress={() => onPress(kind)}
+      className="h-6 w-6 items-center justify-center rounded-md active:bg-muted"
+    >
+      <SymbolView name={FIELD_ICONS[kind].icon} size={18} tintColor={palette.primary} />
+    </Pressable>
   );
 }
 
@@ -196,14 +373,52 @@ interface LineInputProps {
 /** 꾸민 모양 그대로 고칠 수 있는 한 줄 입력칸. 길면 여러 줄로 넘어가요. */
 function LineInput(props: LineInputProps) {
   const ref = useRef<TextInputInstance>(null);
+  // 커서를 이미 옮겼는지. 글자를 칠 때마다 커서가 끝으로 튀지 않게, focused가 켜질 때 한 번만 옮겨요.
+  const moved = useRef(false);
+  const { focused, value } = props;
+  // 해시태그가 있는 줄은 고치지 않을 때 태그를 칩 색으로 보여줘요. 누르면 입력칸으로 바뀌어요.
+  const [editing, setEditing] = useState(false);
+  const parts = splitTags(value);
+  const showText = parts.some((p) => p.tag) && !editing && !focused;
+  // 편집기가 커서를 옮겨 달라고 했거나(focused), 태그 줄을 눌러 입력칸으로 바뀐 때(editing)
+  const wantFocus = focused || editing;
 
   useEffect(() => {
-    if (props.focused) ref.current?.focus();
-  }, [props.focused]);
+    if (!wantFocus) {
+      moved.current = false;
+      return;
+    }
+    if (moved.current) return;
+    moved.current = true;
+    ref.current?.focus();
+    // 커서는 글 끝에 둬요. 서식을 푼 뒤 바로 이어서 지울 수 있게요.
+    moveCursor(ref.current, value.length);
+  }, [wantFocus, value.length]);
+
+  if (showText) {
+    return (
+      <Text
+        onPress={() => setEditing(true)}
+        accessibilityHint="눌러서 고쳐요"
+        className={props.className}
+      >
+        {parts.map((part, i) =>
+          part.tag ? (
+            <Text key={i} className="bg-primary-soft font-medium text-primary-soft-foreground">
+              {part.text}
+            </Text>
+          ) : (
+            part.text
+          ),
+        )}
+      </Text>
+    );
+  }
 
   return (
     <TextInput
       ref={ref}
+      onBlur={() => setEditing(false)}
       value={props.value}
       multiline
       rows={1} // 웹 입력칸은 기본이 두 줄 높이라 한 줄로 시작해요
@@ -224,7 +439,7 @@ function LineInput(props: LineInputProps) {
         props.onDeleteEmpty();
       }}
       // 웹 입력칸은 내용만큼 저절로 늘어나지 않아서 field-sizing으로 늘려요. 앱에서는 원래 늘어나요.
-      className={`p-0 web:[field-sizing:content] ${props.className}`}
+      className={`p-0 web:outline-none web:[field-sizing:content] ${props.className}`}
     />
   );
 }

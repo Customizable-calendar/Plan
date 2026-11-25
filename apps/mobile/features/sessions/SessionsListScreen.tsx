@@ -24,6 +24,7 @@ import {
   removeDraftSession,
 } from './data';
 import { shortDate } from './format';
+import { GROUPS, groupOf } from './groups';
 import { TemplatePickerModal } from './TemplatePickerModal';
 
 const CATEGORIES: { key: string; value: TemplateCategory | undefined; label: string }[] = [
@@ -72,16 +73,32 @@ export function SessionsListScreen() {
   }, [category, query, reload]);
 
   // 양식별로 문서를 묶어 폴더 트리로 보여 줘요.
+  // 블로그처럼 형식이 여러 개인 분류는 '블로그' 폴더 하나 아래에 형식별 폴더(블로그 글, 사진 포스트)로 넣어요.
   const groups = useMemo(() => {
     if (!items) return [];
-    const map = new Map<
-      string,
-      { id: string; name: string; template?: Template; docs: DocumentItem[] }
-    >();
+    const map = new Map<string, Folder>();
     for (const item of items) {
-      const id = item.template?.id ?? 'other';
-      const name = item.template?.name ?? '기타 문서';
-      const group = map.get(id) ?? { id, name, template: item.template, docs: [] };
+      const template = item.template;
+      const id = template?.id ?? 'other';
+      const name = template?.name ?? '기타 문서';
+      const category = groupOf(template);
+      if (category) {
+        const parent = map.get(category) ?? {
+          id: category,
+          name: GROUPS[category]?.name ?? name,
+          docs: [],
+          subs: [],
+        };
+        let sub = parent.subs?.find((s) => s.id === id);
+        if (!sub) {
+          sub = { id, name, template, docs: [] };
+          parent.subs?.push(sub);
+        }
+        sub.docs.push(item);
+        map.set(category, parent);
+        continue;
+      }
+      const group = map.get(id) ?? { id, name, template, docs: [] };
       group.docs.push(item);
       map.set(id, group);
     }
@@ -175,40 +192,20 @@ export function SessionsListScreen() {
         ) : (
           <View>
             <DaySectionTitle label="자료함" count={items.length} />
-            {groups.map((group) => {
-              const expanded = !collapsed[group.id];
-              return (
-                <View key={group.id}>
-                  <TreeRow
-                    icon={expanded ? FolderOpenIcon : FolderIcon}
-                    label={group.name}
-                    strong
-                    count={group.docs.length}
-                    expanded={expanded}
-                    onPress={() => setCollapsed((c) => ({ ...c, [group.id]: !c[group.id] }))}
-                    onAdd={group.template ? () => startNew(group.template!) : undefined}
-                  />
-                  {expanded
-                    ? group.docs.map((item) => (
-                        <TreeRow
-                          key={item.document.id}
-                          icon={FileTextIcon}
-                          label={item.document.title}
-                          depth={1}
-                          meta={shortDate(item.document.updatedAt)}
-                          onPress={() =>
-                            router.push({
-                              pathname: '/editor/[id]',
-                              params: { id: item.document.id },
-                            })
-                          }
-                          onLongPress={() => setDeleting(item)}
-                        />
-                      ))
-                    : null}
-                </View>
-              );
-            })}
+            {groups.map((group) => (
+              <FolderTree
+                key={group.id}
+                folder={group}
+                depth={0}
+                collapsed={collapsed}
+                onToggle={(id) => setCollapsed((c) => ({ ...c, [id]: !c[id] }))}
+                onAdd={startNew}
+                onOpen={(item) =>
+                  router.push({ pathname: '/editor/[id]', params: { id: item.document.id } })
+                }
+                onLongPress={setDeleting}
+              />
+            ))}
           </View>
         )}
       </ScrollView>
@@ -252,6 +249,65 @@ export function SessionsListScreen() {
         onConfirm={confirmRemoveDraft}
         onCancel={() => setRemovingDraft(null)}
       />
+    </View>
+  );
+}
+
+/** 자료함 폴더 하나. 형식 폴더(subs)가 있으면 그 아래에, 없으면 문서를 바로 보여줘요. */
+interface Folder {
+  id: string;
+  name: string;
+  template?: Template;
+  docs: DocumentItem[];
+  subs?: Folder[];
+}
+
+function folderCount(folder: Folder): number {
+  return folder.docs.length + (folder.subs ?? []).reduce((n, s) => n + folderCount(s), 0);
+}
+
+function FolderTree(props: {
+  folder: Folder;
+  depth: number;
+  collapsed: Record<string, boolean>;
+  onToggle: (id: string) => void;
+  onAdd: (template: Template) => void;
+  onOpen: (item: DocumentItem) => void;
+  onLongPress: (item: DocumentItem) => void;
+}) {
+  const { folder, depth } = props;
+  const expanded = !props.collapsed[folder.id];
+  const template = folder.template;
+  return (
+    <View>
+      <TreeRow
+        icon={expanded ? FolderOpenIcon : FolderIcon}
+        label={folder.name}
+        strong={depth === 0}
+        depth={depth}
+        count={folderCount(folder)}
+        expanded={expanded}
+        onPress={() => props.onToggle(folder.id)}
+        onAdd={template ? () => props.onAdd(template) : undefined}
+      />
+      {expanded ? (
+        <>
+          {folder.subs?.map((sub) => (
+            <FolderTree key={sub.id} {...props} folder={sub} depth={depth + 1} />
+          ))}
+          {folder.docs.map((item) => (
+            <TreeRow
+              key={item.document.id}
+              icon={FileTextIcon}
+              label={item.document.title}
+              depth={depth + 1}
+              meta={shortDate(item.document.updatedAt)}
+              onPress={() => props.onOpen(item)}
+              onLongPress={() => props.onLongPress(item)}
+            />
+          ))}
+        </>
+      ) : null}
     </View>
   );
 }

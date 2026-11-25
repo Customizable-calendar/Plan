@@ -1,0 +1,32 @@
+{
+  "id": "photo-post",
+  "name": "사진 포스트",
+  "description": "사진이 중심이고, 사진에 짧은 글과 해시태그를 붙여요. SNS 게시물처럼 써요.",
+  "sections": [
+    {
+      "key": "photos",
+      "title": "사진",
+      "hint": "보여 줄 사진. 첫 사진이 대표 사진이에요"
+    },
+    {
+      "key": "caption",
+      "title": "짧은 글",
+      "hint": "사진을 보고 떠오른 말을 세 줄 안으로"
+    },
+    {
+      "key": "hashtags",
+      "title": "해시태그",
+      "hint": "사진을 찾을 때 쓸 태그"
+    },
+    {
+      "key": "info",
+      "title": "정보",
+      "hint": "장소, 날짜, 함께한 사람"
+    }
+  ],
+  "aiInstructions": "사진 설명은 짧게, 사용자의 말투로 써요. 사진과 메모에 없는 장소, 사람, 사실은 지어내지 않아요. 해시태그는 사용자가 쓴 말에서만 골라요.",
+  "category": "blog",
+  "icon": "pencil",
+  "tags": ["#사진", "#짧은글"],
+  "defaultContent": "## 사진\n\n## 짧은 글\n> \n\n## 해시태그\n- 태그: \n\n## 정보\n- 장소: \n- 날짜: \n- 함께한 사람: \n"
+}

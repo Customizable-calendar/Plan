@@ -3,7 +3,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { SlashItem } from './slash';
 
-/** `/`를 치면 도구 막대 위에 뜨는 명령 목록 */
+/** `//`를 치면 서식 막대 위에 뜨는 명령 목록 */
 export function SlashMenu({
   items,
   onPick,
