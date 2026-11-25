@@ -2,9 +2,17 @@
 import type { Template } from '../types';
 import blog from './blog.json';
 import meetingNotes from './meeting-notes.json';
+import photoPost from './photo-post.json';
 import researchPaper from './research-paper.json';
 import studyLog from './study-log.json';
 import workLog from './work-log.json';
 
 // JSON은 category 같은 값을 그냥 string으로 읽어서, Template 모양이라고 알려줘요. 모양은 contract 테스트가 확인해요.
-export const templates = [workLog, studyLog, meetingNotes, blog, researchPaper] as Template[];
+export const templates = [
+  workLog,
+  studyLog,
+  meetingNotes,
+  blog,
+  photoPost,
+  researchPaper,
+] as Template[];
