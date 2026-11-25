@@ -35,14 +35,21 @@ describe('세션 템플릿', () => {
     for (const t of templates) expect(t.sections.length).toBeGreaterThan(0);
   });
 
-  it('기본 양식 4개는 분류와 태그가 있고, 분류가 겹치지 않는다', () => {
+  it('분류가 있는 양식은 태그가 있고, 블로그만 두 형식(글과 사진, 사진과 짧은 글)이다', () => {
     const categorized = templates.filter((t) => t.category);
     expect(categorized.map((t) => t.category).sort()).toEqual([
+      'blog',
       'blog',
       'meeting',
       'research',
       'work',
     ]);
+    expect(
+      categorized
+        .filter((t) => t.category === 'blog')
+        .map((t) => t.id)
+        .sort(),
+    ).toEqual(['blog', 'photo-post']);
     for (const t of categorized) {
       expect(t.tags?.length).toBeGreaterThan(0);
       for (const tag of t.tags ?? []) expect(tag.startsWith('#')).toBe(true);
