@@ -1,3 +1,5 @@
+import type { SemanticLinkReason, SemanticTagLink } from './embeddingMath';
+
 /**
  * Force-directed hashtag graph builder and layout engine.
  * - Velocity Verlet, phyllotaxis, link/repulsion/collide forces ported from `d3/d3-force` (ISC License).
@@ -11,6 +13,15 @@ export type CalendarTagItem = {
   endAt?: string;
   /** 내부 태그 저장소나 자동 추출 알고리즘이 계산한 해시태그 목록이에요. */
   tags?: readonly string[];
+};
+
+export type SemanticLinkMeta = {
+  similarity: number;
+  reason: SemanticLinkReason;
+};
+
+export type BuildHashtagGraphOptions = {
+  semanticLinks?: readonly SemanticTagLink[];
 };
 
 function normalizeProvidedTags(rawTags: readonly string[]): string[] {
@@ -36,10 +47,19 @@ export type TagNode = {
   tag: string;
   items: CalendarTagItem[];
   links: Map<string, number>;
+  semanticLinks?: Map<string, SemanticLinkMeta>;
   cluster: number;
   weight: number;
 };
-export type TagEdge = { key: string; source: string; target: string; weight: number };
+export type TagEdge = {
+  key: string;
+  source: string;
+  target: string;
+  weight: number;
+  kind?: 'cooccurrence' | 'semantic';
+  similarity?: number;
+  reason?: SemanticLinkReason;
+};
 export type PositionedTagNode = TagNode & { x: number; y: number; radius: number; hop: number };
 export type PositionedTagEdge = TagEdge & {
   x1: number;
@@ -67,8 +87,19 @@ export function extractHashtags(text: string): string[] {
   return [...tags];
 }
 
+function combinedNeighbors(node: TagNode): Map<string, number> {
+  const combined = new Map<string, number>(node.links);
+  if (node.semanticLinks) {
+    for (const [nbTag, meta] of node.semanticLinks) {
+      combined.set(nbTag, (combined.get(nbTag) ?? 0) + meta.similarity * 2.5);
+    }
+  }
+  return combined;
+}
+
 function assignClusters(nodes: TagNode[]): void {
-  const connected = nodes.filter((node) => node.links.size > 0);
+  const neighborMaps = new Map(nodes.map((n) => [n.tag, combinedNeighbors(n)]));
+  const connected = nodes.filter((node) => (neighborMaps.get(node.tag)?.size ?? 0) > 0);
   if (!connected.length) {
     nodes.forEach((node, i) => {
       node.cluster = i % CLUSTER_COUNT;
@@ -83,8 +114,9 @@ function assignClusters(nodes: TagNode[]): void {
     let bestScore = -Infinity;
     for (const cand of connected) {
       if (seedSet.has(cand.tag)) continue;
+      const candLinks = neighborMaps.get(cand.tag)!;
       let linkToSeeds = 0;
-      for (const seed of seeds) linkToSeeds += cand.links.get(seed.tag) ?? 0;
+      for (const seed of seeds) linkToSeeds += candLinks.get(seed.tag) ?? 0;
       const score = cand.weight / (1 + linkToSeeds * 12);
       if (score > bestScore) {
         bestScore = score;
@@ -100,9 +132,10 @@ function assignClusters(nodes: TagNode[]): void {
   const sizes = new Array<number>(seeds.length).fill(1);
   for (let pass = 0; pass < 5; pass++) {
     for (const node of nodes) {
-      if (seedSet.has(node.tag) || node.links.size === 0) continue;
+      const nbMap = neighborMaps.get(node.tag);
+      if (seedSet.has(node.tag) || !nbMap || nbMap.size === 0) continue;
       const scores = new Array<number>(seeds.length).fill(0);
-      for (const [neighborTag, weight] of node.links) {
+      for (const [neighborTag, weight] of nbMap) {
         const nb = nodeMap.get(neighborTag);
         if (nb && nb.cluster >= 0 && nb.cluster < seeds.length)
           scores[nb.cluster] += weight / Math.sqrt(sizes[nb.cluster] || 1);
@@ -119,7 +152,10 @@ function assignClusters(nodes: TagNode[]): void {
   for (const node of nodes) if (node.cluster < 0) node.cluster = fallback++ % CLUSTER_COUNT;
 }
 
-export function buildHashtagGraph(items: readonly CalendarTagItem[]): TagNode[] {
+export function buildHashtagGraph(
+  items: readonly CalendarTagItem[],
+  options?: BuildHashtagGraphOptions,
+): TagNode[] {
   const graph = new Map<string, TagNode>();
   for (const item of items) {
     const tags =
@@ -131,6 +167,7 @@ export function buildHashtagGraph(items: readonly CalendarTagItem[]): TagNode[] 
         tag,
         items: [],
         links: new Map<string, number>(),
+        semanticLinks: new Map<string, SemanticLinkMeta>(),
         cluster: -1,
         weight: 0,
       };
@@ -140,15 +177,31 @@ export function buildHashtagGraph(items: readonly CalendarTagItem[]): TagNode[] 
       graph.set(tag, node);
     }
   }
+  for (const link of options?.semanticLinks ?? []) {
+    if (link.source === link.target) continue;
+    const nodeA = graph.get(link.source);
+    const nodeB = graph.get(link.target);
+    if (!nodeA || !nodeB) continue;
+    const prevA = nodeA.semanticLinks?.get(link.target);
+    if (!prevA || link.similarity > prevA.similarity) {
+      nodeA.semanticLinks?.set(link.target, { similarity: link.similarity, reason: link.reason });
+    }
+    const prevB = nodeB.semanticLinks?.get(link.source);
+    if (!prevB || link.similarity > prevB.similarity) {
+      nodeB.semanticLinks?.set(link.source, { similarity: link.similarity, reason: link.reason });
+    }
+  }
   for (const node of graph.values()) {
     let sum = 0;
     for (const w of node.links.values()) sum += w;
+    for (const meta of node.semanticLinks?.values() ?? []) sum += meta.similarity * 0.6;
     node.weight = node.items.length + sum * 0.5;
   }
   const sorted = [...graph.values()].sort(
     (a, b) =>
       b.items.length - a.items.length ||
       b.links.size - a.links.size ||
+      (b.semanticLinks?.size ?? 0) - (a.semanticLinks?.size ?? 0) ||
       a.tag.localeCompare(b.tag, 'ko'),
   );
   assignClusters(sorted);
@@ -163,7 +216,35 @@ export function buildHashtagEdges(nodes: readonly TagNode[]): TagEdge[] {
       if (!allowed.has(other) || node.tag === other) continue;
       const [source, target] = node.tag < other ? [node.tag, other] : [other, node.tag];
       const key = `${source}:${target}`;
-      if (!edges.has(key)) edges.set(key, { key, source, target, weight });
+      if (!edges.has(key)) {
+        const semantic = node.semanticLinks?.get(other);
+        edges.set(key, {
+          key,
+          source,
+          target,
+          weight,
+          kind: 'cooccurrence',
+          ...(semantic ? { similarity: semantic.similarity, reason: semantic.reason } : {}),
+        });
+      }
+    }
+  }
+  for (const node of nodes) {
+    for (const [other, meta] of node.semanticLinks ?? []) {
+      if (!allowed.has(other) || node.tag === other) continue;
+      const [source, target] = node.tag < other ? [node.tag, other] : [other, node.tag];
+      const key = `${source}:${target}`;
+      if (!edges.has(key)) {
+        edges.set(key, {
+          key,
+          source,
+          target,
+          weight: Math.max(0.6, Number((meta.similarity * 2.2).toFixed(2))),
+          kind: 'semantic',
+          similarity: meta.similarity,
+          reason: meta.reason,
+        });
+      }
     }
   }
   return [...edges.values()].sort(
@@ -183,7 +264,9 @@ export function computeHopDistances(
   for (let head = 0; head < queue.length; head++) {
     const cur = queue[head];
     const nextHop = (dist.get(cur) ?? Infinity) + 1;
-    for (const nb of nodeMap.get(cur)?.links.keys() ?? []) {
+    const node = nodeMap.get(cur);
+    const neighbors = [...(node?.links.keys() ?? []), ...(node?.semanticLinks?.keys() ?? [])];
+    for (const nb of neighbors) {
       if ((dist.get(nb) ?? Infinity) > nextHop) {
         dist.set(nb, nextHop);
         queue.push(nb);
@@ -226,9 +309,10 @@ export function layoutHashtagGraph(
   });
   type SimNode = PositionedTagNode & { vx: number; vy: number; deg: number; repel: number };
   const simNodes: SimNode[] = ordered.map((node, i) => {
+    const linkTotal = node.links.size + (node.semanticLinks?.size ?? 0);
     const radius = Math.min(
       19,
-      9 + Math.sqrt(node.items.length) * 2.5 + Math.min(2.5, node.links.size * 0.35),
+      9 + Math.sqrt(node.items.length) * 2.5 + Math.min(2.5, linkTotal * 0.35),
     );
     const r = node.tag === focusTag ? 0 : 10 * Math.sqrt(0.5 + i);
     const target = clusterTargets[Math.max(0, node.cluster) % CLUSTER_COUNT];
@@ -240,8 +324,8 @@ export function layoutHashtagGraph(
       y: cy + target.oy + r * Math.sin(i * initAngle) * 0.65,
       vx: 0,
       vy: 0,
-      deg: Math.max(1, node.links.size),
-      repel: -240 * (1 + 0.08 * node.links.size),
+      deg: Math.max(1, linkTotal),
+      repel: -240 * (1 + 0.08 * linkTotal),
     };
   });
 
@@ -251,6 +335,10 @@ export function layoutHashtagGraph(
     const source = simMap.get(edge.source),
       target = simMap.get(edge.target);
     if (!source || !target) return [];
+    const baseDist =
+      edge.kind === 'semantic'
+        ? Math.max(66, 118 - (edge.similarity ?? 0.65) * 44)
+        : Math.max(72, 126 - edge.weight * 8);
     return [
       {
         source,
@@ -260,7 +348,7 @@ export function layoutHashtagGraph(
           1,
           (1 / Math.min(source.deg, target.deg)) * (1 + Math.min(1.5, (edge.weight - 1) * 0.25)),
         ),
-        distance: Math.max(72, 126 - edge.weight * 8) * Math.min(1.25, Math.max(0.8, width / 460)),
+        distance: baseDist * Math.min(1.25, Math.max(0.8, width / 460)),
       },
     ];
   });
@@ -414,6 +502,7 @@ export function layoutHashtagGraph(
     const backbone =
       active ||
       edge.weight >= 2 ||
+      (edge.kind === 'semantic' && (edge.similarity ?? 0) >= 0.7) ||
       topEdge.get(edge.source) === edge.key ||
       topEdge.get(edge.target) === edge.key;
     return !backboneOnly || backbone

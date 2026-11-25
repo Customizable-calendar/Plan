@@ -8,6 +8,15 @@ import {
   stripInlineHashtags,
 } from './autoTags.ts';
 import {
+  buildUnigramIndex,
+  computeLexicalSimilarity,
+  computeSemanticLinks,
+  cosineSimilarity,
+  parseSafetensorsHeader,
+  poolQuantizedRows,
+  tokenizeUnigram,
+} from './embeddingMath.ts';
+import {
   buildHashtagEdges,
   buildHashtagGraph,
   computeHopDistances,
@@ -475,4 +484,149 @@ test('validateCalendarEventInput은 DB 제약 조건(제목 1~200자, 종료 >= 
       endAt: '2026-10-28T02:00:00Z',
     }),
   );
+});
+
+test('parseSafetensorsHeader와 Unigram 토크나이저는 INT8 정적 임베딩 행을 역양자화해요', () => {
+  const headerJson = JSON.stringify({
+    weights: { dtype: 'F32', shape: [6], data_offsets: [0, 24] },
+    embeddings: { dtype: 'I8', shape: [6, 4], data_offsets: [24, 48] },
+  });
+  const headerBytes = new TextEncoder().encode(headerJson);
+  const buf = new ArrayBuffer(8 + headerBytes.byteLength);
+  new DataView(buf).setUint32(0, headerBytes.byteLength, true);
+  new DataView(buf).setUint32(4, 0, true);
+  new Uint8Array(buf, 8).set(headerBytes);
+
+  const layout = parseSafetensorsHeader(buf);
+  assert.equal(layout.vocabSize, 6);
+  assert.equal(layout.dim, 4);
+  assert.equal(layout.weightsOffset, 8 + headerBytes.byteLength);
+  assert.equal(layout.embeddingsOffset, 8 + headerBytes.byteLength + 24);
+
+  const tokIndex = buildUnigramIndex(
+    JSON.stringify({
+      model: {
+        vocab: [
+          ['[PAD]', -10],
+          ['[UNK]', -10],
+          ['[CLS]', -10],
+          ['[SEP]', -10],
+          ['▁', -5],
+          ['▁과제', -2.1],
+          ['▁숙제', -2.3],
+          ['제출', -2.5],
+        ],
+      },
+    }),
+  );
+
+  // 공백 마커(id <= 4)는 건너뛰고 유효 서브워드 ID만 반환해요.
+  assert.deepEqual(tokenizeUnigram('과제 제출', tokIndex), [5, 7]);
+  assert.deepEqual(tokenizeUnigram('숙제', tokIndex), [6]);
+
+  const vecA = poolQuantizedRows(
+    [
+      { scale: 0.5, values: new Int8Array([20, 0, 10, 0]) },
+      { scale: 0.25, values: new Int8Array([0, 40, 0, 0]) },
+    ],
+    4,
+  );
+  const vecB = poolQuantizedRows([{ scale: 1.0, values: new Int8Array([10, 10, 5, 0]) }], 4);
+  const vecOther = poolQuantizedRows([{ scale: 1.0, values: new Int8Array([0, 0, 0, 20]) }], 4);
+
+  assert(cosineSimilarity(vecA, vecB) > 0.99);
+  assert.equal(Math.round(cosineSimilarity(vecA, vecOther) * 1000), 0);
+});
+
+test('computeLexicalSimilarity와 computeSemanticLinks는 비슷한 태그(#과제, #숙제, #레포트)를 연결해요', () => {
+  assert(computeLexicalSimilarity('#과제', '#숙제') >= 0.8);
+  assert(computeLexicalSimilarity('#레포트', '#리포트') >= 0.6);
+  assert(computeLexicalSimilarity('#과제', '#러닝') < 0.3);
+
+  const vectors = new Map([
+    ['#치과', new Float32Array([1, 0, 0, 0])],
+    ['#병원', new Float32Array([0.92, 0.39, 0, 0])],
+    ['#발표', new Float32Array([0, 0, 1, 0])],
+  ]);
+
+  const links = computeSemanticLinks(
+    [
+      { id: 'e1', title: '운영체제 과제 제출', tags: ['#운영체제', '#과제'] },
+      { id: 'e2', title: '영어 숙제 마무리', tags: ['#영어', '#숙제'] },
+      { id: 'e3', title: '데이터베이스 레포트 작성', tags: ['#데이터베이스', '#레포트'] },
+      { id: 'e4', title: '아침 한강 러닝', tags: ['#한강', '#러닝'] },
+      { id: 'e5', title: '치과 검진', tags: ['#치과'] },
+      { id: 'e6', title: '병원 방문', tags: ['#병원'] },
+      { id: 'e7', title: '중간 발표 준비', tags: ['#발표'] },
+    ],
+    { vectors, maxNeighborsPerNode: 2 },
+  );
+
+  const hasPair = (a, b) =>
+    links.some((l) => (l.source === a && l.target === b) || (l.source === b && l.target === a));
+  assert(hasPair('#과제', '#숙제'));
+  assert(hasPair('#과제', '#레포트'));
+  assert(hasPair('#치과', '#병원'));
+  assert(!hasPair('#과제', '#러닝'));
+});
+
+test('buildHashtagGraph와 layoutHashtagGraph는 동시 출현이 없어도 의미 유사 간선과 군집을 반영해요', () => {
+  const items = [
+    { id: '1', title: '운영체제 과제 제출', tags: ['#과제'] },
+    { id: '2', title: '영어 숙제 마무리', tags: ['#숙제'] },
+    { id: '3', title: '한강 러닝', tags: ['#러닝'] },
+  ];
+  const semanticLinks = computeSemanticLinks(items);
+  const graph = buildHashtagGraph(items, { semanticLinks });
+
+  const hwNode = graph.find((n) => n.tag === '#과제');
+  const assignNode = graph.find((n) => n.tag === '#숙제');
+  const runNode = graph.find((n) => n.tag === '#러닝');
+  assert(hwNode && assignNode && runNode);
+  assert.equal(hwNode.links.size, 0);
+  assert(hwNode.semanticLinks?.has('#숙제'));
+  assert.equal(hwNode.cluster, assignNode.cluster);
+
+  const hops = computeHopDistances(graph, '#과제');
+  assert.equal(hops.get('#숙제'), 1);
+  assert.equal(hops.get('#러닝'), Infinity);
+
+  const edges = buildHashtagEdges(graph);
+  const semanticEdge = edges.find(
+    (e) =>
+      e.kind === 'semantic' &&
+      ((e.source === '#과제' && e.target === '#숙제') ||
+        (e.source === '#숙제' && e.target === '#과제')),
+  );
+  assert(semanticEdge);
+
+  const layout = layoutHashtagGraph(graph, {
+    width: 480,
+    height: 360,
+    focusTag: '#과제',
+    backboneOnly: true,
+  });
+  assert(layout.edges.some((e) => e.kind === 'semantic' && e.backbone));
+});
+
+test('computeSemanticLinks는 태그 수가 많아지면 임계치와 이웃 수(최대 2개)를 자동으로 조여요', () => {
+  const items = [
+    { id: 's1', title: '운영체제 과제 제출', tags: ['#과제'] },
+    { id: 's2', title: '영어 숙제 마무리', tags: ['#숙제'] },
+    { id: 's3', title: '실험 레포트 작성', tags: ['#레포트'] },
+    { id: 's4', title: '중간 보고서 제출', tags: ['#보고서'] },
+    { id: 's5', title: '주간 assignment 정리', tags: ['#assignment'] },
+  ];
+  for (let i = 0; i < 65; i++) {
+    items.push({
+      id: `n-${i}`,
+      title: `고유 주제 ${i}`,
+      tags: [`#토픽_${i}`],
+    });
+  }
+
+  const links = computeSemanticLinks(items);
+  const assignmentNeighbors = links.filter((l) => l.source === '#과제' || l.target === '#과제');
+  assert(assignmentNeighbors.length >= 1 && assignmentNeighbors.length <= 2);
+  assert(links.every((l) => l.similarity >= 0.74));
 });
