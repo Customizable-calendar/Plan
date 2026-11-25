@@ -1,10 +1,18 @@
 import type { CalendarEvent, Document, Template } from '@noteapp/shared';
 import { Icon, palette, SaveStatus, Text } from '@noteapp/ui';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { EyeIcon, PencilIcon, ShareIcon } from 'lucide-react-native';
+import {
+  EyeIcon,
+  ImageIcon,
+  PaperclipIcon,
+  PencilIcon,
+  ShareIcon,
+  Redo2Icon,
+  SparklesIcon,
+  Undo2Icon,
+} from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -16,14 +24,43 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { listEventsForSlash, openDocument, saveDocument } from './data';
+import {
+  fileUrl,
+  filesAvailable,
+  listEditedDocuments,
+  listEventsForSlash,
+  openDocument,
+  type Photo,
+  saveDocument,
+} from './data';
+import { moveCursor, readCursor } from './cursor';
 import { FormatBar } from './FormatBar';
 import { longDate, savedTime, writingMethod } from './format';
-import { applyLineFormat, type LineFormat } from './markdown';
+import { insertLineAfter, lastFilledLine, lineText, photoSlot, replaceLine } from './blocks';
+import {
+  applyLineFormat,
+  formatAtCursor,
+  type LineFormat,
+  lineFormatOf,
+  linePrefix,
+} from './markdown';
+import { fileLine } from './paper';
+import { PaperSheet } from './PaperSheet';
+import { PhotoTray } from './PhotoTray';
 import { Preview } from './Preview';
+import { FieldSheet, type FieldTarget } from './FieldSheet';
 import { buildSlashItems, findSlashQuery, type SlashItem } from './slash';
 import { SlashMenu } from './SlashMenu';
-import { Toolbar } from './Toolbar';
+import { type ChangeKind, type Snapshot, useEditHistory } from './useEditHistory';
+import { usePaper } from './usePaper';
+import { dDayLabel, studyInfo } from './study';
+
+/** 학습일지 양식 id. 번호, D-day, 복습 연결을 이 양식에서만 보여줘요. */
+const STUDY_LOG = 'study-log';
+
+// 양식으로 쓴 문서는 모두 꾸민 모양(미리보기)으로 먼저 열어요. 마크다운은 연필 버튼으로 봐요.
+// 사진 포스트는 사진이 중심이라 사진함도 처음부터 열어 둬요. (양식 id 기준)
+const TRAY_FIRST: ReadonlySet<string> = new Set(['photo-post']);
 
 /** 편집기: 상자 없는 흰 바탕, 상단바 양식 이름, 제목 아래 상태 칩, 키보드 위 서식 막대 */
 export function EditorScreen() {
@@ -43,7 +80,16 @@ export function EditorScreen() {
   const [dirty, setDirty] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  // 미리보기에서 커서를 옮길 줄과, 마지막으로 누른 줄
+  const [previewFocus, setPreviewFocus] = useState<number | null>(null);
+  const [activeLine, setActiveLine] = useState<number | null>(null);
+  const [trayOpen, setTrayOpen] = useState(false);
+  // 날짜, 사람, 장소 칸을 채우는 시트의 대상 칸
+  const [fieldTarget, setFieldTarget] = useState<FieldTarget | null>(null);
+  // 학습일지면 같은 양식으로 쓴 일지들 (번호, D-day, 복습할 일지를 찾는 데 써요)
+  const [studyDocs, setStudyDocs] = useState<Document[]>([]);
   const bodyRef = useRef<TextInputInstance>(null);
+  const history = useEditHistory();
 
   useEffect(() => {
     let alive = true;
@@ -53,6 +99,9 @@ export function EditorScreen() {
       setDoc(result.document);
       if (seed) setDirty(true);
       setTemplate(result.template);
+      const templateKey = result.template?.id ?? '';
+      setPreviewing(Boolean(result.template));
+      setTrayOpen(TRAY_FIRST.has(templateKey));
       const end = result.document.body.length;
       setSelection({ start: end, end });
       setStatus('ready');
@@ -67,6 +116,57 @@ export function EditorScreen() {
     if (doc && dirty) void saveDocument(doc);
   }, [doc, dirty]);
 
+  // 연구논문 문서의 논문 PDF (붙이기, 열기, 초록과 서론 뽑기)
+  const paper = usePaper(doc?.body ?? '', (body) => {
+    if (doc) history.remember({ title: doc.title, body: doc.body }, 'block');
+    setDoc((d) => d && { ...d, body, updatedAt: new Date().toISOString() });
+    setDirty(true);
+    setSavedAt(null);
+  });
+  const isResearch = template?.category === 'research';
+  const isStudyLog = template?.id === STUDY_LOG;
+
+  useEffect(() => {
+    if (!isStudyLog) return;
+    let alive = true;
+    listEditedDocuments().then(
+      (list) => alive && setStudyDocs(list.filter((d) => d.templateId === STUDY_LOG)),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [isStudyLog]);
+
+  /** 되돌리기, 다시 하기로 꺼낸 모습을 문서에 넣어요. 이건 기록에 다시 남기지 않아요. */
+  function restore(snapshot: Snapshot | null) {
+    if (!snapshot) return;
+    setDoc((d) => d && { ...d, ...snapshot, updatedAt: new Date().toISOString() });
+    setDirty(true);
+    setSavedAt(null);
+  }
+  const undo = () => doc && restore(history.undo({ title: doc.title, body: doc.body }));
+  const redo = () => doc && restore(history.redo({ title: doc.title, body: doc.body }));
+
+  // 웹: Ctrl(맥은 Cmd)+Z 되돌리기, Ctrl+Shift+Z 또는 Ctrl+Y 다시 하기.
+  // 브라우저 입력칸의 원래 되돌리기는 화면 상태와 어긋나서 막고 우리 기록을 써요.
+  // 늘 최신 문서로 되돌리게, 그릴 때마다 다시 붙여요(가벼운 일이에요).
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    function onKey(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const key = e.key.toLowerCase();
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if ((key === 'z' && e.shiftKey) || key === 'y') {
+        e.preventDefault();
+        redo();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   if (status !== 'ready' || !doc) {
     return (
       <View className="flex-1 items-center justify-center bg-background">
@@ -77,10 +177,29 @@ export function EditorScreen() {
     );
   }
 
-  function edit(patch: Partial<Pick<Document, 'title' | 'body'>>) {
+  // 학습일지 번호, 시험 D-day, 1일, 3일, 7일 전 복습할 일지
+  const study = isStudyLog ? studyInfo(doc, studyDocs) : null;
+
+  function edit(patch: Partial<Pick<Document, 'title' | 'body'>>, kind?: ChangeKind) {
+    if (doc) {
+      history.remember(
+        { title: doc.title, body: doc.body },
+        kind ?? ('title' in patch ? 'title' : 'body'),
+      );
+    }
     setDoc((d) => d && { ...d, ...patch, updatedAt: new Date().toISOString() });
     setDirty(true);
     setSavedAt(null);
+  }
+
+  /** 날짜, 사람, 장소 시트에서 고른 값을 그 칸에 넣어요. */
+  function fillField(value: string) {
+    if (!doc || !fieldTarget) return;
+    edit(
+      { body: replaceLine(doc.body, fieldTarget.line, `- ${fieldTarget.label}: ${value}`) },
+      'block',
+    );
+    setFieldTarget(null);
   }
 
   async function saveNow() {
@@ -92,34 +211,69 @@ export function EditorScreen() {
 
   function format(kind: LineFormat) {
     if (!doc) return;
+    if (previewing) return addPreviewLine(kind);
     const next = applyLineFormat(doc.body, selection.start, kind);
-    edit({ body: next.body });
-    setSelection({ start: next.cursor, end: next.cursor });
+    edit({ body: next.body }, 'block');
+    setSelection({ start: next.start, end: next.end });
     requestAnimationFrame(() => {
       bodyRef.current?.focus();
-      bodyRef.current?.setSelection(next.cursor, next.cursor);
+      moveCursor(bodyRef.current, next.start, next.end);
     });
+  }
+
+  /** 미리보기에서 서식 버튼: 마지막으로 누른 줄 아래(없으면 맨 끝)에 그 서식의 빈 줄을 넣고 커서를 둬요. */
+  function addPreviewLine(kind: LineFormat) {
+    if (!doc) return;
+    const after = activeLine ?? lastFilledLine(doc.body);
+    const body = insertLineAfter(doc.body, after, linePrefix(kind, lineText(doc.body, after)));
+    edit({ body }, 'block');
+    setActiveLine(after + 1);
+    setPreviewFocus(after + 1);
   }
 
   function insert(text: string, from = selection.start) {
     if (!doc) return;
     const body = doc.body.slice(0, from) + text + doc.body.slice(selection.end);
     const cursor = from + text.length;
-    edit({ body });
+    edit({ body }, 'block');
     setSelection({ start: cursor, end: cursor });
     requestAnimationFrame(() => {
       bodyRef.current?.focus();
-      bodyRef.current?.setSelection(cursor, cursor);
+      moveCursor(bodyRef.current, cursor);
     });
   }
 
-  const before = doc.body[selection.start - 1];
-  const atLineStart = before === undefined || before === '\n';
+  /**
+   * 사진함에서 고른 사진을 본문에 `![사진](file:<id>)` 한 줄로 넣어요.
+   * 미리보기: 마지막으로 누른 줄 아래, 없으면 '## 사진', '## 대표 사진' 칸, 그것도 없으면 맨 끝.
+   * 편집: 커서 자리에 한 줄로.
+   */
+  function insertPhoto(photo: Photo) {
+    if (!doc) return;
+    const line = fileLine('사진', photo.id);
+    if (previewing) {
+      const after = activeLine ?? photoSlot(doc.body) ?? lastFilledLine(doc.body);
+      edit({ body: insertLineAfter(doc.body, after, line) }, 'block');
+      // 다음 사진은 이 사진 바로 아래에 들어가서, 이어진 사진은 옆으로 넘겨 보는 묶음이 돼요.
+      setActiveLine(after + 1);
+      return;
+    }
+    const before = doc.body[selection.start - 1];
+    const next = doc.body[selection.end];
+    const head = before === undefined || before === '\n' ? '' : '\n';
+    const tail = next === undefined || next === '\n' ? '' : '\n';
+    insert(`${head}${line}${tail}`);
+  }
+
   const slash = bodyFocused ? findSlashQuery(doc.body, selection.start) : null;
   const slashItems = slash ? buildSlashItems(slash.query, events, new Date()) : [];
 
   function pickSlash(item: SlashItem) {
-    if (slash && item.insert !== null) insert(item.insert, slash.start);
+    if (!slash || item.insert === null) return;
+    // 목록 줄(- 일정:, - [ ])은 줄 처음에 있어야 해서, 글 중간에서 고르면 새 줄로 넣어요.
+    const midLine = slash.start > 0 && doc?.body[slash.start - 1] !== '\n';
+    const text = midLine && item.insert.startsWith('- ') ? `\n${item.insert}` : item.insert;
+    insert(text, slash.start);
   }
 
   function share() {
@@ -128,6 +282,14 @@ export function EditorScreen() {
   }
 
   const saveState = savedAt ? 'saved' : dirty ? 'editing' : 'local';
+  // 서식 막대에 지금 줄의 서식을 표시해요. 미리보기에서는 마지막으로 누른 줄이에요.
+  const activeFormat = previewing
+    ? activeLine === null
+      ? null
+      : (lineFormatOf(lineText(doc.body, activeLine))?.format ?? null)
+    : bodyFocused
+      ? formatAtCursor(doc.body, selection.start)
+      : null;
 
   return (
     <KeyboardAvoidingView
@@ -141,6 +303,29 @@ export function EditorScreen() {
           headerRight: () => (
             <View className="mr-2 flex-row items-center gap-3">
               <SaveStatus state={saveState} onPress={() => void saveNow()} />
+              {isResearch ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="논문 PDF 붙이기"
+                  hitSlop={10}
+                  onPress={() => void paper.attach()}
+                >
+                  <Icon as={PaperclipIcon} size={20} className="text-foreground" />
+                </Pressable>
+              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={trayOpen ? '사진함 닫기' : '내 사진함 열기'}
+                accessibilityState={{ expanded: trayOpen }}
+                hitSlop={10}
+                onPress={() => setTrayOpen((open) => !open)}
+              >
+                <Icon
+                  as={ImageIcon}
+                  size={20}
+                  className={trayOpen ? 'text-primary' : 'text-foreground'}
+                />
+              </Pressable>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={previewing ? '편집으로 돌아가기' : '미리보기'}
@@ -176,7 +361,7 @@ export function EditorScreen() {
           onChangeText={(title) => edit({ title })}
           placeholder="제목"
           placeholderTextColor={palette.mutedForeground}
-          className="p-0 text-2xl font-bold tracking-tight text-foreground"
+          className="p-0 text-2xl font-bold tracking-tight text-foreground web:outline-none"
         />
         <View className="flex-row flex-wrap items-center gap-2">
           <View className="rounded-full bg-muted px-2.5 py-0.5">
@@ -185,45 +370,140 @@ export function EditorScreen() {
           <View className="rounded-full bg-muted px-2.5 py-0.5">
             <Text className="text-xs text-muted-foreground">{writingMethod(doc)}</Text>
           </View>
+          {study ? (
+            <View className="rounded-full bg-primary-soft px-2.5 py-0.5">
+              <Text className="text-xs font-semibold text-primary-soft-foreground">
+                No. {study.number}
+              </Text>
+            </View>
+          ) : null}
+          {study?.dDay != null ? (
+            <View className="rounded-full bg-secondary-soft px-2.5 py-0.5">
+              <Text className="text-xs font-semibold text-secondary-soft-foreground">
+                {dDayLabel(study.dDay)}
+              </Text>
+            </View>
+          ) : null}
           {savedAt ? (
             <Text className="text-xs text-muted-foreground">{savedTime(savedAt)} 저장됨</Text>
           ) : null}
         </View>
         <View className="my-1 h-px bg-border" />
         {previewing ? (
-          <Preview body={doc.body} onChange={(body) => edit({ body })} />
+          <Preview
+            body={doc.body}
+            onChange={(body) => edit({ body })}
+            focusLine={previewFocus}
+            onFocusLine={setPreviewFocus}
+            onActiveLine={setActiveLine}
+            onFieldPick={setFieldTarget}
+            study={
+              study
+                ? {
+                    reviews: study.reviews,
+                    onOpen: (docId) =>
+                      router.push({ pathname: '/editor/[id]', params: { id: docId } }),
+                  }
+                : undefined
+            }
+            onFile={(fileId, action) => void paper.onFile(fileId, action)}
+            imageUrl={filesAvailable ? fileUrl : undefined}
+          />
         ) : (
           <TextInput
             ref={bodyRef}
             value={doc.body}
-            onChangeText={(body) => edit({ body })}
+            onChangeText={(body) => {
+              // 웹은 글자를 칠 때 onSelectionChange가 안 와서 // 명령이 안 떴어요. 웹만 커서 위치를 직접 읽어요.
+              // 앱은 onSelectionChange가 제대로 와서 그대로 둬요.
+              const at = readCursor(bodyRef.current);
+              if (at !== null) setSelection({ start: at, end: at });
+              edit({ body });
+            }}
             onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
             onFocus={() => setBodyFocused(true)}
-            onBlur={() => setBodyFocused(false)}
-            placeholder="자유롭게 써 보세요"
+            // 명령 목록을 누르면 본문 칸 포커스가 먼저 빠져요. 바로 닫으면 누른 항목이 안 들어가서 조금 뒤에 닫아요.
+            onBlur={() => setTimeout(() => setBodyFocused(false), 250)}
+            placeholder="자유롭게 써 보세요. // 를 치면 일정을 넣을 수 있어요."
             placeholderTextColor={palette.mutedForeground}
             multiline
             scrollEnabled={false}
             textAlignVertical="top"
-            className="min-h-[320px] p-0 text-base leading-7 text-foreground"
+            // 웹 입력칸은 내용만큼 늘어나지 않아 안에서 스크롤되고 아래가 비어 보여요. field-sizing으로 늘려요.
+            // 글 쓰는 칸이라 브라우저가 그리는 굵은 테두리(outline)는 빼요. 커서로 위치가 보여요.
+            className="min-h-[320px] p-0 text-base leading-7 text-foreground web:outline-none web:[field-sizing:content]"
           />
         )}
       </ScrollView>
 
       {!previewing && slash ? <SlashMenu items={slashItems} onPick={pickSlash} /> : null}
 
-      {!previewing ? <FormatBar onFormat={format} /> : null}
-      <View className="bg-background" style={{ paddingBottom: insets.bottom }}>
-        {!previewing ? (
-          <Toolbar
-            onSlash={() => insert(before && !/\s/.test(before) ? ' /' : '/')}
-            onMic={() => router.push('/stt')}
-            onAi={() => router.push('/draft')}
-            onPhoto={() => Alert.alert('사진 넣기', '사진 첨부는 나중에 붙여요.')}
-            onCheckbox={() => insert(atLineStart ? '- [ ] ' : '\n- [ ] ')}
-          />
-        ) : null}
+      {trayOpen ? <PhotoTray onClose={() => setTrayOpen(false)} onPick={insertPhoto} /> : null}
+      {/* 아래에는 서식 막대 한 줄만 둬요. 일정은 본문에 // 를 쳐서, 사진은 위 헤더에서 넣어요. */}
+      <View className="bg-card" style={{ paddingBottom: insets.bottom }}>
+        <FormatBar
+          onFormat={format}
+          active={activeFormat}
+          showFormats={!previewing}
+          trailing={
+            <View className="flex-row">
+              <BarIcon
+                label="되돌리기 (Ctrl+Z)"
+                icon={Undo2Icon}
+                disabled={!history.canUndo}
+                onPress={undo}
+              />
+              <BarIcon
+                label="다시 하기 (Ctrl+Shift+Z)"
+                icon={Redo2Icon}
+                disabled={!history.canRedo}
+                onPress={redo}
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="AI로 초안 만들기"
+                onPress={() => router.push('/draft')}
+                className="h-12 w-12 items-center justify-center rounded-md active:bg-muted"
+              >
+                <Icon as={SparklesIcon} size={20} className="text-primary" />
+              </Pressable>
+            </View>
+          }
+        />
       </View>
+      <FieldSheet target={fieldTarget} onDone={fillField} onClose={() => setFieldTarget(null)} />
+      <PaperSheet
+        state={paper.sheet}
+        error={paper.error}
+        notice={paper.notice}
+        onApply={paper.apply}
+        onClose={paper.close}
+      />
     </KeyboardAvoidingView>
+  );
+}
+
+/** 서식 막대 오른쪽의 작은 아이콘 버튼 (되돌리기, 다시 하기) */
+function BarIcon(props: {
+  label: string;
+  icon: typeof Undo2Icon;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={props.label}
+      accessibilityState={{ disabled: props.disabled }}
+      disabled={props.disabled}
+      onPress={props.onPress}
+      className="h-12 w-10 items-center justify-center rounded-md active:bg-muted"
+    >
+      <Icon
+        as={props.icon}
+        size={19}
+        className={props.disabled ? 'text-muted-foreground/40' : 'text-foreground'}
+      />
+    </Pressable>
   );
 }
