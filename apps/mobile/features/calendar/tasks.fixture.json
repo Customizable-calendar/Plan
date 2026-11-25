@@ -88,5 +88,17 @@
     "id": "calendar-demo-16",
     "title": "멘토링 질문 리스트 및 데모 시나리오 준비",
     "dayOffset": 5
+  },
+  {
+    "id": "calendar-demo-17",
+    "title": "데이터베이스 실험 레포트 작성",
+    "dayOffset": 2,
+    "hour": 20
+  },
+  {
+    "id": "calendar-demo-18",
+    "title": "중간고사 시험 범위 복습",
+    "dayOffset": 4,
+    "hour": 16
   }
 ]

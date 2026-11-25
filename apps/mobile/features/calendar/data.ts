@@ -300,6 +300,41 @@ export async function loadCalendar(options?: {
           startAt: '16:00',
           endAt: '17:30',
         },
+        {
+          id: 'demo-os-assignment',
+          dayOffset: 2,
+          title: '운영체제 과제 제출',
+          startAt: '18:00',
+          endAt: '19:00',
+        },
+        {
+          id: 'demo-english-homework',
+          dayOffset: 4,
+          title: '영어 작문 숙제 마무리',
+          startAt: '20:00',
+          endAt: '21:00',
+        },
+        {
+          id: 'demo-client-meeting',
+          dayOffset: 3,
+          title: '클라이언트 요구사항 미팅',
+          startAt: '10:30',
+          endAt: '11:30',
+        },
+        {
+          id: 'demo-dental-checkup',
+          dayOffset: 5,
+          title: '치과 정기 검진 예약',
+          startAt: '11:00',
+          endAt: '12:00',
+        },
+        {
+          id: 'demo-clinic-visit',
+          dayOffset: 6,
+          title: '내과 병원 진료 방문',
+          startAt: '10:00',
+          endAt: '11:00',
+        },
       ].map(({ dayOffset, ...event }) => {
         const date = shiftDay(today, dayOffset);
         return {

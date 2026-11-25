@@ -1,6 +1,7 @@
 import { BottomSheet, Button, Scrim, Text } from '@noteapp/ui';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 
+import { EmbeddingModelCard } from './EmbeddingModelCard';
 import { HashtagLevelBar } from './HashtagLevelBar';
 
 /** 캘린더 내부에서 해시태그 자동 추출 강도와 맞춤 시간 추천 연동을 설정하는 바텀 시트예요. */
@@ -19,6 +20,8 @@ export function CalendarSettingsSheet({ onClose }: { onClose: () => void }) {
         <BottomSheet title="해시태그 추출 설정" className="max-h-[85%]">
           <ScrollView contentContainerClassName="gap-4 pb-2">
             <HashtagLevelBar showPreview />
+
+            <EmbeddingModelCard />
 
             <View className="gap-1.5 rounded-xl border border-border bg-muted/40 p-3.5">
               <Text className="text-xs font-bold text-foreground">

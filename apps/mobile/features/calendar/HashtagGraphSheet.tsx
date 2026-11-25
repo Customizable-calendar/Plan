@@ -1,13 +1,17 @@
 import type { CalendarEvent, Card } from '@noteapp/shared';
 import { Button, DaySectionTitle, Icon, Input, RailCard, SegmentTabs, Text } from '@noteapp/ui';
 import { XIcon } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { embedTagsWithLocalModel, useLocalEmbeddingModel } from './embeddingEngine';
+import { computeSemanticLinks } from './embeddingMath';
+import { EmbeddingModelCard } from './EmbeddingModelCard';
 import { HashtagLevelBar } from './HashtagLevelBar';
 import { HiddenTagDisclosure } from './HiddenTagDisclosure';
 import {
+  buildHashtagEdges,
   buildHashtagGraph,
   type CalendarTagItem,
   layoutHashtagGraph,
@@ -74,6 +78,8 @@ export function HashtagGraphSheet({
   const [backboneOnly, setBackboneOnly] = useState(true);
   const [zoomIndex, setZoomIndex] = useState(1);
   const [query, setQuery] = useState('');
+  const [modelVectors, setModelVectors] = useState<Map<string, Float32Array> | null>(null);
+  const embeddingModel = useLocalEmbeddingModel();
 
   const rawItems = useMemo(
     () => [
@@ -111,17 +117,59 @@ export function HashtagGraphSheet({
     [itemsWithTags],
   );
 
-  const graph = useMemo(() => buildHashtagGraph(items), [items]);
+  const tagContextInputs = useMemo(() => {
+    const titlesByTag = new Map<string, string[]>();
+    for (const item of items) {
+      for (const tag of item.tags ?? []) {
+        const list = titlesByTag.get(tag) ?? [];
+        if (list.length < 3) {
+          list.push(item.title);
+          titlesByTag.set(tag, list);
+        }
+      }
+    }
+    return [...titlesByTag.entries()].map(([tag, titles]) => ({
+      tag,
+      contextText: titles.join(' '),
+    }));
+  }, [items]);
+
+  useEffect(() => {
+    if (!embeddingModel.downloaded || tagContextInputs.length === 0) return;
+    let active = true;
+    void embedTagsWithLocalModel(tagContextInputs).then(
+      (vecs) => {
+        if (active) setModelVectors(vecs);
+      },
+      () => {},
+    );
+    return () => {
+      active = false;
+    };
+  }, [embeddingModel.downloaded, tagContextInputs]);
+
+  const activeVectors = embeddingModel.downloaded ? modelVectors : null;
+  const semanticLinks = useMemo(
+    () => computeSemanticLinks(items, { vectors: activeVectors ?? undefined }),
+    [items, activeVectors],
+  );
+
+  const graph = useMemo(() => buildHashtagGraph(items, { semanticLinks }), [items, semanticLinks]);
   const selected =
-    graph.find((n) => n.tag === selectedTag) ?? graph.find((n) => n.links.size > 0) ?? graph[0];
+    graph.find((n) => n.tag === selectedTag) ??
+    graph.find((n) => n.links.size > 0 || (n.semanticLinks?.size ?? 0) > 0) ??
+    graph[0];
   const stats = useMemo(() => {
-    let edges = 0;
+    const edges = buildHashtagEdges(graph);
     const ids = new Set<string>();
     for (const node of graph) {
-      edges += node.links.size;
       for (const item of node.items) ids.add(item.id);
     }
-    return { nodes: graph.length, edges: Math.floor(edges / 2), items: ids.size };
+    return {
+      nodes: graph.length,
+      edges: edges.length,
+      items: ids.size,
+    };
   }, [graph]);
 
   const legend = useMemo(() => {
@@ -135,6 +183,15 @@ export function HashtagGraphSheet({
       selected
         ? [...selected.links.entries()].sort(
             ([a, ac], [b, bc]) => bc - ac || a.localeCompare(b, 'ko'),
+          )
+        : [],
+    [selected],
+  );
+  const relatedSemantic = useMemo(
+    () =>
+      selected?.semanticLinks
+        ? [...selected.semanticLinks.entries()].sort(
+            ([a, am], [b, bm]) => bm.similarity - am.similarity || a.localeCompare(b, 'ko'),
           )
         : [],
     [selected],
@@ -167,7 +224,7 @@ export function HashtagGraphSheet({
                 해시태그 연결망
               </Text>
               <Text className="text-xs text-muted-foreground">
-                같은 일정이나 할 일에 함께 쓰인 주제 태그들이 신경망처럼 연결돼요.
+                같은 일정에 함께 쓰였거나 뜻이 비슷한 태그들이 신경망처럼 연결돼요.
               </Text>
             </View>
             <Pressable
@@ -199,6 +256,8 @@ export function HashtagGraphSheet({
               </View>
 
               <HashtagLevelBar compact />
+
+              <EmbeddingModelCard compact />
 
               <TagCategoryPanel tags={graph.map((n) => n.tag)} onSelectTag={setSelectedTag} />
 
@@ -281,22 +340,27 @@ export function HashtagGraphSheet({
                   onSelect={setSelectedTag}
                 />
 
-                <View className="flex-row flex-wrap gap-2">
-                  {legend.map(([clusterId, rep]) => (
-                    <Pressable
-                      key={clusterId}
-                      accessibilityRole="button"
-                      onPress={() => setSelectedTag(rep.tag)}
-                      className="flex-row items-center gap-1.5 rounded-full bg-muted px-2.5 py-1"
-                    >
-                      <View
-                        className={`h-2.5 w-2.5 rounded-full ${CLUSTER_STYLES[clusterId % CLUSTER_STYLES.length].bg}`}
-                      />
-                      <Text className="text-xs text-muted-foreground">
-                        군집 {clusterId + 1} ({rep.tag})
-                      </Text>
-                    </Pressable>
-                  ))}
+                <View className="flex-row flex-wrap items-center justify-between gap-2">
+                  <View className="flex-row flex-wrap gap-2">
+                    {legend.map(([clusterId, rep]) => (
+                      <Pressable
+                        key={clusterId}
+                        accessibilityRole="button"
+                        onPress={() => setSelectedTag(rep.tag)}
+                        className="flex-row items-center gap-1.5 rounded-full bg-muted px-2.5 py-1"
+                      >
+                        <View
+                          className={`h-2.5 w-2.5 rounded-full ${CLUSTER_STYLES[clusterId % CLUSTER_STYLES.length].bg}`}
+                        />
+                        <Text className="text-xs text-muted-foreground">
+                          군집 {clusterId + 1} ({rep.tag})
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text className="text-[11px] text-muted-foreground">
+                    실선 함께 쓰임, 점선 비슷한 뜻
+                  </Text>
                 </View>
               </View>
 
@@ -306,7 +370,8 @@ export function HashtagGraphSheet({
                     {selected.tag}
                   </Text>
                   <Text className="text-xs font-semibold text-muted-foreground">
-                    연결 태그 {selected.links.size}개, 관련 항목 {selected.items.length}개
+                    연결 {selected.links.size + relatedSemantic.length}개, 관련 항목{' '}
+                    {selected.items.length}개
                   </Text>
                 </View>
                 <Text className="text-xs text-muted-foreground">
@@ -328,6 +393,21 @@ export function HashtagGraphSheet({
                   <Text className="text-xs text-muted-foreground">함께 쓰인 태그가 없어요.</Text>
                 )}
               </View>
+
+              {relatedSemantic.length > 0 ? (
+                <>
+                  <DaySectionTitle label="비슷한 태그" count={relatedSemantic.length} />
+                  <View className="flex-row flex-wrap gap-2">
+                    {relatedSemantic.map(([tag, meta]) => (
+                      <TagPillButton
+                        key={tag}
+                        label={`${tag} (${Math.round(meta.similarity * 100)}%)`}
+                        onPress={() => setSelectedTag(tag)}
+                      />
+                    ))}
+                  </View>
+                </>
+              ) : null}
 
               <DaySectionTitle
                 label={`${selected.tag} 관련 일정 및 할 일`}
@@ -446,22 +526,27 @@ function ObsidianGraphCanvas({
                 dy = edge.y2 - edge.y1,
                 length = Math.hypot(dx, dy);
               if (length <= 0) return null;
+              const isSemantic = edge.kind === 'semantic';
               const thickness = edge.active ? 2 + Math.min(2.5, edge.weight * 0.5) : 1.2;
               return (
                 <View
                   key={edge.key}
                   pointerEvents="none"
                   className={
-                    edge.active
-                      ? `absolute ${activeStyle.bg}`
-                      : 'absolute bg-muted-foreground opacity-30'
+                    isSemantic
+                      ? edge.active
+                        ? 'absolute border-t-2 border-dashed border-ai'
+                        : 'absolute border-t border-dashed border-ai/60'
+                      : edge.active
+                        ? `absolute ${activeStyle.bg}`
+                        : 'absolute bg-muted-foreground opacity-30'
                   }
                   style={{
-                    height: thickness,
+                    height: isSemantic ? 0 : thickness,
                     width: length,
                     left: (edge.x1 + edge.x2) / 2 - length / 2,
-                    top: (edge.y1 + edge.y2) / 2 - thickness / 2,
-                    opacity: edge.active ? 0.92 : 0.28,
+                    top: (edge.y1 + edge.y2) / 2 - (isSemantic ? 1 : thickness / 2),
+                    opacity: edge.active ? 0.92 : isSemantic ? 0.52 : 0.28,
                     transform: [{ rotate: `${Math.atan2(dy, dx)}rad` }],
                   }}
                 />
@@ -481,7 +566,7 @@ function ObsidianGraphCanvas({
                   key={node.tag}
                   accessibilityRole="button"
                   accessibilityState={{ selected: isSelected }}
-                  accessibilityLabel={`${node.tag}, 연결 ${node.links.size}개, 항목 ${node.items.length}개`}
+                  accessibilityLabel={`${node.tag}, 연결 ${node.links.size + (node.semanticLinks?.size ?? 0)}개, 항목 ${node.items.length}개`}
                   onPress={() => onSelect(node.tag)}
                   className="absolute items-center"
                   style={{
